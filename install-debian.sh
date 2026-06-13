@@ -22,6 +22,11 @@ APP_PORT="5000"
 REPO_URL="https://github.com/ChristianHandy/Linux-Magement-Dashbord.git"
 REPO_BRANCH="main"
 
+# Automatically detect the primary server IP (first non-loopback address)
+SERVER_IP=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -1)
+SERVER_IP=${SERVER_IP:-$(hostname -I | awk '{print $1}')}
+SERVER_IP=${SERVER_IP:-"0.0.0.0"}
+
 # ── Preflight checks ─────────────────────────────────────────────────────────
 step "Preflight checks"
 
@@ -194,7 +199,7 @@ Group=${SERVICE_USER}
 WorkingDirectory=${INSTALL_DIR}
 EnvironmentFile=${ENV_FILE}
 ExecStart=${VENV_DIR}/bin/gunicorn \\
-    --bind 127.0.0.1:${APP_PORT} \\
+    --bind ${SERVER_IP}:${APP_PORT} \\
     --workers 2 \\
     --timeout 120 \\
     --access-logfile /var/log/fleetpilot/access.log \\
@@ -223,6 +228,28 @@ chown "${SERVICE_USER}:${SERVICE_USER}" /var/log/fleetpilot
 systemctl daemon-reload
 systemctl enable fleetpilot.service
 success "systemd service installed and enabled"
+
+# ── Firewall (ufw) ────────────────────────────────────────────────────────────
+step "Configuring firewall (ufw)"
+
+if command -v ufw &>/dev/null; then
+    # Ensure SSH is always allowed before enabling ufw
+    ufw allow OpenSSH --force > /dev/null 2>&1 || ufw allow 22/tcp --force > /dev/null 2>&1
+    ufw allow "${APP_PORT}/tcp" comment "FleetPilot web interface" > /dev/null
+    # Enable ufw non-interactively if not already active
+    if ! ufw status | grep -q "Status: active"; then
+        ufw --force enable > /dev/null
+        success "ufw enabled and port ${APP_PORT} opened"
+    else
+        success "ufw already active — port ${APP_PORT} rule added"
+    fi
+    info "To restrict access to a specific IP only, run:"
+    info "  ufw delete allow ${APP_PORT}/tcp"
+    info "  ufw allow from <your-ip> to any port ${APP_PORT}"
+else
+    warn "ufw not found — skipping firewall configuration"
+    warn "Make sure port ${APP_PORT} is reachable on ${SERVER_IP}"
+fi
 
 # ── SSH key for FleetPilot user ───────────────────────────────────────────────
 step "Generating SSH key for managed host connections"
@@ -260,17 +287,18 @@ echo -e "${GREEN}${BOLD}╔═════════════════�
 echo -e "${GREEN}${BOLD}║         FleetPilot installed successfully!           ║${RESET}"
 echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════════════╝${RESET}"
 echo ""
+echo -e "  ${BOLD}Listening on:${RESET}    http://${SERVER_IP}:${APP_PORT}"
 echo -e "  ${BOLD}Local access:${RESET}    http://127.0.0.1:${APP_PORT}"
-echo -e "  ${BOLD}Network access:${RESET}  http://${LOCAL_IP}:${APP_PORT}  (direct, no TLS)"
 echo -e "  ${BOLD}Install dir:${RESET}     ${INSTALL_DIR}"
 echo -e "  ${BOLD}Service user:${RESET}    ${SERVICE_USER}"
 echo -e "  ${BOLD}Logs:${RESET}            journalctl -u fleetpilot -f"
 echo ""
 echo -e "  ${YELLOW}${BOLD}Next steps (recommended):${RESET}"
-echo -e "  1. Set up a reverse proxy with TLS (Caddy or Nginx)"
-echo -e "     so the dashboard is accessible over HTTPS only."
-echo -e "  2. Restrict port ${APP_PORT} in your firewall:"
+echo -e "  1. Restrict dashboard access to your IP only:"
+echo -e "     ufw delete allow ${APP_PORT}/tcp"
 echo -e "     ufw allow from <your-ip> to any port ${APP_PORT}"
+echo -e "  2. Set up a reverse proxy with TLS (Caddy or Nginx)"
+echo -e "     so the dashboard is accessible over HTTPS only."
 echo -e "  3. Copy the SSH public key to your managed hosts:"
 echo -e "     cat ${SSH_DIR}/id_ed25519.pub"
 echo -e "  4. Review ${ENV_FILE} and set SESSION_COOKIE_SECURE=true"
