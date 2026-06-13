@@ -161,32 +161,78 @@ case "${CHOICE}" in
         warn ".env not found — skipping env file update"
     fi
 
-    # Update database (rename user if needed, then set password)
-    FP_DB="${DB_FILE}" "${PYTHON}" - <<PYEOF
+    # Ensure DB schema exists and update the admin user
+    "${PYTHON}" - <<PYEOF
 import sys, sqlite3, os
+sys.path.insert(0, '${INSTALL_DIR}')
+os.chdir('${INSTALL_DIR}')
 from werkzeug.security import generate_password_hash
 
-db = sqlite3.connect('${DB_FILE}')
-db.row_factory = sqlite3.Row
-
+db_path = '${DB_FILE}'
 old_name = '${CURRENT_USER}'
 new_name = '${NEW_USER}'
 new_pass = '${NEW_PASS}'
 
-row = db.execute("SELECT id FROM users WHERE username = ?", (old_name,)).fetchone()
+db = sqlite3.connect(db_path)
+db.row_factory = sqlite3.Row
+
+# ── Ensure tables exist (safe to run even if already created) ──────────────
+db.executescript("""
+    CREATE TABLE IF NOT EXISTS users(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      email TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      active INTEGER DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS roles(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT UNIQUE NOT NULL,
+      description TEXT
+    );
+    CREATE TABLE IF NOT EXISTS user_roles(
+      user_id INTEGER,
+      role_id INTEGER,
+      PRIMARY KEY (user_id, role_id),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
+    );
+""")
+# Ensure default roles exist
+for rname, rdesc in [('admin','Full access'),('operator','Operations'),('viewer','Read-only')]:
+    db.execute('INSERT OR IGNORE INTO roles(name, description) VALUES (?,?)', (rname, rdesc))
+db.commit()
+
+# ── Find or create the admin user ─────────────────────────────────────────
+row = db.execute('SELECT id FROM users WHERE username = ?', (old_name,)).fetchone()
 if not row:
-    # Try id=1 as fallback
-    row = db.execute("SELECT id FROM users WHERE id = 1").fetchone()
+    row = db.execute('SELECT id FROM users WHERE id = 1').fetchone()
     if row:
-        print(f"  User '{old_name}' not found — resetting user with id=1 instead.")
+        print(f"  User '{old_name}' not found — updating user with id=1.")
 
 if row:
-    db.execute("UPDATE users SET username = ?, password_hash = ?, active = 1 WHERE id = ?",
+    db.execute('UPDATE users SET username=?, password_hash=?, active=1 WHERE id=?',
                (new_name, generate_password_hash(new_pass), row['id']))
+    # Ensure admin role is assigned
+    admin_role = db.execute('SELECT id FROM roles WHERE name="admin"').fetchone()
+    if admin_role:
+        db.execute('INSERT OR IGNORE INTO user_roles(user_id,role_id) VALUES (?,?)',
+                   (row['id'], admin_role['id']))
     db.commit()
     print(f"  Database updated: username='{new_name}', password reset, account activated.")
 else:
-    print("  No user found in database — only .env was updated.")
+    # No user at all — create one from scratch
+    from werkzeug.security import generate_password_hash as gph
+    cur = db.execute('INSERT INTO users(username,password_hash,active) VALUES (?,?,1)',
+                     (new_name, gph(new_pass)))
+    uid = cur.lastrowid
+    admin_role = db.execute('SELECT id FROM roles WHERE name="admin"').fetchone()
+    if admin_role:
+        db.execute('INSERT OR IGNORE INTO user_roles(user_id,role_id) VALUES (?,?)',
+                   (uid, admin_role['id']))
+    db.commit()
+    print(f"  No existing user found — created new admin user '{new_name}'.")
 db.close()
 PYEOF
     ;;
