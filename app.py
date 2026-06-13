@@ -1175,6 +1175,150 @@ def add_security_headers(response):
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     return response
 
+# ---- Network Scanner Routes ----
+
+import socket, subprocess, concurrent.futures
+
+def _detect_hostname(ip):
+    """Try reverse DNS lookup for a discovered IP."""
+    try:
+        return socket.gethostbyaddr(ip)[0]
+    except Exception:
+        return ''
+
+def _check_ssh_port(ip, port=22, timeout=1.5):
+    """Check if SSH port is open on an IP."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(timeout)
+        result = s.connect_ex((ip, port))
+        s.close()
+        return result == 0
+    except Exception:
+        return False
+
+def _ping_ip(ip, timeout=1):
+    """Fast ping check."""
+    try:
+        import platform
+        flag = '-n' if platform.system().lower() == 'windows' else '-c'
+        result = subprocess.run(
+            ['ping', flag, '1', '-W', str(timeout), ip],
+            capture_output=True, timeout=timeout + 1
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+@app.route('/scanner')
+@login_required
+def scanner():
+    """Network scanner page."""
+    hosts = load_hosts()
+    # Collect all managed IPs for duplicate detection
+    managed_ips = [h.get('host', '') for h in hosts.values()]
+    # Guess default subnet from local IP
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('8.8.8.8', 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        default_prefix = '.'.join(local_ip.split('.')[:3])
+    except Exception:
+        default_prefix = '192.168.1'
+    return render_template(
+        'scanner.html',
+        managed_host_ips=managed_ips,
+        default_prefix=default_prefix,
+        tag_presets=HOST_TAG_PRESETS,
+    )
+
+@app.route('/api/scan_host')
+@login_required
+def api_scan_host():
+    """Probe a single IP: ping + SSH port check + MAC + hostname."""
+    from flask import jsonify
+    ip   = request.args.get('ip', '').strip()
+    port = int(request.args.get('port', 22) or 22)
+    if not arp_tracker.validate_ip_address(ip):
+        return jsonify({'ip': ip, 'online': False, 'ssh': False, 'mac': '', 'hostname': ''})
+    online = _ping_ip(ip)
+    ssh    = False
+    mac    = ''
+    hostname = ''
+    if online:
+        ssh = _check_ssh_port(ip, port)
+        # Try to get MAC from ARP table (populate via ping first)
+        try:
+            arp = arp_tracker.get_arp_table()
+            # arp is mac->ip, invert to ip->mac
+            ip_to_mac = {v: k for k, v in arp.items()}
+            mac = ip_to_mac.get(ip, '')
+        except Exception:
+            pass
+        hostname = _detect_hostname(ip)
+    return jsonify({'ip': ip, 'online': online, 'ssh': ssh, 'mac': mac, 'hostname': hostname})
+
+@app.route('/hosts/quick_add', methods=['POST'])
+@login_required
+def quick_add_host():
+    """Quick-add a host discovered by the scanner."""
+    if session.get('user_id') and not current_user_has_role('operator', 'admin'):
+        flash('You need operator or admin role to manage hosts.')
+        return redirect(url_for('scanner'))
+    hosts = load_hosts()
+    name = request.form.get('name', '').strip()
+    if not name:
+        flash('Host name is required.', 'error')
+        return redirect(url_for('scanner'))
+    host_data = {
+        'host':        request.form.get('host', '').strip(),
+        'user':        request.form.get('user', 'admin').strip(),
+        'mac':         request.form.get('mac', '').strip(),
+        'description': request.form.get('description', '').strip(),
+        'environment': request.form.get('environment', 'Production'),
+        'criticality': request.form.get('criticality', 'Medium'),
+        'port':        int(request.form.get('port', 22) or 22),
+        'tags':        [t.strip() for t in request.form.get('tags', '').split(',') if t.strip()],
+        'notes':       f'Discovered by Network Scanner on {__import__("datetime").datetime.now().strftime("%Y-%m-%d %H:%M")}',
+    }
+    hosts[name] = normalize_host(host_data)
+    save_hosts(hosts)
+    flash(f'Host "{name}" added successfully from scanner!', 'success')
+    return redirect(url_for('manage_hosts'))
+
+# ---- Update Notification API ----
+
+@app.route('/api/update_notification')
+@login_required
+def api_update_notification():
+    """JSON API for in-app update notification polling."""
+    from flask import jsonify
+    notification = version_manager.get_update_notification()
+    is_admin = False
+    if session.get('user_id'):
+        is_admin = current_user_has_role('admin')
+    elif session.get('login'):
+        is_admin = True  # legacy mode
+    if notification:
+        return jsonify({
+            'available': True,
+            'type':        notification.get('type'),
+            'version':     notification.get('version'),
+            'description': notification.get('description'),
+            'url':         notification.get('url'),
+            'is_admin':    is_admin,
+        })
+    return jsonify({'available': False})
+
+@app.route('/api/update_notification/dismiss', methods=['POST'])
+@login_required
+def api_dismiss_notification():
+    """Dismiss the update notification via AJAX."""
+    from flask import jsonify
+    version_manager.dismiss_notification()
+    return jsonify({'ok': True})
+
 # ---- UI Preference Routes ----
 
 @app.route("/set_theme", methods=["POST", "GET"])
