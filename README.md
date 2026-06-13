@@ -652,207 +652,60 @@ To manually check for updates:
 - The system validates the current branch and commit SHA
 - Updates are fetched from the official GitHub repository only
 
-## Security Guidelines
-
-This repository and its tools are designed for administrative tasks. Because they perform system-level operations (such as disk formatting and package updates), security is paramount.
-
-### Core Security Principles
-
-1. **Authentication:** Always change the default credentials immediately. Use strong passwords and consider restricting access via a VPN or reverse proxy authentication layer.
-2. **Privilege Isolation:** The disk management tools require `sudo` or `root` privileges. Run this application only on trusted networks and dedicated management nodes.
-3. **Network Exposure:** **NEVER** expose this dashboard directly to the public internet. It must be placed behind a secure reverse proxy (e.g., Nginx, Traefik) configured with HTTPS/TLS.
-4. **Plugin Security:** Only install plugins from trusted sources. Plugins execute with the same privileges as the dashboard (potentially root).
-5. **Environment Variables:** Do not hardcode secrets. Use `.env` files and ensure they have restrictive file permissions (`chmod 600 .env`).
-
-## Email Reporting
-
-The FleetPilot includes comprehensive email notification capabilities to keep administrators informed about system status and issues.
-
-### Features
-
-- **Scheduled Reports**: Receive periodic system status reports with host information and update history
-- **Error Notifications**: Get immediate alerts when system updates fail
-- **Flexible Configuration**: Support for any SMTP server (Gmail, Office 365, custom servers)
-- **Multiple Recipients**: Send notifications to multiple email addresses
-- **HTML Formatting**: Professional, easy-to-read email formats with both HTML and plain text
-
-### Accessing Email Settings
-
-1. Log in to the dashboard with operator or admin credentials
-2. Navigate to the main menu (`/index`)
-3. Click the "Email Configuration" button in the System Update Manager section
-4. Configure your SMTP settings and preferences
-
-### Configuration Options
-
-#### SMTP Settings
-- **SMTP Server**: Hostname of your email server (e.g., smtp.gmail.com)
-- **SMTP Port**: Port number (587 for TLS, 465 for SSL, 25 for unencrypted)
-- **Use TLS**: Enable TLS encryption (recommended)
-- **SMTP Username**: Authentication username (usually your email address)
-- **SMTP Password**: Authentication password (for Gmail, use an app-specific password)
-- **Sender Email**: Email address that appears as the sender
-- **Recipient Emails**: One or more email addresses to receive notifications
-
-#### Report Settings
-- **Enable Scheduled Reports**: Toggle periodic system status reports
-- **Report Interval**: Choose how often to send reports (daily, weekly, or monthly)
-- **Enable Error Notifications**: Toggle immediate alerts for update failures
-
-### Email Provider Setup
-
-#### Gmail
-1. Enable 2-factor authentication in your Google Account
-2. Generate an app-specific password:
-   - Go to Google Account → Security → 2-Step Verification → App passwords
-   - Generate a new app password for "Mail"
-3. Use these settings:
-   - SMTP Server: `smtp.gmail.com`
-   - SMTP Port: `587`
-   - Use TLS: ✓ (enabled)
-   - Username: Your Gmail address
-   - Password: The app-specific password (not your regular password)
-
-#### Office 365
-1. Use these settings:
-   - SMTP Server: `smtp.office365.com`
-   - SMTP Port: `587`
-   - Use TLS: ✓ (enabled)
-   - Username: Your full Office 365 email address
-   - Password: Your Office 365 password
-2. Ensure Modern Authentication is enabled if required by your organization
-
-#### Custom SMTP Server
-Configure the appropriate settings for your SMTP server. Contact your email provider or system administrator for specific details.
-
-### Testing Email Configuration
-
-Use the "Send Test Email" button on the email configuration page to verify your settings before enabling automatic reports. This sends a test message to all configured recipients.
-
-### Email Types
-
-#### Scheduled Reports
-Scheduled reports include:
-- Current status of all configured hosts (online/offline)
-- Recent update history
-- Summary of system operations
-- Professional HTML formatting with color-coded status
-
-Reports are sent according to your configured interval (daily, weekly, or monthly).
-
-#### Error Notifications
-Error notifications are sent immediately when:
-- A system update fails
-- SSH connection errors occur
-- Unsupported distributions are detected
-- Any other update-related errors happen
-
-Error notifications include:
-- Host name where the error occurred
-- Timestamp of the error
-- Detailed error message and diagnostics
-- Red alert styling for immediate attention
-
-### Security Notes
-
-- Email settings including passwords are stored in `email_settings.json`
-- The configuration file is excluded from version control via `.gitignore`
-- For production deployments, consider using environment variables for sensitive data
-- Use TLS/SSL encryption when possible to protect credentials in transit
-- App-specific passwords are recommended for Gmail and other providers that support them
-- Only operators and administrators can configure email settings
-
-### Routes
-
-- Email configuration page: `/email_settings`
-
-
 ## Security
 
-### Security Improvements
-This project has been hardened with the following security improvements:
+FleetPilot manages critical system operations including remote updates, disk formatting, and user management. Securing your deployment is essential.
 
-**Authentication & Credentials:**
-- ✅ Credentials moved to environment variables (no hardcoded passwords)
-- ✅ Secure session key generation using `secrets.token_hex(32)`
-- ✅ Warning printed when using default credentials
-- ✅ `.env.example` file provided for configuration
+### Security Architecture
 
-**Command Injection Prevention:**
-- ✅ Device name sanitization to prevent command injection
-- ✅ Input validation on all disk operations
-- ✅ SFTP used instead of shell commands for SSH key installation
-- ✅ Whitelist validation for filesystem types and SMART modes
+FleetPilot implements several built-in security mechanisms to protect your fleet:
 
-**Security Headers:**
-- ✅ X-Content-Type-Options: nosniff
-- ✅ X-Frame-Options: DENY
-- ✅ X-XSS-Protection enabled
-- ✅ Strict-Transport-Security for HTTPS
+- **Authentication & RBAC:** Multi-user authentication backed by `werkzeug.security` password hashing. Three distinct roles (Admin, Operator, Viewer) strictly isolate destructive actions.
+- **Command Injection Prevention:** All user inputs (especially hostnames, MAC addresses, and plugin names) are strictly sanitized. Disk operations use parameterized arguments, and SSH key installation uses SFTP rather than shell execution.
+- **Secure Headers:** The application enforces `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `X-XSS-Protection`.
+- **Database Security:** SQLite queries use parameterized execution to prevent SQL injection.
 
-**Other Improvements:**
-- ✅ Debug mode disabled by default (controlled via FLASK_DEBUG environment variable)
-- ✅ Plugin name validation to prevent template injection
-- ✅ SQL parameterized queries (already implemented)
+### Deployment Hardening Guide
 
-### Important Security Notes
+Before deploying FleetPilot to a production environment, you **must** implement the following hardening steps:
 
-**Before Production Deployment:**
-1. **Set secure credentials** using environment variables:
-   ```bash
-   export SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
-   export DASHBOARD_USERNAME=your_secure_username
-   export DASHBOARD_PASSWORD=your_secure_password
-   ```
+#### 1. Enforce HTTPS/TLS
+**Never expose FleetPilot over unencrypted HTTP.**
+Without TLS, session cookies, SSH passwords, and authentication credentials are transmitted in plain text. You must deploy FleetPilot behind a secure reverse proxy (e.g., Nginx, Traefik, or Caddy) configured with valid SSL/TLS certificates.
 
-2. **Use HTTPS/TLS** - This is critical! Without TLS:
-   - Passwords are transmitted in plain text
-   - Session cookies can be intercepted
-   - SSH passwords sent to the server are exposed
+#### 2. Network Isolation
+FleetPilot is an administrative tool and should not be accessible from the public internet.
+- Restrict access to a management VLAN or require a VPN connection (e.g., Tailscale, WireGuard).
+- Use firewall rules (`ufw` or `iptables`) to restrict access to the application port (default: 5000) strictly to localhost, forcing all traffic through your reverse proxy.
 
-3. **SSH Host Key Verification** - The current implementation uses `AutoAddPolicy`, which accepts any host key. This is vulnerable to man-in-the-middle attacks. For production:
-   - Manually verify host keys on first connection
-   - Use `WarningPolicy` instead of `AutoAddPolicy`
-   - Maintain a proper `known_hosts` file
+#### 3. Secure Environment Variables
+Do not rely on default credentials. You must explicitly define secure environment variables in a `.env` file. Ensure this file is strictly permissioned:
+```bash
+chmod 600 .env
+```
 
-4. **Network Security:**
-   - Run behind a reverse proxy (nginx, Apache) with TLS
-   - Restrict access to trusted networks/VPN only
-   - Consider using firewall rules to limit access
-   - Never expose directly to the internet without proper hardening
+| Variable | Requirement | Description |
+|---|---|---|
+| `SECRET_KEY` | **Required** | Must be a cryptographically secure random string (e.g., generated via `openssl rand -hex 32`). |
+| `DASHBOARD_USERNAME` | **Required** | The initial admin username. Change this from the default. |
+| `DASHBOARD_PASSWORD` | **Required** | A strong, complex password for the initial admin account. |
+| `FLASK_DEBUG` | **Required** | Must be set to `false` in production to prevent source code leakage. |
 
-5. **Additional Hardening (Recommended):**
-   - Add CSRF protection using Flask-WTF
-   - Implement rate limiting for login attempts
-   - Add two-factor authentication
-   - Use a production WSGI server (gunicorn, uWSGI) instead of Flask's development server
-   - Implement audit logging for all operations
-   - Regular security updates for all dependencies
+#### 4. SSH Host Key Verification
+By default, the SSH client uses `AutoAddPolicy` for ease of initial setup. In a strict production environment, this is vulnerable to Man-in-the-Middle (MitM) attacks. It is highly recommended to pre-populate the `~/.ssh/known_hosts` file on the FleetPilot server and modify the codebase to use `WarningPolicy` or `RejectPolicy`.
 
-6. **Disk Operations Security:**
-   - Requires root/sudo access (significant security risk)
-   - Only run on isolated, trusted systems
-   - Validate that only intended disks are being modified
-   - Consider running disk operations in a separate, sandboxed process
+#### 5. Privilege Management (sudo)
+Disk operations require `sudo` privileges. 
+- Run FleetPilot on a dedicated, isolated management node.
+- Do not run the application as the `root` user directly; instead, run it as a standard user and configure `/etc/sudoers` to allow passwordless execution only for the specific disk utilities required (e.g., `smartctl`, `mkfs.*`, `wipefs`), rather than granting blanket `sudo` access.
 
-### Environment Variables
+#### 6. Production WSGI Server
+Do not use the built-in Flask development server in production. Deploy the application using a production-ready WSGI server such as Gunicorn or uWSGI:
+```bash
+gunicorn --bind 127.0.0.1:5000 --workers 4 app:app
+```
 
-Create a `.env` file or set these environment variables:
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `SECRET_KEY` | Recommended | Auto-generated | Flask session encryption key |
-| `DASHBOARD_USERNAME` | Recommended | admin | Dashboard login username |
-| `DASHBOARD_PASSWORD` | Recommended | password | Dashboard login password |
-| `FLASK_DEBUG` | Optional | false | Enable Flask debug mode (never in production!) |
-
-Security notes (legacy - see Security section above for updated guidance)
-- Use HTTPS/TLS if the dashboard is reachable over an untrusted network, otherwise passwords and session cookies travel unencrypted.
-- The "Install SSH key" flow requires you to enter the remote account password; that password is sent to the dashboard server and used transiently. Do not expose the dashboard without TLS and strong authentication.
-- The dashboard may generate and store a private key under `~/.ssh` on the dashboard host. Protect that machine and its filesystem.
-- Credentials and `app.secret_key` now use environment variables (see Security section).
-
-Running & testing
+## Running & testing
 1. Ensure dependencies are installed:
    - paramiko (see `requirements.txt`)
 2. Start the app:
