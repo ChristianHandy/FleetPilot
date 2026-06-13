@@ -1,80 +1,522 @@
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="/static/style.css">
+{% extends "base.html" %}
 
-<div class="container">
-  <h2>Manage Hosts</h2>
-  <p>
-    <a class="btn" href="/dashboard">Back to Dashboard</a>
-    {% if not current_user_id or 'operator' in current_user_roles or 'admin' in current_user_roles %}
-    <a class="btn" href="/hosts/arp_table">View ARP Table</a>
-    <a class="btn btn-primary" href="/hosts/scan_ip_changes">🔍 Scan for IP Changes</a>
-    {% endif %}
-  </p>
+{% block title %}{{ _('Manage Hosts') }} — FleetPilot{% endblock %}
+{% block page_icon %}&#x1F5A7;{% endblock %}
+{% block page_title %}{{ _('Manage Hosts') }}{% endblock %}
 
-  {% with messages = get_flashed_messages() %}
-    {% if messages %}
-      {% for message in messages %}
-        <div class="alert">{{ message }}</div>
-      {% endfor %}
-    {% endif %}
-  {% endwith %}
+{% block topbar_actions %}
+<a class="btn btn-secondary btn-sm" href="/dashboard">&#x1F504; {{ _('Dashboard') }}</a>
+{% if not current_user_id or 'operator' in current_user_roles or 'admin' in current_user_roles %}
+<a class="btn btn-secondary btn-sm" href="/hosts/arp_table">&#x1F4CB; ARP</a>
+<a class="btn btn-secondary btn-sm" href="/hosts/scan_ip_changes">&#x1F50D; {{ _('Scan IPs') }}</a>
+<a class="btn btn-primary btn-sm" href="#add-host-form">&#x2B; {{ _('Add Host') }}</a>
+{% endif %}
+{% endblock %}
 
-  <h3>Existing Hosts</h3>
-  {% if hosts %}
-    {% for name, h in hosts.items() %}
-      <div class="card">
-        <b>{{ name }}</b>
-        {% if h.host.lower() in localhost_identifiers %}
-          <span class="badge-local">LOCAL</span>
-        {% endif %}
-        <br>
-        Host: {{ h.host }}<br>
-        User: {{ h.user }}<br>
-        {% if h.mac %}
-        MAC: {{ h.mac }}<br>
-        {% endif %}
-        <br>
-        {% if not current_user_id or 'operator' in current_user_roles or 'admin' in current_user_roles %}
-          <a class="btn" href="/hosts/edit/{{ name }}">Edit</a>
-          {% if h.host.lower() not in localhost_identifiers %}
-            <a class="btn" href="/hosts/install_key/{{ name }}">Install SSH key</a>
-            {% if not h.mac %}
-            <a class="btn btn-secondary" href="/hosts/detect_mac/{{ name }}">🔍 Detect MAC</a>
-            {% endif %}
-          {% else %}
-            <span class="text-muted">(No SSH key needed for localhost)</span>
-          {% endif %}
-          <form action="/hosts/delete/{{ name }}" method="post" style="display:inline">
-            <button class="btn" type="submit" onclick="return confirm('Are you sure?')">Delete</button>
-          </form>
-        {% endif %}
-      </div>
-    {% endfor %}
-  {% else %}
-    <p>No hosts configured yet.</p>
-  {% endif %}
+{% block content %}
 
-  {% if not current_user_id or 'operator' in current_user_roles or 'admin' in current_user_roles %}
-  <h3>Add / Update Host</h3>
-  <div class="card info-box">
-    <p><strong><span aria-label="Tip">💡</span> Tip:</strong> You can manage this local server by using <code>localhost</code> as the host. 
-    No SSH key is needed for localhost - updates will run directly on this machine.</p>
-    <p><strong>Example:</strong> Display name: "Local Server", Host: "localhost", User: (any value, will be ignored)</p>
-    <p><strong><span aria-label="New">🆕</span> IP Change Detection:</strong> Add a MAC address to enable automatic IP detection for DHCP hosts. 
-    You can use the "Detect MAC" button to automatically discover it, or enter it manually.</p>
+<!-- ── Search & Filter Bar ─────────────────────────────────── -->
+{% if hosts %}
+<div class="search-filter-bar">
+  <div class="search-input-wrapper">
+    <span class="search-icon">&#x1F50D;</span>
+    <input type="text" id="hostSearch" placeholder="Search by name, IP, group, tag, description…" oninput="filterHosts()">
   </div>
-  <form method="post" class="card">
-    <label>Display name</label><br>
-    <input name="name" placeholder="Friendly name"><br><br>
-    <label>Host (IP or hostname)</label><br>
-    <input name="host" placeholder="192.168.1.100 or localhost"><br><br>
-    <label>User</label><br>
-    <input name="user" placeholder="username (ignored for localhost)"><br><br>
-    <label>MAC Address (optional, for IP change detection)</label><br>
-    <input name="mac" placeholder="00:11:22:33:44:55"><br><br>
-    <button class="btn" type="submit">Save</button>
-  </form>
-  {% else %}
-  <p><em>You need operator or admin role to manage hosts.</em></p>
-  {% endif %}
+  <select class="filter-select" id="filterEnv" onchange="filterHosts()">
+    <option value="">All Environments</option>
+    {% for env in environments %}
+    <option value="{{ env|lower }}">{{ env }}</option>
+    {% endfor %}
+  </select>
+  <select class="filter-select" id="filterCrit" onchange="filterHosts()">
+    <option value="">All Criticality</option>
+    {% for c in criticalities %}
+    <option value="{{ c|lower }}">{{ c }}</option>
+    {% endfor %}
+  </select>
+  <select class="filter-select" id="filterTag" onchange="filterHosts()">
+    <option value="">All Tags</option>
+    {% set seen_tags = namespace(v=[]) %}
+    {% for name, data in hosts.items() %}
+      {% for tag in data.tags %}
+        {% if tag not in seen_tags.v %}
+          {% set seen_tags.v = seen_tags.v + [tag] %}
+          <option value="{{ tag|lower }}">{{ tag }}</option>
+        {% endif %}
+      {% endfor %}
+    {% endfor %}
+  </select>
+  <select class="filter-select" id="filterGroup" onchange="filterHosts()">
+    <option value="">All Groups</option>
+    {% set seen_groups = namespace(v=[]) %}
+    {% for name, data in hosts.items() %}
+      {% if data.group and data.group not in seen_groups.v %}
+        {% set seen_groups.v = seen_groups.v + [data.group] %}
+        <option value="{{ data.group|lower }}">{{ data.group }}</option>
+      {% endif %}
+    {% endfor %}
+  </select>
+  <div class="view-toggle">
+    <button class="view-toggle-btn active" id="viewGrid" onclick="setView('grid')" title="Grid view">&#x229E;</button>
+    <button class="view-toggle-btn" id="viewList" onclick="setView('list')" title="List view">&#x2630;</button>
+  </div>
+  <span class="filter-count" id="filterCount">{{ hosts|length }} {{ _('hosts') }}</span>
 </div>
+{% endif %}
+
+<!-- ── Host Cards ─────────────────────────────────────────── -->
+{% if hosts %}
+
+<!-- Grid View -->
+<div id="gridView" class="host-grid">
+  {% for name, h in hosts.items() %}
+  {% set env_slug = (h.environment|lower).replace(' ','') %}
+  {% set crit_slug = h.criticality|lower %}
+  <div class="host-card-v2"
+       data-name="{{ name|lower }}"
+       data-ip="{{ h.host|lower }}"
+       data-group="{{ h.group|lower }}"
+       data-env="{{ h.environment|lower }}"
+       data-crit="{{ h.criticality|lower }}"
+       data-tags="{{ h.tags|join(',')|lower }}"
+       data-desc="{{ h.description|lower }}">
+
+    <!-- Header -->
+    <div class="hc-header">
+      <div style="min-width:0;flex:1;">
+        <div class="hc-title-row">
+          <span class="hc-name">{{ name }}</span>
+          {% if h.host in localhost_identifiers or h.host|lower in localhost_identifiers %}
+            <span class="badge badge-local">&#x1F3E0; Local</span>
+          {% endif %}
+        </div>
+        <div class="hc-badges" style="margin-top:0.4rem;">
+          <span class="env-badge env-{{ env_slug }}">{{ h.environment }}</span>
+          <span class="crit-badge crit-{{ crit_slug }}">
+            {% if h.criticality == 'Critical' %}&#x1F534;
+            {% elif h.criticality == 'High' %}&#x1F7E0;
+            {% elif h.criticality == 'Medium' %}&#x1F7E1;
+            {% else %}&#x26AA;{% endif %}
+            {{ h.criticality }}
+          </span>
+          {% if h.group %}
+          <span class="badge badge-gray">&#x1F4C1; {{ h.group }}</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Description -->
+    {% if h.description %}
+    <div class="hc-description">{{ h.description }}</div>
+    {% endif %}
+
+    <!-- Meta info -->
+    <div class="hc-meta">
+      <span class="hc-meta-item"><span class="icon">&#x1F4BB;</span> {{ h.host }}{% if h.port and h.port != 22 %}:{{ h.port }}{% endif %}</span>
+      <span class="hc-meta-item"><span class="icon">&#x1F464;</span> {{ h.user }}</span>
+      {% if h.location %}
+      <span class="hc-meta-item"><span class="icon">&#x1F4CD;</span> {{ h.location }}</span>
+      {% endif %}
+      {% if h.mac %}
+      <span class="hc-meta-item"><span class="icon">&#x1F4E1;</span> {{ h.mac }}</span>
+      {% endif %}
+      {% if h.last_update %}
+      <span class="hc-meta-item"><span class="icon">&#x1F504;</span> {{ h.last_update }}</span>
+      {% endif %}
+    </div>
+
+    <!-- Tags -->
+    {% if h.tags %}
+    <div class="hc-tags">
+      {% for tag in h.tags %}
+      {% set slug = (tag|lower).replace(' ','-') %}
+      <span class="tag-chip tag-chip-default tag-chip-{{ slug }}">{{ tag }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- OS Profiles -->
+    {% if h.os_profiles %}
+    <div style="padding:0 1.1rem 0.6rem; display:flex; flex-wrap:wrap; gap:0.3rem;">
+      {% for p in h.os_profiles %}
+      <span class="badge {% if p.default %}badge-blue{% else %}badge-gray{% endif %}">
+        {% if p.type == 'windows' %}&#x1FA9F;{% else %}&#x1F427;{% endif %}
+        {{ p.name }}{% if p.default %} &#x2605;{% endif %}
+      </span>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Notes -->
+    {% if h.notes %}
+    <div class="hc-notes">&#x1F4DD; {{ h.notes }}</div>
+    {% endif %}
+
+    <!-- Actions -->
+    {% if not current_user_id or 'operator' in current_user_roles or 'admin' in current_user_roles %}
+    <div class="hc-actions">
+      <a class="btn btn-secondary btn-sm" href="/hosts/edit/{{ name }}">&#x270F; {{ _('Edit') }}</a>
+      {% if h.host not in localhost_identifiers and h.host|lower not in localhost_identifiers %}
+      <a class="btn btn-secondary btn-sm" href="/hosts/install_key/{{ name }}">&#x1F511; SSH</a>
+      <a class="btn btn-ghost btn-sm" href="/hosts/detect_mac/{{ name }}">&#x1F50D; MAC</a>
+      {% endif %}
+      <a class="btn btn-primary btn-sm" href="/update/{{ name }}">&#x2B06; Update</a>
+      <form method="post" action="/hosts/delete/{{ name }}" style="margin:0;"
+            onsubmit="return confirm('Delete {{ name }}?')">
+        <button type="submit" class="btn btn-danger btn-sm">&#x1F5D1;</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+<!-- List View -->
+<div id="listView" class="host-list-view" style="display:none;">
+  {% for name, h in hosts.items() %}
+  {% set env_slug = (h.environment|lower).replace(' ','') %}
+  {% set crit_slug = h.criticality|lower %}
+  <div class="host-list-item"
+       data-name="{{ name|lower }}"
+       data-ip="{{ h.host|lower }}"
+       data-group="{{ h.group|lower }}"
+       data-env="{{ h.environment|lower }}"
+       data-crit="{{ h.criticality|lower }}"
+       data-tags="{{ h.tags|join(',')|lower }}"
+       data-desc="{{ h.description|lower }}">
+    <div class="hli-name">{{ name }}</div>
+    <div class="hli-meta">
+      <span>&#x1F4BB; {{ h.host }}</span>
+      <span>&#x1F464; {{ h.user }}</span>
+      {% if h.group %}<span>&#x1F4C1; {{ h.group }}</span>{% endif %}
+      {% if h.location %}<span>&#x1F4CD; {{ h.location }}</span>{% endif %}
+      {% if h.description %}<span style="color:var(--text-secondary);">{{ h.description[:55] }}{% if h.description|length > 55 %}…{% endif %}</span>{% endif %}
+    </div>
+    <div class="hli-tags">
+      <span class="env-badge env-{{ env_slug }}">{{ h.environment }}</span>
+      <span class="crit-badge crit-{{ crit_slug }}">{{ h.criticality }}</span>
+      {% for tag in h.tags[:3] %}
+      <span class="tag-chip tag-chip-default">{{ tag }}</span>
+      {% endfor %}
+    </div>
+    {% if not current_user_id or 'operator' in current_user_roles or 'admin' in current_user_roles %}
+    <div class="hli-actions">
+      <a class="btn btn-secondary btn-sm" href="/hosts/edit/{{ name }}">&#x270F;</a>
+      <a class="btn btn-primary btn-sm" href="/update/{{ name }}">&#x2B06;</a>
+      <form method="post" action="/hosts/delete/{{ name }}" style="margin:0;"
+            onsubmit="return confirm('Delete {{ name }}?')">
+        <button type="submit" class="btn btn-danger btn-sm">&#x1F5D1;</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+<div class="no-results-msg" id="noResults">
+  <div class="icon">&#x1F50D;</div>
+  <p>No hosts match your search or filter.</p>
+</div>
+
+{% else %}
+<div class="empty-state">
+  <div class="empty-state-icon">&#x1F5A7;</div>
+  <h3>{{ _('No hosts configured yet.') }}</h3>
+  <p>{{ _('Add your first host below to start managing remote systems.') }}</p>
+</div>
+{% endif %}
+
+<!-- ── Add Host Form ───────────────────────────────────────── -->
+{% if not current_user_id or 'operator' in current_user_roles or 'admin' in current_user_roles %}
+<div class="card" id="add-host-form" style="margin-top:2rem;">
+  <div class="card-header">
+    <h3>&#x2795; {{ _('Add Host') }}</h3>
+  </div>
+  <form method="post" action="/hosts">
+
+    <!-- Basic Info -->
+    <div class="form-section"><span class="form-section-title">&#x1F4CB; Basic Information</span></div>
+    <div class="form-grid-2">
+      <div class="form-group">
+        <label class="form-label">{{ _('Display Name') }} <span style="color:var(--accent-red)">*</span></label>
+        <input type="text" name="name" placeholder="{{ _('e.g. Web Server') }}" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <input type="text" name="description" placeholder="Short description of this host">
+      </div>
+    </div>
+    <div class="form-grid-3">
+      <div class="form-group">
+        <label class="form-label">{{ _('IP Address / Hostname') }} <span style="color:var(--accent-red)">*</span></label>
+        <input type="text" name="host" placeholder="192.168.1.100 / localhost" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">{{ _('SSH User') }} <span style="color:var(--accent-red)">*</span></label>
+        <input type="text" name="user" placeholder="{{ _('e.g. admin') }}" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">SSH Port</label>
+        <input type="number" name="port" placeholder="22" value="22" min="1" max="65535">
+      </div>
+    </div>
+    <div class="form-grid-2">
+      <div class="form-group">
+        <label class="form-label">{{ _('MAC Address') }} <span class="text-muted">({{ _('optional') }})</span></label>
+        <input type="text" name="mac" placeholder="AA:BB:CC:DD:EE:FF">
+        <div class="form-hint">Used for automatic IP change detection on DHCP hosts.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">SSH Key Path <span class="text-muted">(optional)</span></label>
+        <input type="text" name="ssh_key" placeholder="~/.ssh/id_rsa">
+      </div>
+    </div>
+
+    <!-- Classification -->
+    <div class="form-section"><span class="form-section-title">&#x1F3F7; Classification</span></div>
+    <div class="form-grid-3">
+      <div class="form-group">
+        <label class="form-label">Environment</label>
+        <select name="environment">
+          {% for env in environments %}
+          <option value="{{ env }}">{{ env }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Criticality</label>
+        <select name="criticality">
+          {% for c in criticalities %}
+          <option value="{{ c }}">{{ c }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Group / Team</label>
+        <input type="text" name="group" placeholder="e.g. Backend, DevOps, Lab">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Location / Site</label>
+      <input type="text" name="location" placeholder="e.g. Rack A3, Home Lab, AWS eu-central-1">
+    </div>
+
+    <!-- Tags -->
+    <div class="form-section"><span class="form-section-title">&#x1F3F7; Tags</span></div>
+    <div class="form-group">
+      <label class="form-label">Tags</label>
+      <div class="tag-input-wrapper" id="tagWrapper">
+        <div id="tagChips" style="display:contents;"></div>
+        <input type="text" class="tag-input-inner" id="tagInput"
+               placeholder="Type tag and press Enter…" autocomplete="off">
+        <input type="hidden" name="tags" id="tagsHidden">
+      </div>
+      <div class="tag-presets" id="tagPresets">
+        {% for tag in tag_presets %}
+        <button type="button" class="tag-preset-btn" onclick="addPresetTag('{{ tag }}')">{{ tag }}</button>
+        {% endfor %}
+      </div>
+      <div class="form-hint">Click a preset or type your own. Press Enter or comma to add a tag.</div>
+    </div>
+
+    <!-- Notes -->
+    <div class="form-section"><span class="form-section-title">&#x1F4DD; Notes</span></div>
+    <div class="form-group">
+      <label class="form-label">Notes <span class="text-muted">(internal)</span></label>
+      <textarea name="notes" class="notes-textarea"
+                placeholder="Internal notes, maintenance info, credentials hints…"></textarea>
+    </div>
+
+    <!-- OS Profiles (Multiboot) -->
+    <div class="form-section" style="margin-top:1.25rem;">
+      <button type="button" class="collapsible-toggle" id="osToggle" onclick="toggleOS()">
+        <span>&#x1F4BF; {{ _('OS Profiles (Multiboot)') }} — <span style="font-weight:400;color:var(--text-muted);">{{ _('optional') }}</span></span>
+        <span class="arrow" id="osArrow">&#x25BC;</span>
+      </button>
+    </div>
+    <div class="collapsible-body" id="osBody">
+      <div id="os-profiles-container"></div>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="addOsProfile()">+ {{ _('Add OS Profile') }}</button>
+      <div class="form-hint" style="margin-top:0.5rem;">{{ _('For dual-boot or multi-OS machines, define each installed OS. The default OS will be used for updates.') }}</div>
+    </div>
+
+    <div style="margin-top:1.5rem;">
+      <button type="submit" class="btn btn-primary">&#x1F4BE; {{ _('Save Host') }}</button>
+    </div>
+  </form>
+</div>
+
+<!-- Tips -->
+<div class="card card-blue" style="margin-top:1.5rem;">
+  <div class="card-header"><h3>&#x1F4A1; Tips</h3></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:0.75rem;">
+    <div class="feature-item">
+      <div class="feature-item-title">&#x1F3E0; Localhost</div>
+      <div class="feature-item-desc">Use <code>localhost</code> as the host to manage this server directly — no SSH key required.</div>
+    </div>
+    <div class="feature-item">
+      <div class="feature-item-title">&#x1F4E1; IP Detection</div>
+      <div class="feature-item-desc">Add a MAC address to enable automatic IP change detection for DHCP hosts.</div>
+    </div>
+    <div class="feature-item">
+      <div class="feature-item-title">&#x1F4BF; Multiboot</div>
+      <div class="feature-item-desc">Add OS profiles for machines with multiple operating systems installed.</div>
+    </div>
+    <div class="feature-item">
+      <div class="feature-item-title">&#x1F3F7; Tags &amp; Groups</div>
+      <div class="feature-item-desc">Use tags (Server, VM, PC…) and groups to categorize and filter your fleet.</div>
+    </div>
+  </div>
+</div>
+
+{% else %}
+<div class="alert alert-warning" style="margin-top:1.5rem;">
+  &#x26A0; {{ _('You need') }} <strong>operator</strong> {{ _('or') }} <strong>admin</strong> {{ _('role to manage hosts.') }}
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* ── Tag Input ─────────────────────────────────────────────── */
+let currentTags = [];
+
+function renderTagChips() {
+  const wrapper = document.getElementById('tagWrapper');
+  const input   = document.getElementById('tagInput');
+  const hidden  = document.getElementById('tagsHidden');
+  // Remove existing chips (keep input)
+  wrapper.querySelectorAll('.tag-chip').forEach(el => el.remove());
+  currentTags.forEach((tag, i) => {
+    const chip = document.createElement('span');
+    const slug = tag.toLowerCase().replace(/\s+/g, '-');
+    chip.className = 'tag-chip tag-chip-default tag-chip-' + slug;
+    chip.style.cssText = 'display:inline-flex;align-items:center;gap:0.3rem;';
+    chip.innerHTML = tag + ' <button type="button" class="tag-chip-remove" onclick="removeTag(' + i + ')">&#x2715;</button>';
+    wrapper.insertBefore(chip, input);
+  });
+  hidden.value = currentTags.join(',');
+  document.querySelectorAll('.tag-preset-btn').forEach(btn => {
+    btn.classList.toggle('active', currentTags.includes(btn.textContent.trim()));
+  });
+}
+
+function addTag(tag) {
+  tag = tag.trim();
+  if (tag && !currentTags.includes(tag)) {
+    currentTags.push(tag);
+    renderTagChips();
+  }
+}
+function removeTag(i) { currentTags.splice(i, 1); renderTagChips(); }
+function addPresetTag(tag) {
+  if (currentTags.includes(tag)) currentTags = currentTags.filter(t => t !== tag);
+  else addTag(tag);
+  renderTagChips();
+}
+
+const tagInput = document.getElementById('tagInput');
+if (tagInput) {
+  tagInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      addTag(this.value); this.value = '';
+    }
+  });
+  tagInput.addEventListener('blur', function() {
+    if (this.value.trim()) { addTag(this.value); this.value = ''; }
+  });
+  document.getElementById('tagWrapper').addEventListener('click', function() { tagInput.focus(); });
+}
+
+/* ── OS Profiles ───────────────────────────────────────────── */
+let osProfileCount = 0;
+const OS_TYPES = [
+  {value:'ubuntu',  label:'Ubuntu / Debian'},
+  {value:'fedora',  label:'Fedora'},
+  {value:'centos',  label:'CentOS / RHEL'},
+  {value:'arch',    label:'Arch Linux'},
+  {value:'windows', label:'Windows'},
+  {value:'macos',   label:'macOS'},
+  {value:'freebsd', label:'FreeBSD'},
+  {value:'other',   label:'Other'},
+];
+
+function addOsProfile(name='', type='ubuntu', isDefault=false) {
+  const idx = osProfileCount++;
+  const c   = document.getElementById('os-profiles-container');
+  const div = document.createElement('div');
+  div.id = 'os-profile-' + idx;
+  div.style.cssText = 'display:grid;grid-template-columns:1fr 180px 130px 36px;gap:0.5rem;align-items:center;margin-bottom:0.5rem;';
+  const opts = OS_TYPES.map(t => `<option value="${t.value}"${type===t.value?' selected':''}>${t.label}</option>`).join('');
+  div.innerHTML = `
+    <input type="text" name="os_name" placeholder="OS Name (e.g. Ubuntu 24.04)" value="${escHtml(name)}">
+    <select name="os_type">${opts}</select>
+    <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.85rem;cursor:pointer;
+                  padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md);
+                  background:var(--bg-elevated);color:var(--text-secondary);">
+      <input type="checkbox" name="os_default" value="${idx}"${isDefault?' checked':''}
+             style="width:16px;height:16px;accent-color:var(--accent-blue);">
+      Default
+    </label>
+    <button type="button" onclick="removeOsProfile(${idx})" class="btn btn-danger btn-sm" style="padding:0.4rem 0.6rem;">&#x2715;</button>`;
+  c.appendChild(div);
+  document.getElementById('osBody').classList.add('open');
+  document.getElementById('osToggle').classList.add('open');
+}
+
+function removeOsProfile(idx) {
+  const el = document.getElementById('os-profile-' + idx);
+  if (el) el.remove();
+}
+function toggleOS() {
+  document.getElementById('osBody').classList.toggle('open');
+  document.getElementById('osToggle').classList.toggle('open');
+}
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ── Search & Filter ───────────────────────────────────────── */
+function filterHosts() {
+  const q    = (document.getElementById('hostSearch')?.value || '').toLowerCase();
+  const env  = (document.getElementById('filterEnv')?.value  || '').toLowerCase();
+  const crit = (document.getElementById('filterCrit')?.value || '').toLowerCase();
+  const tag  = (document.getElementById('filterTag')?.value  || '').toLowerCase();
+  const grp  = (document.getElementById('filterGroup')?.value|| '').toLowerCase();
+
+  const cards = document.querySelectorAll('.host-card-v2, .host-list-item');
+  let visible = 0;
+  cards.forEach(card => {
+    const matchQ    = !q    || [card.dataset.name,card.dataset.ip,card.dataset.group,card.dataset.tags,card.dataset.desc].some(v=>(v||'').includes(q));
+    const matchEnv  = !env  || (card.dataset.env  ||'') === env;
+    const matchCrit = !crit || (card.dataset.crit ||'') === crit;
+    const matchTag  = !tag  || (card.dataset.tags ||'').split(',').map(t=>t.trim()).includes(tag);
+    const matchGrp  = !grp  || (card.dataset.group||'') === grp;
+    const show = matchQ && matchEnv && matchCrit && matchTag && matchGrp;
+    card.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  const fc = document.getElementById('filterCount');
+  if (fc) fc.textContent = visible + ' host' + (visible !== 1 ? 's' : '');
+  const nr = document.getElementById('noResults');
+  if (nr) nr.classList.toggle('visible', visible === 0 && cards.length > 0);
+}
+
+/* ── View Toggle ───────────────────────────────────────────── */
+function setView(mode) {
+  const grid = document.getElementById('gridView');
+  const list = document.getElementById('listView');
+  if (!grid || !list) return;
+  grid.style.display = mode === 'grid' ? '' : 'none';
+  list.style.display = mode === 'list' ? '' : 'none';
+  document.getElementById('viewGrid')?.classList.toggle('active', mode === 'grid');
+  document.getElementById('viewList')?.classList.toggle('active', mode === 'list');
+  localStorage.setItem('fp_host_view', mode);
+}
+const savedView = localStorage.getItem('fp_host_view');
+if (savedView) setView(savedView);
+</script>
+{% endblock %}

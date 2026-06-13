@@ -1,86 +1,240 @@
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="/static/style.css">
+{% extends "base.html" %}
 
-<div class="container">
-<h2>Linux Update Dashboard</h2>
+{% block title %}Update Dashboard — FleetPilot{% endblock %}
+{% block page_icon %}&#x1F504;{% endblock %}
+{% block page_title %}Update Dashboard{% endblock %}
 
-<p>
-  <a class="btn" href="/index">← Back to Main Menu</a>
-  <a class="btn" href="/hosts">Manage Hosts</a>
-  <a class="btn" href="/update_settings" style="background: #059669;">Update Settings</a>
-</p>
+{% block topbar_actions %}
+<a class="btn btn-secondary btn-sm" href="/hosts">&#x1F5A7; Hosts</a>
+<a class="btn btn-success btn-sm" href="/update_settings">&#x2699; Settings</a>
+{% endblock %}
 
-{% with messages = get_flashed_messages() %}
-  {% if messages %}
-    {% for message in messages %}
-      <div class="alert">{{ message }}</div>
-    {% endfor %}
-  {% endif %}
-{% endwith %}
+{% block content %}
 
 {% if update_notification %}
-<div class="card" style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); border: 2px solid #60a5fa;">
-  <h3 style="color: #dbeafe; margin-bottom: 0.5rem;">🔔 Dashboard Update Available!</h3>
-  <p style="color: #bfdbfe; margin-bottom: 1rem;">
-    <strong>{{ update_notification.description }}</strong><br>
-    Version: {{ update_notification.version }} ({{ update_notification.type }})
-  </p>
-  <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+<div class="card card-blue" style="margin-bottom:1.5rem;">
+  <div class="card-header">
+    <h3>&#x1F514; Dashboard Update Available</h3>
+    <span class="badge badge-blue">{{ update_notification.type }}</span>
+  </div>
+  <p><strong>{{ update_notification.description }}</strong><br>
+     <span class="text-muted">Version {{ update_notification.version }}</span></p>
+  <div class="btn-group">
     {% if is_admin %}
-    <a class="btn" href="/dashboard_version/update" style="background: #059669;">
-      Update Now
-    </a>
+    <a class="btn btn-success btn-sm" href="/dashboard_version/update">&#x2B06; Update Now</a>
     {% endif %}
-    <a class="btn" href="/dashboard_version/check" style="background: #7c3aed;">
-      Check Again
-    </a>
+    <a class="btn btn-purple btn-sm" href="/dashboard_version/check">&#x1F504; Check Again</a>
     {% if update_notification.url %}
-    <a class="btn" href="{{ update_notification.url }}" target="_blank" style="background: #475569;">
-      View on GitHub
-    </a>
+    <a class="btn btn-secondary btn-sm" href="{{ update_notification.url }}" target="_blank">&#x1F517; GitHub</a>
     {% endif %}
-    <a class="btn" href="/dashboard_version/dismiss" style="background: #64748b;">
-      Dismiss
-    </a>
+    <a class="btn btn-ghost btn-sm" href="/dashboard_version/dismiss">&#x2715; Dismiss</a>
   </div>
 </div>
 {% endif %}
 
-<!-- Automatic Update Status Card -->
-<div class="card" style="background: {% if auto_updates_enabled %}#065f46{% else %}#1e293b{% endif %}; border: 1px solid {% if auto_updates_enabled %}#10b981{% else %}#334155{% endif %};">
-  <h3>Automatic Updates: {% if auto_updates_enabled %}✓ Enabled{% else %}✗ Disabled{% endif %}</h3>
-  <p>
+<!-- ── Stats Row ───────────────────────────────────────────── -->
+{% if hosts %}
+<div class="stat-grid-v2" style="margin-bottom:1.5rem;">
+  <div class="stat-card-v2 blue">
+    <div class="stat-card-v2-value">{{ hosts|length }}</div>
+    <div class="stat-card-v2-label">&#x1F5A7; Total Hosts</div>
+  </div>
+  <div class="stat-card-v2 green">
+    <div class="stat-card-v2-value">{{ status.values()|selectattr('==', 'equalto', true)|list|length }}</div>
+    <div class="stat-card-v2-label">&#x1F7E2; Online</div>
+  </div>
+  <div class="stat-card-v2 red">
+    <div class="stat-card-v2-value">{{ status.values()|selectattr('==', 'equalto', false)|list|length }}</div>
+    <div class="stat-card-v2-label">&#x1F534; Offline</div>
+  </div>
+  <div class="stat-card-v2 purple">
+    <div class="stat-card-v2-value">{{ history|length if history else 0 }}</div>
+    <div class="stat-card-v2-label">&#x1F4DC; Updates Run</div>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── Auto-Update Status ──────────────────────────────────── -->
+<div class="card {% if auto_updates_enabled %}card-green{% endif %}" style="margin-bottom:1.5rem;">
+  <div class="card-header">
+    <h3>&#x23F0; Automatic Updates</h3>
     {% if auto_updates_enabled %}
-      Automatic updates are running <strong>{{ update_frequency }}</strong>.
-      {% if last_auto_update %}
-        <br>Last automatic update: {{ last_auto_update }}
-      {% endif %}
+      <span class="badge badge-green">&#x2714; Enabled</span>
     {% else %}
-      Automatic updates are currently disabled. Visit <a href="/update_settings" style="color: #60a5fa;">Update Settings</a> to enable.
+      <span class="badge badge-gray">&#x2715; Disabled</span>
     {% endif %}
-  </p>
-</div>
-
-{% for name in hosts %}
-<div class="card">
-  <b>{{ name }}</b><br>
-  Status:
-  <span class="{{ 'status-online' if status[name] else 'status-offline' }}">
-    {{ 'Online' if status[name] else 'Offline' }}
-  </span><br><br>
-  <a class="btn" href="/update/{{ name }}">Full Update</a>
-  <a class="btn" href="/update_repo/{{ name }}" style="background: #7c3aed;" title="Update packages from repository while keeping host configuration files unchanged">Repo Update</a>
-  <a class="btn" href="/hosts/edit/{{ name }}" style="background: #475569;">Edit</a>
-</div>
-{% endfor %}
-
-<h3>Update History</h3>
-{% for h in history %}
-<div class="card">
-  {{ h.time }} — {{ h.host }} — {{ h.status }}
-  {% if h.type %}
-    <span style="color: #94a3b8;"> ({{ h.type }})</span>
+  </div>
+  {% if auto_updates_enabled %}
+    <p>Running <strong>{{ update_frequency }}</strong>.
+    {% if last_auto_update %}
+      Last run: <span class="text-muted">{{ last_auto_update }}</span>
+    {% endif %}
+    </p>
+  {% else %}
+    <p>Automatic updates are currently disabled.
+      <a href="/update_settings" class="text-blue">Enable in Update Settings &rarr;</a>
+    </p>
   {% endif %}
 </div>
-{% endfor %}
+
+<!-- ── Managed Hosts ──────────────────────────────────────── -->
+<div class="card-header" style="margin-bottom:1rem; padding:0;">
+  <h3>&#x1F5A7; Managed Hosts</h3>
+  <a class="btn btn-secondary btn-sm" href="/hosts">Manage Hosts</a>
 </div>
+
+{% if hosts %}
+<div class="host-grid">
+  {% for name, h in hosts.items() %}
+  {% set online = status[name] %}
+  {% set env_slug = (h.environment|lower).replace(' ','') %}
+  {% set crit_slug = h.criticality|lower %}
+  <div class="host-card-v2 {% if online %}online{% else %}offline{% endif %}">
+
+    <!-- Header -->
+    <div class="hc-header">
+      <div style="min-width:0;flex:1;">
+        <div class="hc-title-row">
+          <span class="hc-name">{{ name }}</span>
+          {% if h.host in localhost_identifiers or h.host|lower in localhost_identifiers %}
+            <span class="badge badge-local">&#x1F3E0; Local</span>
+          {% endif %}
+        </div>
+        <div class="hc-badges" style="margin-top:0.4rem;">
+          <span class="status-badge">
+            <span class="status-dot {% if online %}online{% else %}offline{% endif %}"></span>
+            <span class="{% if online %}status-online{% else %}status-offline{% endif %}" style="font-size:0.78rem;">
+              {% if online %}Online{% else %}Offline{% endif %}
+            </span>
+          </span>
+          <span class="env-badge env-{{ env_slug }}">{{ h.environment }}</span>
+          <span class="crit-badge crit-{{ crit_slug }}">{{ h.criticality }}</span>
+          {% if h.group %}
+          <span class="badge badge-gray">&#x1F4C1; {{ h.group }}</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Description -->
+    {% if h.description %}
+    <div class="hc-description">{{ h.description }}</div>
+    {% endif %}
+
+    <!-- Meta -->
+    <div class="hc-meta">
+      <span class="hc-meta-item"><span class="icon">&#x1F4BB;</span> {{ h.host }}</span>
+      <span class="hc-meta-item"><span class="icon">&#x1F464;</span> {{ h.user }}</span>
+      {% if h.location %}
+      <span class="hc-meta-item"><span class="icon">&#x1F4CD;</span> {{ h.location }}</span>
+      {% endif %}
+      {% if h.last_update %}
+      <span class="hc-meta-item"><span class="icon">&#x1F504;</span> {{ h.last_update }}</span>
+      {% endif %}
+    </div>
+
+    <!-- Tags -->
+    {% if h.tags %}
+    <div class="hc-tags">
+      {% for tag in h.tags %}
+      {% set slug = (tag|lower).replace(' ','-') %}
+      <span class="tag-chip tag-chip-default tag-chip-{{ slug }}">{{ tag }}</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- OS Profiles -->
+    {% if h.os_profiles %}
+    <div style="padding:0 1.1rem 0.6rem; display:flex; flex-wrap:wrap; gap:0.3rem;">
+      {% for p in h.os_profiles %}
+      <span class="badge {% if p.default %}badge-blue{% else %}badge-gray{% endif %}">
+        {% if p.type == 'windows' %}&#x1FA9F;{% else %}&#x1F427;{% endif %}
+        {{ p.name }}{% if p.default %} &#x2605;{% endif %}
+      </span>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Actions -->
+    {% if not current_user_id or 'operator' in current_user_roles or 'admin' in current_user_roles %}
+    <div class="hc-actions">
+      <a class="btn btn-primary btn-sm" href="/update/{{ name }}">&#x2B06; Full Update</a>
+      <a class="btn btn-purple btn-sm" href="/update_repo/{{ name }}">&#x1F4E6; Repo Update</a>
+      <a class="btn btn-secondary btn-sm" href="/hosts/edit/{{ name }}">&#x270F; Edit</a>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+  <div class="empty-state-icon">&#x1F5A7;</div>
+  <h3>No hosts configured</h3>
+  <p>Add your first host to start managing remote Linux systems.</p>
+  <a class="btn btn-primary" href="/hosts" style="margin-top:1rem;">Add Host</a>
+</div>
+{% endif %}
+
+<!-- ── Update History ─────────────────────────────────────── -->
+<div style="margin-top:2rem;">
+  <div class="card-header" style="margin-bottom:1rem; padding:0;">
+    <h3>&#x1F4DC; Update History</h3>
+  </div>
+  {% if history %}
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Host</th>
+          <th>Status</th>
+          <th>Type</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in history %}
+        <tr>
+          <td style="color:var(--text-muted);white-space:nowrap;">&#x1F552; {{ entry.time }}</td>
+          <td>
+            <strong>{{ entry.host }}</strong>
+            {% if hosts.get(entry.host) %}
+            {% set h = hosts[entry.host] %}
+            {% if h.tags %}
+            <div style="margin-top:0.2rem;display:flex;gap:0.25rem;flex-wrap:wrap;">
+              {% for tag in h.tags[:2] %}
+              <span class="tag-chip tag-chip-default" style="font-size:0.65rem;padding:0.1rem 0.4rem;">{{ tag }}</span>
+              {% endfor %}
+            </div>
+            {% endif %}
+            {% endif %}
+          </td>
+          <td>
+            {% if 'success' in (entry.status|lower) or 'ok' in (entry.status|lower) %}
+            <span class="badge badge-green">&#x2714; {{ entry.status }}</span>
+            {% elif 'fail' in (entry.status|lower) or 'error' in (entry.status|lower) %}
+            <span class="badge badge-red">&#x2715; {{ entry.status }}</span>
+            {% else %}
+            <span class="badge badge-gray">{{ entry.status }}</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if entry.type %}
+            <span class="badge badge-blue">{{ entry.type }}</span>
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state" style="padding:2rem;">
+    <div class="empty-state-icon">&#x1F4DC;</div>
+    <p>No update history yet.</p>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

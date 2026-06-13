@@ -1,0 +1,312 @@
+{% extends "base.html" %}
+
+{% block title %}Network Scanner — FleetPilot{% endblock %}
+{% block page_icon %}&#x1F50D;{% endblock %}
+{% block page_title %}Network Scanner{% endblock %}
+
+{% block topbar_actions %}
+<a class="btn btn-secondary btn-sm" href="/hosts">&#x1F5A7; Hosts</a>
+{% endblock %}
+
+{% block content %}
+
+<!-- Intro Card -->
+<div class="card" style="margin-bottom:1.25rem;">
+  <div class="card-header">
+    <h3>&#x1F50D; Discover Devices on Your Network</h3>
+    <span class="badge badge-blue">Auto-Discovery</span>
+  </div>
+  <p>Scan a subnet to find reachable devices. FleetPilot pings each IP, checks for open SSH ports, and lets you add discovered devices as managed hosts in one click.</p>
+</div>
+
+<!-- Scanner Controls -->
+<div class="scanner-card">
+  <div class="scanner-input-row">
+    <div class="form-group">
+      <label class="form-label">&#x1F4E1; Network Prefix</label>
+      <input type="text" id="networkPrefix" value="{{ default_prefix }}"
+             placeholder="e.g. 192.168.1" style="font-family:monospace;">
+      <div class="form-hint">Enter the first three octets of your subnet (e.g. 192.168.1)</div>
+    </div>
+    <div class="form-group" style="max-width:120px;">
+      <label class="form-label">Start IP</label>
+      <input type="number" id="rangeStart" value="1" min="1" max="254">
+    </div>
+    <div class="form-group" style="max-width:120px;">
+      <label class="form-label">End IP</label>
+      <input type="number" id="rangeEnd" value="254" min="1" max="254">
+    </div>
+    <div class="form-group" style="max-width:120px;">
+      <label class="form-label">SSH Port</label>
+      <input type="number" id="sshPort" value="22" min="1" max="65535">
+    </div>
+    <div style="padding-bottom:0.1rem;">
+      <button class="btn btn-primary" id="scanBtn" type="button" onclick="startScan()">
+        &#x25B6; Start Scan
+      </button>
+    </div>
+  </div>
+
+  <!-- Progress -->
+  <div class="scan-progress" id="scanProgress">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem;">
+      <span style="font-size:0.85rem;font-weight:600;color:var(--text-secondary);" id="scanStatusText">Scanning…</span>
+      <span style="font-size:0.8rem;color:var(--text-muted);" id="scanPercent">0%</span>
+    </div>
+    <div class="scan-progress-bar-wrap">
+      <div class="scan-progress-bar" id="scanProgressBar"></div>
+    </div>
+    <div style="font-size:0.78rem;color:var(--text-muted);" id="scanCurrentIP">Probing…</div>
+  </div>
+</div>
+
+<!-- Results -->
+<div id="scanResultsSection" style="display:none;">
+  <div class="card-header" style="padding:0;margin-bottom:0.75rem;">
+    <h3>&#x1F4CB; Scan Results</h3>
+    <div style="display:flex;gap:0.5rem;align-items:center;">
+      <span class="badge badge-green" id="foundCount">0 found</span>
+      <span class="badge badge-blue" id="sshCount">0 SSH</span>
+      <button class="btn btn-ghost btn-sm" onclick="clearResults()">&#x2715; Clear</button>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:0.75rem;font-size:0.78rem;color:var(--text-muted);">
+    <span><span class="scan-status-dot ssh"></span>SSH reachable — can be managed</span>
+    <span><span class="scan-status-dot ping"></span>Ping only — SSH not available</span>
+    <span><span class="scan-status-dot off"></span>Offline</span>
+  </div>
+
+  <div class="scan-results-grid" id="scanResultsGrid"></div>
+</div>
+
+<!-- Already managed hosts (for duplicate detection) -->
+<script>
+const MANAGED_HOSTS = {{ managed_host_ips | tojson }};
+</script>
+
+<!-- Quick-Add Modal -->
+<div class="modal-backdrop" id="quickAddModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>&#x2795; Quick Add Host</h3>
+      <button class="modal-close" onclick="closeModal()" type="button">&#x2715;</button>
+    </div>
+    <form id="quickAddForm" method="POST" action="/hosts/quick_add">
+      <div class="form-group">
+        <label class="form-label">Display Name *</label>
+        <input type="text" name="name" id="qaName" placeholder="e.g. Web Server" required>
+      </div>
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label class="form-label">IP Address *</label>
+          <input type="text" name="host" id="qaHost" readonly style="background:var(--bg-base);font-family:monospace;">
+        </div>
+        <div class="form-group">
+          <label class="form-label">SSH Port</label>
+          <input type="number" name="port" id="qaPort" value="22" min="1" max="65535">
+        </div>
+      </div>
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label class="form-label">SSH User *</label>
+          <input type="text" name="user" id="qaUser" placeholder="e.g. admin" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">MAC Address</label>
+          <input type="text" name="mac" id="qaMac" placeholder="AA:BB:CC:DD:EE:FF">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <input type="text" name="description" id="qaDesc" placeholder="Short description">
+      </div>
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label class="form-label">Environment</label>
+          <select name="environment">
+            <option>Production</option><option>Staging</option>
+            <option>Development</option><option>Testing</option><option>Lab</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Criticality</label>
+          <select name="criticality">
+            <option>Critical</option><option>High</option>
+            <option selected>Medium</option><option>Low</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tags</label>
+        <div class="tag-presets" style="margin-bottom:0.5rem;" id="qaTagPresets">
+          {% for tag in tag_presets %}
+          <button type="button" class="tag-preset-btn" onclick="qaToggleTag('{{ tag }}')">{{ tag }}</button>
+          {% endfor %}
+        </div>
+        <input type="hidden" name="tags" id="qaTagsHidden">
+      </div>
+      <div class="btn-group" style="margin-top:1.25rem;">
+        <button class="btn btn-primary" type="submit">&#x1F4BE; Add Host</button>
+        <button class="btn btn-ghost" type="button" onclick="closeModal()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let scanResults = [];
+let qaSelectedTags = [];
+
+/* ── Quick-Add Modal ── */
+function openModal(ip, mac, sshPort) {
+  document.getElementById('qaHost').value = ip;
+  document.getElementById('qaMac').value  = mac || '';
+  document.getElementById('qaPort').value = sshPort || 22;
+  document.getElementById('qaName').value = '';
+  document.getElementById('qaUser').value = 'admin';
+  document.getElementById('qaDesc').value = '';
+  qaSelectedTags = [];
+  renderQaTags();
+  document.getElementById('quickAddModal').classList.add('open');
+  setTimeout(() => document.getElementById('qaName').focus(), 100);
+}
+function closeModal() {
+  document.getElementById('quickAddModal').classList.remove('open');
+}
+document.getElementById('quickAddModal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+function qaToggleTag(tag) {
+  const idx = qaSelectedTags.indexOf(tag);
+  if (idx === -1) qaSelectedTags.push(tag);
+  else qaSelectedTags.splice(idx, 1);
+  renderQaTags();
+}
+function renderQaTags() {
+  document.getElementById('qaTagsHidden').value = qaSelectedTags.join(',');
+  document.querySelectorAll('#qaTagPresets .tag-preset-btn').forEach(btn => {
+    btn.classList.toggle('active', qaSelectedTags.includes(btn.textContent.trim()));
+  });
+}
+
+/* ── Scan Logic ── */
+function startScan() {
+  const prefix = document.getElementById('networkPrefix').value.trim();
+  const start  = parseInt(document.getElementById('rangeStart').value) || 1;
+  const end    = parseInt(document.getElementById('rangeEnd').value) || 254;
+  const port   = parseInt(document.getElementById('sshPort').value) || 22;
+
+  if (!prefix.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}$/)) {
+    alert('Please enter a valid network prefix (e.g. 192.168.1)');
+    return;
+  }
+  if (start > end) { alert('Start IP must be ≤ End IP'); return; }
+
+  scanResults = [];
+  document.getElementById('scanResultsSection').style.display = 'none';
+  document.getElementById('scanResultsGrid').innerHTML = '';
+  document.getElementById('foundCount').textContent = '0 found';
+  document.getElementById('sshCount').textContent   = '0 SSH';
+
+  const progress = document.getElementById('scanProgress');
+  const bar      = document.getElementById('scanProgressBar');
+  const pct      = document.getElementById('scanPercent');
+  const statusTxt= document.getElementById('scanStatusText');
+  const curIP    = document.getElementById('scanCurrentIP');
+  const scanBtn  = document.getElementById('scanBtn');
+
+  progress.classList.add('active');
+  scanBtn.disabled = true;
+  scanBtn.textContent = '⏳ Scanning…';
+
+  const total = end - start + 1;
+  let done = 0;
+  let found = 0;
+  let sshFound = 0;
+
+  /* Scan in batches of 10 for responsiveness */
+  const ips = [];
+  for (let i = start; i <= end; i++) ips.push(`${prefix}.${i}`);
+
+  function scanBatch(batch) {
+    return Promise.all(batch.map(ip =>
+      fetch(`/api/scan_host?ip=${encodeURIComponent(ip)}&port=${port}`)
+        .then(r => r.json())
+        .catch(() => ({ip, online: false, ssh: false, mac: ''}))
+    ));
+  }
+
+  async function runScan() {
+    const batchSize = 10;
+    for (let b = 0; b < ips.length; b += batchSize) {
+      const batch = ips.slice(b, b + batchSize);
+      curIP.textContent = `Probing ${batch[0]} … ${batch[batch.length-1]}`;
+      const results = await scanBatch(batch);
+      results.forEach(r => {
+        done++;
+        const pctVal = Math.round((done / total) * 100);
+        bar.style.width = pctVal + '%';
+        pct.textContent = pctVal + '%';
+        if (r.online) {
+          found++;
+          if (r.ssh) sshFound++;
+          scanResults.push(r);
+          addResultCard(r, port);
+          document.getElementById('foundCount').textContent = found + ' found';
+          document.getElementById('sshCount').textContent   = sshFound + ' SSH';
+          document.getElementById('scanResultsSection').style.display = 'block';
+        }
+      });
+    }
+    /* Done */
+    progress.classList.remove('active');
+    scanBtn.disabled = false;
+    scanBtn.textContent = '▶ Start Scan';
+    statusTxt.textContent = `Scan complete — ${found} device(s) found`;
+    bar.style.width = '100%';
+    pct.textContent = '100%';
+  }
+
+  runScan();
+}
+
+function addResultCard(r, sshPort) {
+  const grid = document.getElementById('scanResultsGrid');
+  const isManaged = MANAGED_HOSTS.includes(r.ip);
+  const div = document.createElement('div');
+  div.className = 'scan-device-card' + (isManaged ? ' already-added' : '');
+  div.id = 'card-' + r.ip.replace(/\./g, '-');
+
+  const dotClass = r.ssh ? 'ssh' : (r.online ? 'ping' : 'off');
+  const statusLabel = r.ssh ? 'SSH reachable' : (r.online ? 'Ping only' : 'Offline');
+
+  div.innerHTML = `
+    <div class="scan-device-ip">
+      <span class="scan-status-dot ${dotClass}"></span>${r.ip}
+    </div>
+    <div class="scan-device-meta">
+      <span>&#x1F4E1; ${statusLabel}</span>
+      ${r.mac ? `<span>&#x1F4DF; MAC: <code>${r.mac}</code></span>` : ''}
+      ${r.hostname ? `<span>&#x1F4BB; ${r.hostname}</span>` : ''}
+      ${r.ssh ? `<span>&#x1F511; SSH port ${sshPort} open</span>` : ''}
+    </div>
+    <div class="scan-device-actions">
+      ${!isManaged && r.ssh ? `<button class="btn btn-primary btn-sm" onclick="openModal('${r.ip}','${r.mac||''}',${sshPort})">&#x2795; Add Host</button>` : ''}
+      ${isManaged ? '<span class="badge badge-green">&#x2714; Already managed</span>' : ''}
+      ${!r.ssh && !isManaged ? '<span style="font-size:0.75rem;color:var(--text-muted);">No SSH — ping only</span>' : ''}
+    </div>`;
+  grid.appendChild(div);
+}
+
+function clearResults() {
+  scanResults = [];
+  document.getElementById('scanResultsGrid').innerHTML = '';
+  document.getElementById('scanResultsSection').style.display = 'none';
+}
+</script>
+{% endblock %}
