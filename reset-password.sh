@@ -13,205 +13,246 @@ success() { echo -e "${GREEN}[OK]${RESET}    $*"; }
 warn()    { echo -e "${YELLOW}[WARN]${RESET}  $*"; }
 error()   { echo -e "${RED}[ERROR]${RESET} $*" >&2; exit 1; }
 
-INSTALL_DIR="/opt/fleetpilot"
-ENV_FILE="${INSTALL_DIR}/.env"
-DB_FILE="${INSTALL_DIR}/users.db"
-VENV_PYTHON="${INSTALL_DIR}/venv/bin/python3"
-
 # ── Root check ────────────────────────────────────────────────────────────────
 if [[ $EUID -ne 0 ]]; then
     error "This script must be run as root. Use: sudo bash reset-password.sh"
 fi
 
+# ── Locate installation ───────────────────────────────────────────────────────
+# Try the default install path first, then fall back to the script's own directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${SCRIPT_DIR}/users.db" ]]; then
+    INSTALL_DIR="${SCRIPT_DIR}"
+elif [[ -f "/opt/fleetpilot/users.db" ]]; then
+    INSTALL_DIR="/opt/fleetpilot"
+else
+    # Ask the user
+    read -rp "FleetPilot install directory [/opt/fleetpilot]: " INPUT_DIR
+    INSTALL_DIR="${INPUT_DIR:-/opt/fleetpilot}"
+    [[ -f "${INSTALL_DIR}/users.db" ]] || error "users.db not found in ${INSTALL_DIR}"
+fi
+
+DB_FILE="${INSTALL_DIR}/users.db"
+ENV_FILE="${INSTALL_DIR}/.env"
+
+# ── Find a working Python interpreter with werkzeug ──────────────────────────
+find_python() {
+    for PY in \
+        "${INSTALL_DIR}/venv/bin/python3" \
+        "/opt/fleetpilot/venv/bin/python3" \
+        "$(which python3 2>/dev/null)" \
+        "$(which python 2>/dev/null)"; do
+        if [[ -x "${PY}" ]] && "${PY}" -c "from werkzeug.security import generate_password_hash" 2>/dev/null; then
+            echo "${PY}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+PYTHON=$(find_python) || error "Could not find Python with werkzeug installed.
+  Fix: pip3 install werkzeug   or   ${INSTALL_DIR}/venv/bin/pip install werkzeug"
+
+# ── Banner ────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${BOLD}╔══════════════════════════════════════════════════════╗${RESET}"
 echo -e "${BOLD}║         FleetPilot — Password Reset Utility          ║${RESET}"
 echo -e "${BOLD}╚══════════════════════════════════════════════════════╝${RESET}"
 echo ""
+info "Install dir : ${INSTALL_DIR}"
+info "Database    : ${DB_FILE}"
+info "Python      : ${PYTHON}"
+echo ""
 
-# ── Detect installation ───────────────────────────────────────────────────────
-if [[ ! -d "${INSTALL_DIR}" ]]; then
-    error "FleetPilot installation not found at ${INSTALL_DIR}"
-fi
+# ── Helper: prompt for a confirmed password ───────────────────────────────────
+prompt_password() {
+    local LABEL="${1:-New password}"
+    local PASS=""
+    while true; do
+        read -rsp "  ${LABEL} (min 12 chars): " PASS
+        echo ""
+        if [[ ${#PASS} -lt 12 ]]; then
+            warn "Password must be at least 12 characters. Try again."
+            continue
+        fi
+        local CONFIRM=""
+        read -rsp "  Confirm password: " CONFIRM
+        echo ""
+        if [[ "${PASS}" == "${CONFIRM}" ]]; then
+            echo "${PASS}"
+            return 0
+        fi
+        warn "Passwords do not match. Try again."
+    done
+}
+
+# ── Helper: update password in SQLite ─────────────────────────────────────────
+db_update_password() {
+    local USERNAME="${1}"
+    local NEW_PASS="${2}"
+    "${PYTHON}" - "${USERNAME}" "${NEW_PASS}" <<'PYEOF'
+import sys, sqlite3
+from werkzeug.security import generate_password_hash
+
+db_path = sys.argv[1] if len(sys.argv) > 3 else None
+username = sys.argv[1]
+new_pass = sys.argv[2]
+
+import os
+db_path = os.environ.get('FP_DB')
+
+db = sqlite3.connect(db_path)
+db.row_factory = sqlite3.Row
+row = db.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+if not row:
+    print(f"  User '{username}' not found in database.")
+    sys.exit(2)
+db.execute("UPDATE users SET password_hash = ?, active = 1 WHERE id = ?",
+           (generate_password_hash(new_pass), row['id']))
+db.commit()
+db.close()
+print(f"  Database updated for user '{username}'.")
+PYEOF
+}
 
 # ── Choose reset method ───────────────────────────────────────────────────────
-echo -e "  ${BOLD}Choose reset method:${RESET}"
-echo -e "  ${CYAN}1)${RESET} Reset via .env file  (affects the built-in admin account)"
-echo -e "  ${CYAN}2)${RESET} Reset via database   (affects any user account)"
-echo -e "  ${CYAN}3)${RESET} List all users       (show usernames in database)"
+echo -e "  ${BOLD}Choose an option:${RESET}"
+echo -e "  ${CYAN}1)${RESET} Reset admin password  (via .env + database)"
+echo -e "  ${CYAN}2)${RESET} Reset any user        (database only)"
+echo -e "  ${CYAN}3)${RESET} List all users"
 echo ""
 read -rp "  Enter choice [1/2/3]: " CHOICE
 
 case "${CHOICE}" in
 
-# ── Method 1: .env reset ──────────────────────────────────────────────────────
+# ── Option 1: Reset admin (env + db) ─────────────────────────────────────────
 1)
     echo ""
-    info "Resetting admin credentials in ${ENV_FILE}"
+    info "Resetting admin credentials"
 
-    if [[ ! -f "${ENV_FILE}" ]]; then
-        error ".env file not found at ${ENV_FILE}. Was FleetPilot installed with install-debian.sh?"
+    # Determine current admin username
+    CURRENT_USER="admin"
+    if [[ -f "${ENV_FILE}" ]]; then
+        ENV_USER=$(grep "^DASHBOARD_USERNAME=" "${ENV_FILE}" 2>/dev/null | cut -d= -f2 | tr -d '"' || true)
+        [[ -n "${ENV_USER}" ]] && CURRENT_USER="${ENV_USER}"
     fi
+    info "Current admin username: ${CURRENT_USER}"
 
-    read -rp "  New admin username [leave blank to keep current]: " NEW_USER
+    read -rp "  New username [leave blank to keep '${CURRENT_USER}']: " NEW_USER
+    NEW_USER="${NEW_USER:-${CURRENT_USER}}"
 
-    while true; do
-        read -rsp "  New admin password (min 12 chars): " NEW_PASS
-        echo ""
-        if [[ ${#NEW_PASS} -ge 12 ]]; then
-            read -rsp "  Confirm new password: " CONFIRM_PASS
-            echo ""
-            if [[ "${NEW_PASS}" == "${CONFIRM_PASS}" ]]; then
-                break
-            else
-                warn "Passwords do not match. Try again."
-            fi
-        else
-            warn "Password must be at least 12 characters. Try again."
-        fi
-    done
+    NEW_PASS=$(prompt_password "New password for '${NEW_USER}'")
 
-    # Update username if provided
-    if [[ -n "${NEW_USER}" ]]; then
+    # Update .env
+    if [[ -f "${ENV_FILE}" ]]; then
+        # Update existing entries or append if missing
         if grep -q "^DASHBOARD_USERNAME=" "${ENV_FILE}"; then
             sed -i "s|^DASHBOARD_USERNAME=.*|DASHBOARD_USERNAME=${NEW_USER}|" "${ENV_FILE}"
         else
             echo "DASHBOARD_USERNAME=${NEW_USER}" >> "${ENV_FILE}"
         fi
-        success "Username updated to: ${NEW_USER}"
-    fi
-
-    # Update password
-    if grep -q "^DASHBOARD_PASSWORD=" "${ENV_FILE}"; then
-        sed -i "s|^DASHBOARD_PASSWORD=.*|DASHBOARD_PASSWORD=${NEW_PASS}|" "${ENV_FILE}"
-    else
-        echo "DASHBOARD_PASSWORD=${NEW_PASS}" >> "${ENV_FILE}"
-    fi
-    success "Password updated in ${ENV_FILE}"
-
-    # Also update the database if it exists (keeps both in sync)
-    if [[ -f "${DB_FILE}" ]] && [[ -x "${VENV_PYTHON}" ]]; then
-        EFFECTIVE_USER="${NEW_USER}"
-        if [[ -z "${EFFECTIVE_USER}" ]]; then
-            EFFECTIVE_USER=$(grep "^DASHBOARD_USERNAME=" "${ENV_FILE}" | cut -d= -f2)
+        if grep -q "^DASHBOARD_PASSWORD=" "${ENV_FILE}"; then
+            sed -i "s|^DASHBOARD_PASSWORD=.*|DASHBOARD_PASSWORD=${NEW_PASS}|" "${ENV_FILE}"
+        else
+            echo "DASHBOARD_PASSWORD=${NEW_PASS}" >> "${ENV_FILE}"
         fi
-        EFFECTIVE_USER="${EFFECTIVE_USER:-admin}"
+        success ".env updated"
+    else
+        warn ".env not found — skipping env file update"
+    fi
 
-        "${VENV_PYTHON}" - <<PYEOF
-import sys
-sys.path.insert(0, '${INSTALL_DIR}')
-import os, sqlite3
-os.chdir('${INSTALL_DIR}')
+    # Update database (rename user if needed, then set password)
+    FP_DB="${DB_FILE}" "${PYTHON}" - <<PYEOF
+import sys, sqlite3, os
 from werkzeug.security import generate_password_hash
 
 db = sqlite3.connect('${DB_FILE}')
 db.row_factory = sqlite3.Row
 
-# Update by username
-cur = db.execute("SELECT id FROM users WHERE username = ?", ('${EFFECTIVE_USER}',))
-row = cur.fetchone()
+old_name = '${CURRENT_USER}'
+new_name = '${NEW_USER}'
+new_pass = '${NEW_PASS}'
+
+row = db.execute("SELECT id FROM users WHERE username = ?", (old_name,)).fetchone()
+if not row:
+    # Try id=1 as fallback
+    row = db.execute("SELECT id FROM users WHERE id = 1").fetchone()
+    if row:
+        print(f"  User '{old_name}' not found — resetting user with id=1 instead.")
+
 if row:
-    db.execute("UPDATE users SET password_hash = ? WHERE id = ?",
-               (generate_password_hash('${NEW_PASS}'), row['id']))
+    db.execute("UPDATE users SET username = ?, password_hash = ?, active = 1 WHERE id = ?",
+               (new_name, generate_password_hash(new_pass), row['id']))
     db.commit()
-    print(f"  Database record for '{EFFECTIVE_USER}' updated.")
+    print(f"  Database updated: username='{new_name}', password reset, account activated.")
 else:
-    print(f"  User '{EFFECTIVE_USER}' not found in database — only .env was updated.")
+    print("  No user found in database — only .env was updated.")
 db.close()
 PYEOF
-    fi
     ;;
 
-# ── Method 2: Database reset ──────────────────────────────────────────────────
+# ── Option 2: Reset any user (db only) ───────────────────────────────────────
 2)
     echo ""
-
-    if [[ ! -f "${DB_FILE}" ]]; then
-        error "Database not found at ${DB_FILE}"
-    fi
-
-    if [[ ! -x "${VENV_PYTHON}" ]]; then
-        error "Python venv not found at ${VENV_PYTHON}. Is FleetPilot installed?"
-    fi
-
-    # List users first
     info "Users in database:"
-    "${VENV_PYTHON}" - <<PYEOF
+    "${PYTHON}" - <<PYEOF
 import sqlite3
 db = sqlite3.connect('${DB_FILE}')
 db.row_factory = sqlite3.Row
-rows = db.execute("SELECT id, username, active FROM users ORDER BY id").fetchall()
+rows = db.execute("""
+    SELECT u.id, u.username, u.active,
+           GROUP_CONCAT(r.name, ', ') as roles
+    FROM users u
+    LEFT JOIN user_roles ur ON u.id = ur.user_id
+    LEFT JOIN roles r ON ur.role_id = r.id
+    GROUP BY u.id ORDER BY u.id
+""").fetchall()
 for r in rows:
-    status = "active" if r['active'] else "inactive"
-    print(f"    [{r['id']}] {r['username']}  ({status})")
+    status = "active" if r['active'] else "INACTIVE"
+    roles  = r['roles'] or '-'
+    print(f"    [{r['id']}]  {r['username']:<20}  roles: {roles:<15}  ({status})")
 db.close()
 PYEOF
 
     echo ""
-    read -rp "  Enter the username to reset: " TARGET_USER
+    read -rp "  Username to reset: " TARGET_USER
+    [[ -z "${TARGET_USER}" ]] && error "No username entered."
 
-    if [[ -z "${TARGET_USER}" ]]; then
-        error "No username entered."
-    fi
+    NEW_PASS=$(prompt_password "New password for '${TARGET_USER}'")
 
-    while true; do
-        read -rsp "  New password for '${TARGET_USER}' (min 12 chars): " NEW_PASS
-        echo ""
-        if [[ ${#NEW_PASS} -ge 12 ]]; then
-            read -rsp "  Confirm new password: " CONFIRM_PASS
-            echo ""
-            if [[ "${NEW_PASS}" == "${CONFIRM_PASS}" ]]; then
-                break
-            else
-                warn "Passwords do not match. Try again."
-            fi
-        else
-            warn "Password must be at least 12 characters. Try again."
-        fi
-    done
-
-    "${VENV_PYTHON}" - <<PYEOF
-import sys
-sys.path.insert(0, '${INSTALL_DIR}')
-import sqlite3
+    "${PYTHON}" - <<PYEOF
+import sys, sqlite3
 from werkzeug.security import generate_password_hash
 
 db = sqlite3.connect('${DB_FILE}')
 db.row_factory = sqlite3.Row
-
-cur = db.execute("SELECT id FROM users WHERE username = ?", ('${TARGET_USER}',))
-row = cur.fetchone()
+row = db.execute("SELECT id FROM users WHERE username = ?", ('${TARGET_USER}',)).fetchone()
 if not row:
-    print(f"  ERROR: User '${TARGET_USER}' not found in database.")
+    print("  ERROR: User '${TARGET_USER}' not found.")
     sys.exit(1)
-
 db.execute("UPDATE users SET password_hash = ?, active = 1 WHERE id = ?",
            (generate_password_hash('${NEW_PASS}'), row['id']))
 db.commit()
-print(f"  Password for '${TARGET_USER}' updated successfully.")
 db.close()
+print(f"  Password for '${TARGET_USER}' updated and account activated.")
 PYEOF
-    success "Password reset for user '${TARGET_USER}'"
+    success "Password reset for '${TARGET_USER}'"
 
-    # If this is the admin user, also update .env to keep them in sync
+    # Sync .env if this is the admin user
     if [[ -f "${ENV_FILE}" ]]; then
-        ENV_USER=$(grep "^DASHBOARD_USERNAME=" "${ENV_FILE}" | cut -d= -f2)
+        ENV_USER=$(grep "^DASHBOARD_USERNAME=" "${ENV_FILE}" 2>/dev/null | cut -d= -f2 | tr -d '"' || true)
         if [[ "${ENV_USER}" == "${TARGET_USER}" ]]; then
             sed -i "s|^DASHBOARD_PASSWORD=.*|DASHBOARD_PASSWORD=${NEW_PASS}|" "${ENV_FILE}"
-            info ".env also updated to keep credentials in sync"
+            info ".env synced for admin user '${TARGET_USER}'"
         fi
     fi
     ;;
 
-# ── Method 3: List users ──────────────────────────────────────────────────────
+# ── Option 3: List users ──────────────────────────────────────────────────────
 3)
     echo ""
-    if [[ ! -f "${DB_FILE}" ]]; then
-        error "Database not found at ${DB_FILE}"
-    fi
-
-    info "Users in database:"
-    "${VENV_PYTHON}" - <<PYEOF
+    info "Users in database (${DB_FILE}):"
+    "${PYTHON}" - <<PYEOF
 import sqlite3
 db = sqlite3.connect('${DB_FILE}')
 db.row_factory = sqlite3.Row
@@ -221,16 +262,13 @@ rows = db.execute("""
     FROM users u
     LEFT JOIN user_roles ur ON u.id = ur.user_id
     LEFT JOIN roles r ON ur.role_id = r.id
-    GROUP BY u.id
-    ORDER BY u.id
+    GROUP BY u.id ORDER BY u.id
 """).fetchall()
-print(f"\n  {'ID':<5} {'Username':<20} {'Email':<30} {'Roles':<20} {'Status'}")
-print(f"  {'-'*4} {'-'*19} {'-'*29} {'-'*19} {'-'*8}")
+print(f"\n  {'ID':<5} {'Username':<20} {'Email':<28} {'Roles':<18} Status")
+print(f"  {'─'*4} {'─'*19} {'─'*27} {'─'*17} {'─'*8}")
 for r in rows:
-    status = "active" if r['active'] else "inactive"
-    email  = r['email'] or '-'
-    roles  = r['roles'] or '-'
-    print(f"  {r['id']:<5} {r['username']:<20} {email:<30} {roles:<20} {status}")
+    status = "active" if r['active'] else "INACTIVE"
+    print(f"  {r['id']:<5} {r['username']:<20} {(r['email'] or '-'):<28} {(r['roles'] or '-'):<18} {status}")
 print()
 db.close()
 PYEOF
@@ -238,27 +276,27 @@ PYEOF
     ;;
 
 *)
-    error "Invalid choice. Run the script again and enter 1, 2, or 3."
+    error "Invalid choice '${CHOICE}'. Run the script again and enter 1, 2, or 3."
     ;;
 esac
 
-# ── Restart service ───────────────────────────────────────────────────────────
+# ── Offer service restart ─────────────────────────────────────────────────────
 echo ""
 if systemctl is-active --quiet fleetpilot.service 2>/dev/null; then
-    read -rp "  Restart FleetPilot service to apply changes? [Y/n] " RESTART
+    read -rp "  Restart FleetPilot now to apply changes? [Y/n] " RESTART
     if [[ "${RESTART,,}" != "n" ]]; then
         systemctl restart fleetpilot.service
         sleep 2
         if systemctl is-active --quiet fleetpilot.service; then
-            success "FleetPilot restarted successfully"
+            success "FleetPilot restarted"
         else
-            warn "Service restart failed. Check: journalctl -u fleetpilot -n 20"
+            warn "Restart failed — check: journalctl -u fleetpilot -n 30"
         fi
     fi
 else
-    info "FleetPilot service is not running. Start it with: systemctl start fleetpilot"
+    info "FleetPilot is not running. Start it with: systemctl start fleetpilot"
 fi
 
 echo ""
-success "Password reset complete. You can now log in with the new credentials."
+success "Done. Log in with your new credentials."
 echo ""
