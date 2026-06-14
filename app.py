@@ -69,7 +69,8 @@ try:
     app.config['WTF_CSRF_TIME_LIMIT'] = 3600
 
     # Exempt pure JSON/API and SSE-stream endpoints from CSRF
-    _CSRF_EXEMPT_PREFIXES = ('/api/', '/progress/', '/disks/stream', '/smart/stream')
+    _CSRF_EXEMPT_PREFIXES = ('/api/', '/progress/', '/disks/stream', '/smart/stream',
+                              '/set_language', '/set_theme')
 
     @_csrf.exempt
     def _csrf_exempt_check():
@@ -77,10 +78,16 @@ try:
 
     @app.before_request
     def _maybe_exempt_csrf():
-        """Exempt API and streaming routes from CSRF validation."""
+        """Exempt API, streaming and UI-helper routes from CSRF validation."""
         if any(request.path.startswith(p) for p in _CSRF_EXEMPT_PREFIXES):
-            # Mark this request as CSRF-exempt by patching the view
-            pass  # Flask-WTF checks per-view; use @_csrf.exempt on individual routes
+            # Disable CSRF check for this request by setting the flag Flask-WTF reads
+            app.config['WTF_CSRF_ENABLED'] = False
+
+    @app.after_request
+    def _re_enable_csrf(response):
+        """Re-enable CSRF after each request so only exempt routes skip it."""
+        app.config['WTF_CSRF_ENABLED'] = True
+        return response
 
     @app.errorhandler(CSRFError)
     def handle_csrf_error(e):
@@ -1672,14 +1679,22 @@ def set_theme():
         session['theme'] = theme
     return ('', 204)
 
-@app.route("/set_language", methods=["POST", "GET"])
+@app.route("/set_language", methods=["GET", "POST"])
 def set_language():
-    """Persist the user's chosen language in the session."""
+    """Persist the user's chosen language in the session.
+    Accepts both GET (?lang=de&next=/hosts) and POST for backwards compat.
+    CSRF-exempt because changing UI language is not a security-sensitive action.
+    """
     from i18n import SUPPORTED_LANGUAGES
     lang = request.args.get('lang') or request.form.get('lang', 'en')
-    if lang in SUPPORTED_LANGUAGES:
-        session['lang'] = lang
-    next_url = request.form.get('next') or request.args.get('next') or '/index'
+    if lang not in SUPPORTED_LANGUAGES:
+        lang = 'en'
+    session['lang'] = lang
+    session.modified = True          # force session save even if nothing else changed
+    next_url = request.args.get('next') or request.form.get('next') or request.referrer or '/index'
+    # Sanitise next_url: only allow relative paths
+    if next_url and (next_url.startswith('http://') or next_url.startswith('https://')):
+        next_url = '/index'
     return redirect(next_url)
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2262,6 +2277,160 @@ def api_smart_disks():
     """JSON API: full disk list with latest health status."""
     disks = smart_manager.get_all_disks()
     return json.dumps(disks, default=str), 200, {"Content-Type": "application/json"}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CheckMK Integration Routes
+# ─────────────────────────────────────────────────────────────────────────────
+import checkmk_integration as _cmk
+import secrets as _secrets_mod
+
+# API token for CheckMK (stored in a simple file, generated on first use)
+_CMK_TOKEN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".checkmk_token")
+
+def _get_or_create_cmk_token() -> str:
+    """Return the persistent CheckMK API token, creating it if necessary."""
+    if os.path.exists(_CMK_TOKEN_FILE):
+        with open(_CMK_TOKEN_FILE) as f:
+            tok = f.read().strip()
+            if tok:
+                return tok
+    tok = _secrets_mod.token_hex(32)
+    with open(_CMK_TOKEN_FILE, "w") as f:
+        f.write(tok)
+    os.chmod(_CMK_TOKEN_FILE, 0o600)
+    return tok
+
+
+def _check_cmk_token():
+    """Validate the X-FleetPilot-Token header or query param."""
+    token = (request.headers.get("X-FleetPilot-Token")
+             or request.args.get("token", ""))
+    expected = _get_or_create_cmk_token()
+    return token == expected
+
+
+@app.route("/api/checkmk/agent")
+def api_checkmk_agent():
+    """CheckMK datasource program endpoint — returns <<<local>>> section."""
+    if not _check_cmk_token():
+        return "Unauthorized", 401
+    hosts = load_hosts()
+    output = _cmk.build_agent_output(
+        hosts,
+        smart_manager=smart_manager,
+        vm_controller=vm_controller,
+        storage_controller=storage_controller,
+    )
+    return output, 200, {"Content-Type": "text/plain; charset=utf-8"}
+
+
+@app.route("/api/checkmk/host/<host_name>")
+def api_checkmk_host(host_name):
+    """CheckMK piggyback data for a specific host."""
+    if not _check_cmk_token():
+        return "Unauthorized", 401
+    hosts = load_hosts()
+    if host_name not in hosts:
+        return f"Host '{host_name}' not found", 404
+    output = _cmk.build_host_piggyback(
+        host_name, hosts[host_name], smart_manager=smart_manager
+    )
+    return output, 200, {"Content-Type": "text/plain; charset=utf-8"}
+
+
+@app.route("/api/checkmk/hosts")
+def api_checkmk_hosts():
+    """JSON list of all configured hosts (for piggyback script)."""
+    if not _check_cmk_token():
+        return jsonify({"error": "Unauthorized"}), 401
+    hosts = load_hosts()
+    return jsonify({"hosts": [{"name": n, "ip": h.get("host", "")} for n, h in hosts.items()]})
+
+
+@app.route("/api/checkmk/status")
+def api_checkmk_status():
+    """Structured JSON status for CheckMK REST API or Grafana."""
+    if not _check_cmk_token():
+        return jsonify({"error": "Unauthorized"}), 401
+    hosts = load_hosts()
+    data = _cmk.build_status_json(
+        hosts,
+        smart_manager=smart_manager,
+        vm_controller=vm_controller,
+        storage_controller=storage_controller,
+    )
+    return jsonify(data)
+
+
+@app.route("/checkmk")
+@login_required
+def checkmk_dashboard():
+    """CheckMK Integration configuration page."""
+    token = _get_or_create_cmk_token()
+    base_url = request.host_url.rstrip("/")
+    script_local = _cmk.LOCAL_CHECK_SCRIPT_TEMPLATE.format(
+        base_url=base_url, api_token=token
+    )
+    script_piggyback = _cmk.PIGGYBACK_SCRIPT_TEMPLATE.format(
+        base_url=base_url, api_token=token
+    )
+    hosts = load_hosts()
+    status = _cmk.build_status_json(
+        hosts,
+        smart_manager=smart_manager,
+        vm_controller=vm_controller,
+        storage_controller=storage_controller,
+    )
+    return render_template(
+        "checkmk/index.html",
+        token=token,
+        base_url=base_url,
+        script_local=script_local,
+        script_piggyback=script_piggyback,
+        status=status,
+    )
+
+
+@app.route("/checkmk/regenerate_token", methods=["POST"])
+@login_required
+def checkmk_regenerate_token():
+    """Regenerate the CheckMK API token."""
+    if not current_user_has_role("admin"):
+        flash("Admin role required.", "error")
+        return redirect("/checkmk")
+    tok = _secrets_mod.token_hex(32)
+    with open(_CMK_TOKEN_FILE, "w") as f:
+        f.write(tok)
+    os.chmod(_CMK_TOKEN_FILE, 0o600)
+    flash("CheckMK API token regenerated successfully.", "success")
+    return redirect("/checkmk")
+
+
+@app.route("/checkmk/download_script/<script_type>")
+@login_required
+def checkmk_download_script(script_type):
+    """Download CheckMK local check shell script."""
+    token = _get_or_create_cmk_token()
+    base_url = request.host_url.rstrip("/")
+    if script_type == "local":
+        content = _cmk.LOCAL_CHECK_SCRIPT_TEMPLATE.format(
+            base_url=base_url, api_token=token
+        )
+        filename = "fleetpilot_check"
+    elif script_type == "piggyback":
+        content = _cmk.PIGGYBACK_SCRIPT_TEMPLATE.format(
+            base_url=base_url, api_token=token
+        )
+        filename = "fleetpilot_piggyback"
+    else:
+        return "Unknown script type", 404
+    from flask import Response
+    return Response(
+        content,
+        mimetype="text/x-shellscript",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 if __name__ == "__main__":

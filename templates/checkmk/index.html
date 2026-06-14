@@ -1,0 +1,387 @@
+{% extends "base.html" %}
+{% block title %}CheckMK Integration — FleetPilot{% endblock %}
+{% block page_icon %}&#x1F50D;{% endblock %}
+{% block page_title %}CheckMK Integration{% endblock %}
+
+{% block nav_extra %}
+  <a href="/checkmk/download_script/local" class="btn btn-secondary btn-sm">&#x2B07; Local Check Script</a>
+  <a href="/checkmk/download_script/piggyback" class="btn btn-secondary btn-sm">&#x2B07; Piggyback Script</a>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Overall Status ─────────────────────────────────────────────────────── -->
+<div class="stats-grid" style="margin-bottom:1.5rem">
+  {% set s = status.summary %}
+  {% set state_color = "green" if status.overall_state == "OK" else ("red" if status.overall_state == "CRITICAL" else "yellow") %}
+  <div class="stat-card">
+    <div class="stat-value" style="color:var(--{{ state_color }},#22c55e)">{{ status.overall_state }}</div>
+    <div class="stat-label">Overall State</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ s.hosts_online }}/{{ s.hosts_total }}</div>
+    <div class="stat-label">Hosts Online</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value {% if s.hosts_with_security_updates > 0 %}stat-danger{% elif s.hosts_with_pending_updates > 0 %}stat-warn{% endif %}">
+      {{ s.hosts_with_pending_updates }}
+    </div>
+    <div class="stat-label">Hosts with Updates</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value {% if s.disks_failed > 0 %}stat-danger{% endif %}">{{ s.disks_failed }}/{{ s.disks_total }}</div>
+    <div class="stat-label">Disks Failed/Total</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ s.vm_endpoints }}</div>
+    <div class="stat-label">VM Endpoints</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ s.storage_endpoints }}</div>
+    <div class="stat-label">Storage Endpoints</div>
+  </div>
+</div>
+
+<!-- ── API Token ──────────────────────────────────────────────────────────── -->
+<div class="card" style="margin-bottom:1.5rem">
+  <div class="card-header">
+    <h3>&#x1F511; API Token</h3>
+    <small class="text-muted">Use this token to authenticate CheckMK against FleetPilot</small>
+  </div>
+  <div style="padding:0.75rem 0">
+    <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
+      <code id="token-display" style="font-size:0.8rem;background:var(--bg-elevated);padding:0.4rem 0.75rem;border-radius:6px;border:1px solid var(--border);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ token }}</code>
+      <button class="btn btn-sm btn-secondary" onclick="copyToken()">&#x1F4CB; Copy</button>
+      {% if is_admin %}
+      <form method="POST" action="/checkmk/regenerate_token" style="display:inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-sm btn-danger" onclick="return confirm('Regenerate token? All existing CheckMK scripts will need updating.')">&#x1F504; Regenerate</button>
+      </form>
+      {% endif %}
+    </div>
+    <p class="text-muted" style="margin-top:0.5rem;font-size:0.8rem">
+      Pass as HTTP header: <code>X-FleetPilot-Token: &lt;token&gt;</code>
+      or query parameter: <code>?token=&lt;token&gt;</code>
+    </p>
+  </div>
+</div>
+
+<!-- ── API Endpoints ──────────────────────────────────────────────────────── -->
+<div class="card" style="margin-bottom:1.5rem">
+  <div class="card-header">
+    <h3>&#x1F310; API Endpoints</h3>
+  </div>
+  <div style="overflow-x:auto">
+  <table class="table">
+    <thead>
+      <tr><th>Endpoint</th><th>Method</th><th>Description</th><th>Use In CheckMK</th><th>Test</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>/api/checkmk/agent</code></td>
+        <td><span class="badge badge-blue">GET</span></td>
+        <td>Full <code>&lt;&lt;&lt;local&gt;&gt;&gt;</code> agent output — all hosts, disks, VMs, storage</td>
+        <td><span class="badge badge-purple">Datasource Program</span></td>
+        <td><button class="btn btn-sm btn-secondary" onclick="testEndpoint('/api/checkmk/agent','text')">Test</button></td>
+      </tr>
+      <tr>
+        <td><code>/api/checkmk/host/&lt;name&gt;</code></td>
+        <td><span class="badge badge-blue">GET</span></td>
+        <td>Piggyback data for a specific host</td>
+        <td><span class="badge badge-purple">Piggyback</span></td>
+        <td><button class="btn btn-sm btn-secondary" onclick="testEndpoint('/api/checkmk/host/server-90','text')">Test</button></td>
+      </tr>
+      <tr>
+        <td><code>/api/checkmk/hosts</code></td>
+        <td><span class="badge badge-blue">GET</span></td>
+        <td>JSON list of all configured hosts</td>
+        <td><span class="badge">Helper</span></td>
+        <td><button class="btn btn-sm btn-secondary" onclick="testEndpoint('/api/checkmk/hosts','json')">Test</button></td>
+      </tr>
+      <tr>
+        <td><code>/api/checkmk/status</code></td>
+        <td><span class="badge badge-blue">GET</span></td>
+        <td>Structured JSON status summary (Grafana / REST API)</td>
+        <td><span class="badge badge-green">REST / Grafana</span></td>
+        <td><button class="btn btn-sm btn-secondary" onclick="testEndpoint('/api/checkmk/status','json')">Test</button></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  <div id="api-test-result" style="display:none;padding:0.75rem 0">
+    <pre id="api-test-output" style="background:var(--bg-elevated);padding:0.75rem;border-radius:6px;font-size:0.75rem;max-height:300px;overflow:auto;white-space:pre-wrap;border:1px solid var(--border)"></pre>
+  </div>
+</div>
+
+<!-- ── Setup Instructions ─────────────────────────────────────────────────── -->
+<div class="card" style="margin-bottom:1.5rem">
+  <div class="card-header">
+    <h3>&#x1F4CB; Setup Instructions</h3>
+  </div>
+  <div style="padding:0.5rem 0">
+
+    <!-- Tab Nav -->
+    <div style="display:flex;gap:0.5rem;margin-bottom:1rem;border-bottom:1px solid var(--border);padding-bottom:0.5rem">
+      <button class="btn btn-sm btn-secondary tab-btn active" onclick="showTab('tab-local',this)">Option 1: Local Check Script</button>
+      <button class="btn btn-sm btn-secondary tab-btn" onclick="showTab('tab-piggyback',this)">Option 2: Piggyback Script</button>
+      <button class="btn btn-sm btn-secondary tab-btn" onclick="showTab('tab-datasource',this)">Option 3: Datasource Program</button>
+      <button class="btn btn-sm btn-secondary tab-btn" onclick="showTab('tab-rest',this)">Option 4: REST API</button>
+    </div>
+
+    <!-- Tab: Local Check -->
+    <div id="tab-local" class="tab-content">
+      <p class="text-muted" style="margin-bottom:0.75rem">
+        Place this script on the <strong>CheckMK monitoring host</strong> (or any host monitored by CheckMK).
+        It queries FleetPilot and outputs CheckMK-compatible service lines.
+      </p>
+      <ol style="padding-left:1.25rem;line-height:2">
+        <li>Download the script: <a href="/checkmk/download_script/local" class="btn btn-sm btn-secondary">&#x2B07; fleetpilot_check</a></li>
+        <li>Copy to CheckMK agent local directory:<br>
+          <code>cp fleetpilot_check /usr/lib/check_mk_agent/local/</code></li>
+        <li>Make executable:<br>
+          <code>chmod +x /usr/lib/check_mk_agent/local/fleetpilot_check</code></li>
+        <li>Run service discovery in CheckMK — FleetPilot services will appear automatically</li>
+      </ol>
+      <details style="margin-top:0.75rem">
+        <summary style="cursor:pointer;color:var(--text-secondary)">View script source</summary>
+        <pre style="background:var(--bg-elevated);padding:0.75rem;border-radius:6px;font-size:0.72rem;max-height:300px;overflow:auto;margin-top:0.5rem;border:1px solid var(--border)">{{ script_local }}</pre>
+      </details>
+    </div>
+
+    <!-- Tab: Piggyback -->
+    <div id="tab-piggyback" class="tab-content" style="display:none">
+      <p class="text-muted" style="margin-bottom:0.75rem">
+        Use this script to create <strong>piggyback data</strong> — each FleetPilot host appears as a separate
+        host in CheckMK with its own services (updates, disks, etc.).
+      </p>
+      <ol style="padding-left:1.25rem;line-height:2">
+        <li>Download: <a href="/checkmk/download_script/piggyback" class="btn btn-sm btn-secondary">&#x2B07; fleetpilot_piggyback</a></li>
+        <li><code>cp fleetpilot_piggyback /usr/lib/check_mk_agent/local/</code></li>
+        <li><code>chmod +x /usr/lib/check_mk_agent/local/fleetpilot_piggyback</code></li>
+        <li>In CheckMK: enable <em>Piggyback</em> for the monitoring host</li>
+        <li>Run service discovery — each FleetPilot host gets its own CheckMK host</li>
+      </ol>
+      <details style="margin-top:0.75rem">
+        <summary style="cursor:pointer;color:var(--text-secondary)">View script source</summary>
+        <pre style="background:var(--bg-elevated);padding:0.75rem;border-radius:6px;font-size:0.72rem;max-height:300px;overflow:auto;margin-top:0.5rem;border:1px solid var(--border)">{{ script_piggyback }}</pre>
+      </details>
+    </div>
+
+    <!-- Tab: Datasource Program -->
+    <div id="tab-datasource" class="tab-content" style="display:none">
+      <p class="text-muted" style="margin-bottom:0.75rem">
+        Configure FleetPilot as a <strong>datasource program</strong> in CheckMK.
+        CheckMK will call the URL directly instead of using an agent.
+      </p>
+      <ol style="padding-left:1.25rem;line-height:2">
+        <li>In CheckMK: <em>Setup → Hosts → [your host] → Monitoring agents → Datasource programs</em></li>
+        <li>Set command to:<br>
+          <code>curl -sf -H "X-FleetPilot-Token: {{ token }}" {{ base_url }}/api/checkmk/agent</code></li>
+        <li>Activate changes and run service discovery</li>
+      </ol>
+      <div style="background:var(--bg-elevated);padding:0.75rem;border-radius:6px;border:1px solid var(--border);margin-top:0.5rem">
+        <strong>Direct URL:</strong><br>
+        <code style="font-size:0.8rem;word-break:break-all">{{ base_url }}/api/checkmk/agent?token={{ token }}</code>
+        <button class="btn btn-sm btn-secondary" style="margin-left:0.5rem" onclick="copyText('{{ base_url }}/api/checkmk/agent?token={{ token }}')">&#x1F4CB; Copy</button>
+      </div>
+    </div>
+
+    <!-- Tab: REST API -->
+    <div id="tab-rest" class="tab-content" style="display:none">
+      <p class="text-muted" style="margin-bottom:0.75rem">
+        Use the JSON status API for <strong>Grafana dashboards</strong>, custom alerting, or integration with
+        other monitoring tools.
+      </p>
+      <table class="table" style="font-size:0.85rem">
+        <thead><tr><th>URL</th><th>Returns</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>{{ base_url }}/api/checkmk/status?token=&lt;token&gt;</code></td>
+            <td>Full JSON status (hosts, disks, VMs, storage)</td>
+          </tr>
+          <tr>
+            <td><code>{{ base_url }}/api/checkmk/hosts?token=&lt;token&gt;</code></td>
+            <td>Host list</td>
+          </tr>
+          <tr>
+            <td><code>{{ base_url }}/api/checkmk/agent?token=&lt;token&gt;</code></td>
+            <td>Raw CheckMK local-check text</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="text-muted" style="font-size:0.8rem;margin-top:0.5rem">
+        Example: <code>curl -H "X-FleetPilot-Token: {{ token }}" {{ base_url }}/api/checkmk/status</code>
+      </p>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Live Agent Output Preview ─────────────────────────────────────────── -->
+<div class="card" style="margin-bottom:1.5rem">
+  <div class="card-header">
+    <h3>&#x1F441; Live Agent Output Preview</h3>
+    <button class="btn btn-sm btn-secondary" onclick="loadAgentPreview()">&#x1F504; Refresh</button>
+  </div>
+  <div id="agent-preview-loading" style="padding:1rem;color:var(--text-muted)">Click Refresh to load live output...</div>
+  <pre id="agent-preview" style="display:none;background:var(--bg-elevated);padding:0.75rem;border-radius:6px;font-size:0.75rem;max-height:400px;overflow:auto;white-space:pre-wrap;border:1px solid var(--border);margin:0"></pre>
+</div>
+
+<!-- ── Failed Disks Alert ─────────────────────────────────────────────────── -->
+{% if status.failed_disks %}
+<div class="card card-red" style="margin-bottom:1.5rem">
+  <div class="card-header">
+    <h3>&#x26A0; Failed / Critical Disks</h3>
+    <span class="badge badge-red">{{ status.failed_disks|length }} disk(s)</span>
+  </div>
+  <div style="overflow-x:auto">
+  <table class="table">
+    <thead><tr><th>Device</th><th>Source</th><th>Model</th><th>Health</th><th>Temp</th><th>Reallocated</th><th>Pending</th></tr></thead>
+    <tbody>
+    {% for disk in status.failed_disks %}
+    <tr>
+      <td><code>{{ disk.device }}</code></td>
+      <td>{{ disk.source_host or disk.source }}</td>
+      <td>{{ disk.model or "—" }}</td>
+      <td><span class="badge badge-red">{{ disk.health }}</span></td>
+      <td>{{ disk.temperature or "—" }}{% if disk.temperature %}°C{% endif %}</td>
+      <td>{{ disk.reallocated_sectors or 0 }}</td>
+      <td>{{ disk.pending_sectors or 0 }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── Host Update Status ─────────────────────────────────────────────────── -->
+{% if status.hosts %}
+<div class="card">
+  <div class="card-header">
+    <h3>&#x1F4BB; Host Status Overview</h3>
+  </div>
+  <div style="overflow-x:auto">
+  <table class="table">
+    <thead>
+      <tr><th>Host</th><th>IP</th><th>Status</th><th>OS</th><th>Pending Updates</th><th>Security Updates</th><th>Last Seen</th></tr>
+    </thead>
+    <tbody>
+    {% for host in status.hosts %}
+    <tr>
+      <td><strong>{{ host.name }}</strong></td>
+      <td><code>{{ host.ip }}</code></td>
+      <td>
+        {% if host.status == "online" %}<span class="badge badge-green">&#x25CF; online</span>
+        {% elif host.status == "offline" %}<span class="badge badge-red">&#x25A0; offline</span>
+        {% else %}<span class="badge">{{ host.status }}</span>{% endif %}
+      </td>
+      <td>{{ host.os or "—" }}</td>
+      <td>
+        {% if host.security_updates > 0 %}
+          <span class="badge badge-red">{{ host.pending_updates }} ({{ host.security_updates }} security!)</span>
+        {% elif host.pending_updates > 0 %}
+          <span class="badge badge-yellow">{{ host.pending_updates }}</span>
+        {% else %}
+          <span class="badge badge-green">Up to date</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if host.security_updates > 0 %}
+          <span class="badge badge-red">{{ host.security_updates }}</span>
+        {% else %}
+          <span class="badge badge-green">0</span>
+        {% endif %}
+      </td>
+      <td><small class="text-muted">{{ host.last_seen or "—" }}</small></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const TOKEN = "{{ token }}";
+
+function copyToken() {
+  navigator.clipboard.writeText(TOKEN).then(() => showToast("Token copied!", "success"));
+}
+
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => showToast("Copied!", "success"));
+}
+
+function showToast(msg, type) {
+  let t = document.getElementById("cmk-toast");
+  if (!t) {
+    t = document.createElement("div");
+    t.id = "cmk-toast";
+    t.style.cssText = "position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;padding:0.75rem 1.25rem;border-radius:8px;font-weight:600;max-width:380px;box-shadow:0 4px 16px rgba(0,0,0,0.2);transition:opacity 0.3s";
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.background = type === "success" ? "var(--success,#22c55e)" : "var(--danger,#ef4444)";
+  t.style.color = "#fff";
+  t.style.opacity = "1";
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.opacity = "0"; }, 3000);
+}
+
+function showTab(tabId, btn) {
+  document.querySelectorAll(".tab-content").forEach(el => el.style.display = "none");
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+  document.getElementById(tabId).style.display = "block";
+  btn.classList.add("active");
+}
+
+function testEndpoint(path, format) {
+  const resultDiv = document.getElementById("api-test-result");
+  const output = document.getElementById("api-test-output");
+  resultDiv.style.display = "block";
+  output.textContent = "Loading...";
+
+  fetch(path + "?token=" + TOKEN)
+    .then(r => format === "json" ? r.json() : r.text())
+    .then(data => {
+      output.textContent = format === "json" ? JSON.stringify(data, null, 2) : data;
+    })
+    .catch(e => { output.textContent = "Error: " + e; });
+}
+
+function loadAgentPreview() {
+  const loading = document.getElementById("agent-preview-loading");
+  const preview = document.getElementById("agent-preview");
+  loading.style.display = "block";
+  loading.textContent = "Loading...";
+  preview.style.display = "none";
+
+  fetch("/api/checkmk/agent?token=" + TOKEN)
+    .then(r => r.text())
+    .then(data => {
+      loading.style.display = "none";
+      preview.style.display = "block";
+      // Colorize output
+      preview.innerHTML = data.split("\n").map(line => {
+        if (line.startsWith("0 ")) return `<span style="color:var(--success,#22c55e)">${escHtml(line)}</span>`;
+        if (line.startsWith("1 ")) return `<span style="color:var(--warning,#f59e0b)">${escHtml(line)}</span>`;
+        if (line.startsWith("2 ")) return `<span style="color:var(--danger,#ef4444)">${escHtml(line)}</span>`;
+        if (line.startsWith("3 ")) return `<span style="color:var(--text-muted)">${escHtml(line)}</span>`;
+        if (line.startsWith("<<<")) return `<strong style="color:var(--primary,#6366f1)">${escHtml(line)}</strong>`;
+        return escHtml(line);
+      }).join("\n");
+    })
+    .catch(e => {
+      loading.textContent = "Error loading agent output: " + e;
+    });
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+</script>
+{% endblock %}

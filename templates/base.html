@@ -60,6 +60,9 @@
       <a class="sidebar-link {% if request.path.startswith('/smart') %}active{% endif %}" href="/smart">
         <span class="sidebar-icon">&#x1F4CA;</span> SMART Dashboard
       </a>
+      <a class="sidebar-link {% if request.path.startswith('/checkmk') %}active{% endif %}" href="/checkmk">
+        <span class="sidebar-icon">&#x1F50D;</span> CheckMK
+      </a>
 
       <span class="sidebar-section-label">{{ _('Settings') }}</span>
       {% if is_admin is defined and is_admin %}
@@ -137,19 +140,16 @@
       <div class="topbar-actions">
         {% block topbar_actions %}{% endblock %}
 
-        <!-- Language Selector -->
-        <form method="POST" action="/set_language" style="display:inline;">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="hidden" name="next" value="{{ request.path }}">
-          <select name="lang" class="lang-select" onchange="this.form.submit()" title="{{ _('Language') }}"
-                  style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-md);
-                         padding:0.35rem 0.65rem;font-size:0.8rem;color:var(--text-secondary);cursor:pointer;appearance:none;">
-            <option value="en" {% if current_lang == 'en' %}selected{% endif %}>&#x1F310; EN</option>
-            <option value="de" {% if current_lang == 'de' %}selected{% endif %}>&#x1F1E9;&#x1F1EA; DE</option>
-            <option value="es" {% if current_lang == 'es' %}selected{% endif %}>&#x1F1EA;&#x1F1F8; ES</option>
-            <option value="fr" {% if current_lang == 'fr' %}selected{% endif %}>&#x1F1EB;&#x1F1F7; FR</option>
-          </select>
-        </form>
+        <!-- Language Selector (GET-based, no CSRF needed) -->
+        <select class="lang-select" title="{{ _('Language') }}"
+                onchange="window.location='/set_language?lang='+this.value+'&next='+encodeURIComponent(window.location.pathname+window.location.search)"
+                style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-md);
+                       padding:0.35rem 0.65rem;font-size:0.8rem;color:var(--text-secondary);cursor:pointer;appearance:none;">
+          <option value="en" {% if current_lang == 'en' %}selected{% endif %}>&#x1F310; EN</option>
+          <option value="de" {% if current_lang == 'de' %}selected{% endif %}>&#x1F1E9;&#x1F1EA; DE</option>
+          <option value="es" {% if current_lang == 'es' %}selected{% endif %}>&#x1F1EA;&#x1F1F8; ES</option>
+          <option value="fr" {% if current_lang == 'fr' %}selected{% endif %}>&#x1F1EB;&#x1F1F7; FR</option>
+        </select>
 
         <!-- Theme Toggle -->
         <button class="theme-toggle" id="theme-toggle" title="{{ _('Toggle theme') }}" type="button">
