@@ -12,6 +12,7 @@
       <h3>&#x2795; Create New User</h3>
     </div>
     <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="form-group">
         <label class="form-label">Username <span class="text-red">*</span></label>
         <input class="form-control" name="username" placeholder="username" required>

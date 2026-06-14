@@ -94,6 +94,7 @@ const MANAGED_HOSTS = {{ managed_host_ips | tojson }};
       <button class="modal-close" onclick="closeModal()" type="button">&#x2715;</button>
     </div>
     <form id="quickAddForm" method="POST" action="/hosts/quick_add">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="form-group">
         <label class="form-label">Display Name *</label>
         <input type="text" name="name" id="qaName" placeholder="e.g. Web Server" required>

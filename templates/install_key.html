@@ -31,6 +31,7 @@
     </div>
     <p>Enter the SSH password for the remote host to install the public key for passwordless authentication.</p>
     <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="form-group">
         <label class="form-label">Remote Account Password for <strong>{{ name }}</strong></label>
         <input class="form-control" type="password" name="password" placeholder="SSH password" autofocus>

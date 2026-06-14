@@ -30,6 +30,7 @@
         <td>
           {% if is_admin and p.file != 'plugin_manager.py' %}
           <form method="post" action="{{ url_for('plugin_manager.uninstall_plugin', plugin_file=p.file) }}" style="display: inline;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to uninstall this plugin?')">Uninstall</button>
           </form>
           {% else %}
@@ -73,6 +74,7 @@
           {% if is_admin %}
           {% if not plugin.installed %}
           <form method="post" action="{{ url_for('plugin_manager.install_plugin', plugin_id=plugin.id) }}" style="display: inline;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn btn-primary btn-sm">Install</button>
           </form>
           {% else %}

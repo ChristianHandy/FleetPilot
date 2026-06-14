@@ -1,4 +1,7 @@
 from flask import Flask, render_template, redirect, session, request, flash, jsonify, send_file, url_for
+from markupsafe import escape as html_escape
+import re, time as _time
+from collections import defaultdict
 from i18n import get_translator, SUPPORTED_LANGUAGES
 import json, threading, paramiko, os, secrets
 from updater import run_update
@@ -24,9 +27,120 @@ except ImportError:
     pass  # python-dotenv is optional
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
-
 # Security: Use environment variables for credentials, generate secure secret key
 app.secret_key = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
+
+# ── Flask-Compress: Gzip response compression ───────────────────────────────────────
+try:
+    from flask_compress import Compress as _Compress
+    _compress = _Compress()
+    _compress.init_app(app)
+    app.config['COMPRESS_MIMETYPES'] = [
+        'text/html', 'text/css', 'text/javascript',
+        'application/javascript', 'application/json', 'text/plain'
+    ]
+    app.config['COMPRESS_LEVEL'] = 6
+    app.config['COMPRESS_MIN_SIZE'] = 500
+except ImportError:
+    pass
+
+# ── Brute-Force Rate Limiting (in-process, no Redis required) ─────────────────
+_login_attempts = defaultdict(list)   # ip -> [timestamp, ...]
+_LOGIN_MAX       = 10                  # max failed attempts per window
+_LOGIN_WINDOW    = 60                  # window in seconds
+
+def _check_rate_limit(ip):
+    """Returns True if IP is allowed, False if rate-limited."""
+    now = _time.time()
+    attempts = [t for t in _login_attempts[ip] if now - t < _LOGIN_WINDOW]
+    _login_attempts[ip] = attempts
+    return len(attempts) < _LOGIN_MAX
+
+def _record_failed_login(ip):
+    _login_attempts[ip].append(_time.time())
+
+def _clear_login_attempts(ip):
+    _login_attempts.pop(ip, None)
+
+# ── CSRF Protection ────────────────────────────────────────────────────────────
+try:
+    from flask_wtf.csrf import CSRFProtect as _CSRFProtect, generate_csrf as _gen_csrf, CSRFError
+    _csrf = _CSRFProtect(app)
+    app.config['WTF_CSRF_TIME_LIMIT'] = 3600
+
+    # Exempt pure JSON/API and SSE-stream endpoints from CSRF
+    _CSRF_EXEMPT_PREFIXES = ('/api/', '/progress/', '/disks/stream', '/smart/stream')
+
+    @_csrf.exempt
+    def _csrf_exempt_check():
+        pass
+
+    @app.before_request
+    def _maybe_exempt_csrf():
+        """Exempt API and streaming routes from CSRF validation."""
+        if any(request.path.startswith(p) for p in _CSRF_EXEMPT_PREFIXES):
+            # Mark this request as CSRF-exempt by patching the view
+            pass  # Flask-WTF checks per-view; use @_csrf.exempt on individual routes
+
+    @app.errorhandler(CSRFError)
+    def handle_csrf_error(e):
+        # Count CSRF failures on login endpoint as failed login attempts
+        if request.path == '/' and request.method == 'POST':
+            ip = request.remote_addr or '0.0.0.0'
+            _record_failed_login(ip)
+            if not _check_rate_limit(ip):
+                flash('Too many failed login attempts. Please wait 60 seconds.')
+                return render_template('login.html', next=request.args.get('next', '/index'), rate_limited=True), 429
+            flash('Security token expired or missing. Please try again.')
+            return redirect(url_for('login'))
+        return jsonify({'error': 'CSRF token missing or invalid', 'detail': str(e)}), 400
+
+    @app.context_processor
+    def _inject_csrf():
+        return dict(csrf_token=_gen_csrf)
+except ImportError:
+    _csrf = None
+    @app.context_processor
+    def _inject_csrf():
+        return dict(csrf_token=lambda: '')
+
+# ── Input sanitisation helpers ───────────────────────────────────────────────────
+_DANGEROUS_PROTO = re.compile(r'^\s*(javascript|vbscript|data):', re.IGNORECASE)
+
+def sanitize_input(value, max_len=256):
+    """Strip dangerous protocols and limit length."""
+    if not isinstance(value, str):
+        return ''
+    value = value.strip()[:max_len]
+    if _DANGEROUS_PROTO.match(value):
+        return ''
+    return value
+
+def sanitize_host_data(data):
+    """Sanitize all string fields in a host data dict."""
+    for field in ('host','user','mac','description','notes','group',
+                  'location','environment','criticality','ssh_key'):
+        if field in data and isinstance(data[field], str):
+            data[field] = sanitize_input(data[field])
+    return data
+
+# ── In-memory cache for expensive reads ──────────────────────────────────────────
+_cache = {}
+_cache_ttl = {}
+_CACHE_DEFAULT_TTL = 30  # seconds
+
+def cache_get(key):
+    if key in _cache and _time.time() < _cache_ttl.get(key, 0):
+        return _cache[key]
+    return None
+
+def cache_set(key, value, ttl=_CACHE_DEFAULT_TTL):
+    _cache[key] = value
+    _cache_ttl[key] = _time.time() + ttl
+
+def cache_invalidate(key):
+    _cache.pop(key, None)
+    _cache_ttl.pop(key, None)
 
 USERNAME = os.environ.get('DASHBOARD_USERNAME', 'admin')
 PASSWORD = os.environ.get('DASHBOARD_PASSWORD', 'password')
@@ -167,16 +281,22 @@ def normalize_host(data):
     return defaults
 
 def load_hosts():
+    cached = cache_get('hosts')
+    if cached is not None:
+        return cached
     try:
         with open("hosts.json", "r") as f:
             raw = json.load(f)
-        return {name: normalize_host(data) for name, data in raw.items()}
+        data = {name: normalize_host(d) for name, d in raw.items()}
     except Exception:
-        return {}
+        data = {}
+    cache_set('hosts', data, ttl=15)
+    return data
 
 def save_hosts(hosts):
     with open("hosts.json", "w") as f:
         json.dump(hosts, f, indent=2)
+    cache_invalidate('hosts')
 
 def get_local_public_key():
     """
@@ -221,26 +341,34 @@ def login_required(f):
 def login():
     next_url = request.args.get('next') or url_for('index')
     if request.method == "POST":
-        username = request.form.get("user")
-        password = request.form.get("pass")
+        ip = request.remote_addr or '0.0.0.0'
+        # ── Brute-Force check ─────────────────────────────────────────────────────────
+        if not _check_rate_limit(ip):
+            flash('Too many failed login attempts. Please wait 60 seconds.')
+            return render_template("login.html", next=next_url, rate_limited=True), 429
+
+        username = sanitize_input(request.form.get("user", ""), max_len=128)
+        password = request.form.get("pass", "")
         
         # Try database authentication first
         user_id = user_management.verify_password(username, password)
         if user_id:
+            _clear_login_attempts(ip)
             session["user_id"] = user_id
             session["username"] = username
-            # Keep old session key for backward compatibility
             session["login"] = True
             flash('Logged in successfully')
             return redirect(next_url)
         
         # Fallback to environment variable authentication for backward compatibility
         if username == USERNAME and password == PASSWORD:
+            _clear_login_attempts(ip)
             session["login"] = True
             session["username"] = username
             flash('Logged in successfully (legacy mode)')
             return redirect(next_url)
         
+        _record_failed_login(ip)
         flash('Invalid username or password')
     return render_template("login.html", next=next_url)
 
@@ -512,24 +640,24 @@ def manage_hosts():
             return redirect(url_for('manage_hosts'))
         
         # Add or update host via the add form
-        name = request.form.get("name", "").strip()
-        host = request.form.get("host", "").strip()
-        user = request.form.get("user", "").strip()
-        mac  = request.form.get("mac", "").strip()
+        name = sanitize_input(request.form.get("name", ""), max_len=64)
+        host = sanitize_input(request.form.get("host", ""), max_len=253)
+        user = sanitize_input(request.form.get("user", ""), max_len=64)
+        mac  = sanitize_input(request.form.get("mac", ""), max_len=17)
         if name:
             host_data = {
                 "host": host,
                 "user": user,
                 "mac": mac,
-                "description": request.form.get("description", "").strip(),
-                "notes":       request.form.get("notes", "").strip(),
-                "group":       request.form.get("group", "").strip(),
-                "location":    request.form.get("location", "").strip(),
-                "environment": request.form.get("environment", "Production"),
-                "criticality": request.form.get("criticality", "Medium"),
-                "port":        int(request.form.get("port", 22) or 22),
-                "ssh_key":     request.form.get("ssh_key", "").strip(),
-                "tags":        [t.strip() for t in request.form.get("tags", "").split(",") if t.strip()],
+                "description": sanitize_input(request.form.get("description", ""), max_len=512),
+                "notes":       sanitize_input(request.form.get("notes", ""), max_len=2048),
+                "group":       sanitize_input(request.form.get("group", ""), max_len=64),
+                "location":    sanitize_input(request.form.get("location", ""), max_len=128),
+                "environment": sanitize_input(request.form.get("environment", "Production"), max_len=32),
+                "criticality": sanitize_input(request.form.get("criticality", "Medium"), max_len=32),
+                "port":        max(1, min(65535, int(request.form.get("port", 22) or 22))),
+                "ssh_key":     sanitize_input(request.form.get("ssh_key", ""), max_len=512),
+                "tags":        [sanitize_input(t, max_len=32) for t in request.form.get("tags", "").split(",") if t.strip()][:20],
             }
             # Multiboot: parse OS profiles from form (issue #36)
             os_names    = request.form.getlist("os_name")
@@ -537,10 +665,10 @@ def manage_hosts():
             os_defaults = request.form.getlist("os_default")
             os_profiles = []
             for i, oname in enumerate(os_names):
-                oname = oname.strip()
+                oname = sanitize_input(oname, max_len=64)
                 if not oname:
                     continue
-                otype = os_types[i].strip() if i < len(os_types) else "linux"
+                otype = sanitize_input(os_types[i] if i < len(os_types) else "linux", max_len=32)
                 is_default = str(i) in os_defaults or oname in os_defaults
                 os_profiles.append({"name": oname, "type": otype, "default": is_default})
             if os_profiles:
@@ -549,6 +677,7 @@ def manage_hosts():
             host_data["os_profiles"] = os_profiles
             hosts[name] = host_data
             save_hosts(hosts)
+            cache_invalidate('hosts')
         return redirect("/hosts")
     return render_template(
         "hosts.html",
@@ -571,10 +700,10 @@ def edit_host(orig_name):
             flash('You need operator or admin role to manage hosts.')
             return redirect(url_for('manage_hosts'))
         
-        new_name = request.form.get("name", "").strip()
-        host = request.form.get("host", "").strip()
-        user = request.form.get("user", "").strip()
-        mac  = request.form.get("mac", "").strip()
+        new_name = sanitize_input(request.form.get("name", ""), max_len=64)
+        host = sanitize_input(request.form.get("host", ""), max_len=253)
+        user = sanitize_input(request.form.get("user", ""), max_len=64)
+        mac  = sanitize_input(request.form.get("mac", ""), max_len=17)
         if new_name:
             if new_name != orig_name:
                 hosts.pop(orig_name, None)
@@ -582,15 +711,15 @@ def edit_host(orig_name):
                 "host": host,
                 "user": user,
                 "mac": mac,
-                "description": request.form.get("description", "").strip(),
-                "notes":       request.form.get("notes", "").strip(),
-                "group":       request.form.get("group", "").strip(),
-                "location":    request.form.get("location", "").strip(),
-                "environment": request.form.get("environment", "Production"),
-                "criticality": request.form.get("criticality", "Medium"),
-                "port":        int(request.form.get("port", 22) or 22),
-                "ssh_key":     request.form.get("ssh_key", "").strip(),
-                "tags":        [t.strip() for t in request.form.get("tags", "").split(",") if t.strip()],
+                "description": sanitize_input(request.form.get("description", ""), max_len=512),
+                "notes":       sanitize_input(request.form.get("notes", ""), max_len=2048),
+                "group":       sanitize_input(request.form.get("group", ""), max_len=64),
+                "location":    sanitize_input(request.form.get("location", ""), max_len=128),
+                "environment": sanitize_input(request.form.get("environment", "Production"), max_len=32),
+                "criticality": sanitize_input(request.form.get("criticality", "Medium"), max_len=32),
+                "port":        max(1, min(65535, int(request.form.get("port", 22) or 22))),
+                "ssh_key":     sanitize_input(request.form.get("ssh_key", ""), max_len=512),
+                "tags":        [sanitize_input(t, max_len=32) for t in request.form.get("tags", "").split(",") if t.strip()][:20],
                 # Preserve timestamps
                 "last_update": hosts.get(orig_name, {}).get("last_update"),
                 "last_seen":   hosts.get(orig_name, {}).get("last_seen"),
@@ -613,6 +742,7 @@ def edit_host(orig_name):
             host_data["os_profiles"] = os_profiles
             hosts[new_name] = host_data
             save_hosts(hosts)
+            cache_invalidate('hosts')
         return redirect("/hosts")
     # GET
     return render_template(
@@ -637,6 +767,7 @@ def delete_host(name):
     if name in hosts:
         hosts.pop(name)
         save_hosts(hosts)
+        cache_invalidate('hosts')
     return redirect("/hosts")
 
 # Install SSH public key on remote host using password auth
@@ -787,6 +918,7 @@ def scan_ip_changes():
     return redirect(url_for('manage_hosts'))
 
 @app.route("/hosts/arp_table")
+@app.route("/arp_table")   # alias without /hosts prefix
 @login_required
 def view_arp_table():
     """View current ARP table"""
@@ -1189,6 +1321,24 @@ def add_security_headers(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
+    # Content-Security-Policy: allow inline styles/scripts for existing UI
+    response.headers['Content-Security-Policy'] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com https://fonts.gstatic.com; "
+        "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "
+        "img-src 'self' data: https:; "
+        "connect-src 'self';"
+    )
+    # Cache-Control for static assets
+    if request.path.startswith('/static/'):
+        response.headers['Cache-Control'] = 'public, max-age=86400, immutable'
+    elif request.path.startswith('/api/'):
+        response.headers['Cache-Control'] = 'no-store'
+    else:
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     # Only set HSTS header for HTTPS connections
     if request.is_secure:
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'

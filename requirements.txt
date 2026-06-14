@@ -13,5 +13,14 @@ python-dotenv>=1.0.0
 # HTTP requests for version checking
 requests>=2.31.0
 
+# CSRF Protection (Security fix)
+flask-wtf>=1.2.0
+
+# Response compression — Gzip/Brotli (Performance)
+flask-compress>=1.14
+
+# Gunicorn WSGI server
+gunicorn>=21.2.0
+
 #smartctl for smart checks
 smartmontools

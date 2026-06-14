@@ -79,6 +79,7 @@
           {% if is_admin %}
           <form method="POST" action="/vm/delete/{{ ep.id }}" style="display:inline"
                 onsubmit="return confirm('Delete endpoint {{ ep.name }}?')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button class="btn btn-sm btn-danger">&#x1F5D1;</button>
           </form>
           {% endif %}

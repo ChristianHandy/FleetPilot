@@ -66,10 +66,12 @@
           <button class="btn btn-sm btn-secondary" onclick="testConn({{ ep.id }}, this)">&#x1F50C; Test</button>
           {% if is_admin %}
           <form method="POST" action="/storage/{{ ep.id }}/poll" style="display:inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button class="btn btn-sm btn-secondary">&#x1F504; Poll</button>
           </form>
           <form method="POST" action="/storage/delete/{{ ep.id }}" style="display:inline"
                 onsubmit="return confirm('Delete endpoint {{ ep.name }}?')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button class="btn btn-sm btn-danger">&#x1F5D1;</button>
           </form>
           {% endif %}

@@ -23,6 +23,7 @@
       </div>
     </div>
     <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
       <!-- Basic Info -->
       <div class="form-section"><span class="form-section-title">&#x1F4CB; Basic Information</span></div>

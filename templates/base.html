@@ -139,6 +139,7 @@
 
         <!-- Language Selector -->
         <form method="POST" action="/set_language" style="display:inline;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="next" value="{{ request.path }}">
           <select name="lang" class="lang-select" onchange="this.form.submit()" title="{{ _('Language') }}"
                   style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-md);

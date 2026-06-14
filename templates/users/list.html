@@ -41,6 +41,7 @@
     <div class="host-card-actions">
       <a class="btn btn-secondary btn-sm" href="/users/edit/{{ user.id }}">&#x270F; Edit</a>
       <form action="/users/delete/{{ user.id }}" method="post" style="display:inline; margin:0;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button class="btn btn-danger btn-sm" type="submit"
                 onclick="return confirm('Delete user \'{{ user.username }}\'?')">&#x1F5D1; Delete</button>
       </form>

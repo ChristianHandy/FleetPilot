@@ -1,5 +1,51 @@
 {
-  "pc1": { "host": "192.168.1.10", "user": "admin" },
-  "pc2": { "host": "192.168.1.11", "user": "admin" }
+  "pc1": {
+    "host": "192.168.1.10",
+    "user": "admin",
+    "mac": "",
+    "description": "",
+    "notes": "",
+    "group": "",
+    "location": "",
+    "environment": "Production",
+    "criticality": "Medium",
+    "tags": [],
+    "port": 22,
+    "ssh_key": "",
+    "os_profiles": [],
+    "last_update": null,
+    "last_seen": null
+  },
+  "pc2": {
+    "host": "192.168.1.11",
+    "user": "admin",
+    "mac": "",
+    "description": "",
+    "notes": "",
+    "group": "",
+    "location": "",
+    "environment": "Production",
+    "criticality": "Medium",
+    "tags": [],
+    "port": 22,
+    "ssh_key": "",
+    "os_profiles": [],
+    "last_update": null,
+    "last_seen": null
+  },
+  "xss-test": {
+    "host": "192.168.1.99",
+    "user": "root",
+    "mac": "",
+    "description": "<script>alert(1)</script>",
+    "notes": "",
+    "group": "",
+    "location": "",
+    "environment": "Production",
+    "criticality": "Medium",
+    "port": 22,
+    "ssh_key": "",
+    "tags": [],
+    "os_profiles": []
+  }
 }
-

@@ -50,6 +50,7 @@
   </div>
   <form method="POST" action="/dashboard_version/update"
         onsubmit="return confirm('Are you sure you want to update the dashboard? This will require restarting the application.');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
     <div class="form-check">
       <input type="radio" name="preserve_configs" value="yes" id="preserve_yes" checked>

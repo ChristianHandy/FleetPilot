@@ -6,6 +6,7 @@
 {% block nav_extra %}
   {% if is_admin %}
   <form method="POST" action="/smart/poll" style="display:inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button class="btn btn-success btn-sm">&#x1F504; Poll Now</button>
   </form>
   {% endif %}
@@ -68,6 +69,7 @@
       <td>
         {% if is_admin %}
         <form method="POST" action="/smart/alert/{{ a.id }}/ack" style="display:inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="btn btn-sm btn-ghost">&#x2713; Ack</button>
         </form>
         {% endif %}
@@ -151,6 +153,7 @@
     <div class="btn-group" style="justify-content:center">
       {% if is_admin %}
       <form method="POST" action="/smart/poll">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button class="btn btn-success">&#x1F504; Poll Local Disks</button>
       </form>
       {% endif %}
@@ -166,6 +169,7 @@
 <div class="card">
   <div class="card-header"><h3>&#x23F0; Polling Configuration</h3></div>
   <form method="POST" action="/smart/config">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;padding:0 0 0.5rem">
       <div class="form-group" style="margin:0">
         <label class="form-label">Interval (minutes)</label>

@@ -8,6 +8,7 @@
   <a href="/smart" class="btn btn-secondary btn-sm">&#x1F4CA; SMART Dashboard</a>
   {% if is_admin %}
   <form method="POST" action="/storage/{{ ep_id }}/poll" style="display:inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button class="btn btn-secondary btn-sm">&#x1F504; Poll Disks</button>
   </form>
   {% endif %}

@@ -168,6 +168,8 @@
       {% endif %}
       <form method="post" action="/hosts/delete/{{ name }}" style="margin:0;"
             onsubmit="return confirm('Delete {{ name }}?')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="btn btn-danger btn-sm">&#x1F5D1;</button>
       </form>
     </div>
@@ -238,6 +240,7 @@
     <h3>&#x2795; {{ _('Add Host') }}</h3>
   </div>
   <form method="post" action="/hosts">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
     <!-- Basic Info -->
     <div class="form-section"><span class="form-section-title">&#x1F4CB; Basic Information</span></div>

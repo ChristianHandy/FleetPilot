@@ -9,6 +9,7 @@
     <h3>&#x1F5A5; New VM / Backup Endpoint</h3>
   </div>
   <form method="POST" action="/vm/add">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="form-group">
       <label class="form-label">Display Name *</label>
       <input type="text" name="name" class="form-control" placeholder="e.g. Proxmox-Home" required>

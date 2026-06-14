@@ -43,6 +43,7 @@
       <h3>&#x270F; Update Profile</h3>
     </div>
     <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="form-group">
         <label class="form-label">Email</label>
         <input class="form-control" type="email" name="email" value="{{ user.email or '' }}" placeholder="user@example.com">

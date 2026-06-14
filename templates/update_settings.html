@@ -15,6 +15,7 @@
         <h3>&#x2699; Update Configuration</h3>
       </div>
       <form method="POST" action="/update_settings">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
         <div class="form-check">
           <input type="checkbox" name="automatic_updates_enabled" id="auto_updates"
