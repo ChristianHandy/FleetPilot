@@ -4,8 +4,8 @@
 {% block content %}
 <div class="page-header">
   <div>
-    <h1 class="page-title">Plugin Manager</h1>
-    <p class="page-subtitle">Extend FleetPilot with plugins for every part of the dashboard</p>
+    <h1 class="page-title">{{ _('Plugin Manager') }}</h1>
+    <p class="page-subtitle">{{ _('Extend FleetPilot with plugins for every part of the dashboard') }}</p>
   </div>
   <div class="page-actions">
     <form method="POST" action="/plugins/upload" enctype="multipart/form-data" id="uploadForm" style="display:inline">
@@ -66,7 +66,7 @@
 <!-- Hook Coverage Banner -->
 <div class="card" style="margin-bottom:2rem; border-left: 4px solid #6366f1">
   <div class="card-body" style="padding:1.25rem 1.5rem">
-    <h3 style="margin:0 0 0.75rem; font-size:0.95rem; font-weight:600; color:var(--text-primary)">Available Hook Points</h3>
+    <h3 style="margin:0 0 0.75rem; font-size:0.95rem; font-weight:600; color:var(--text-primary)">{{ _('Available Hook Points') }}</h3>
     <div style="display:flex; flex-wrap:wrap; gap:0.5rem">
       {% for hook in hook_names %}
       <span class="badge {% if hook in active_hooks %}badge-green{% else %}badge-gray{% endif %}" style="font-family:monospace; font-size:0.75rem">
@@ -82,7 +82,7 @@
 
 <!-- Installed Plugins -->
 {% if plugins %}
-<h2 style="font-size:1.1rem; font-weight:600; margin-bottom:1rem; color:var(--text-primary)">Installed Plugins</h2>
+<h2 style="font-size:1.1rem; font-weight:600; margin-bottom:1rem; color:var(--text-primary)">{{ _('Installed Plugins') }}</h2>
 <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap:1.25rem; margin-bottom:2rem">
   {% for plugin in plugins %}
   <div class="card plugin-card {% if plugin.status == 'error' %}plugin-card-error{% endif %}">
@@ -167,17 +167,17 @@
   <div class="empty-icon">
     <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/></svg>
   </div>
-  <h3>No plugins installed</h3>
-  <p>Upload a .py plugin file or install one from the repository below.</p>
+  <h3>{{ _('No plugins installed') }}</h3>
+  <p>{{ _('Upload a .py plugin file or install one from the repository below.') }}</p>
 </div>
 {% endif %}
 
 <!-- Remote Repository -->
-<h2 style="font-size:1.1rem; font-weight:600; margin-bottom:1rem; color:var(--text-primary)">Plugin Repository</h2>
+<h2 style="font-size:1.1rem; font-weight:600; margin-bottom:1rem; color:var(--text-primary)">{{ _('Plugin Repository') }}</h2>
 <div id="repoContainer">
   <div style="text-align:center; padding:2rem; color:var(--text-muted)">
     <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-    <p style="margin-top:0.5rem">Loading repository…</p>
+    <p style="margin-top:0.5rem">{{ _('Loading repository…') }}</p>
   </div>
 </div>
 
@@ -227,7 +227,7 @@ def register(app, core):
         return "&lt;h1&gt;My Plugin Page&lt;/h1&gt;"
 
     app.register_blueprint(bp)</pre>
-    <a href="/plugins/docs" class="btn btn-secondary" style="margin-top:1rem">Full Documentation</a>
+    <a href="/plugins/docs" class="btn btn-secondary" style="margin-top:1rem">{{ _('Full Documentation') }}</a>
   </div>
 </div>
 
@@ -247,7 +247,7 @@ fetch('/plugins/repository.json')
     const plugins = data.plugins || [];
     const installed = {{ installed_names | tojson }};
     if (!plugins.length) {
-      container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:1rem">No remote plugins available.</p>';
+      container.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:1rem">{{ _('No remote plugins available.') }}</p>';
       return;
     }
     let html = '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(320px,1fr)); gap:1rem">';
@@ -259,12 +259,12 @@ fetch('/plugins/repository.json')
             <div style="font-weight:600; color:var(--text-primary)">${p.name}</div>
             <div style="font-size:0.75rem; color:var(--text-muted)">v${p.version} · ${p.author}</div>
           </div>
-          ${isInstalled ? '<span class="badge badge-green">Installed</span>' : ''}
+          ${isInstalled ? '<span class="badge badge-green">{{ _('Installed') }}</span>' : ''}
         </div>
         <p style="font-size:0.85rem; color:var(--text-secondary); margin:0">${p.description}</p>
         ${!isInstalled ? `<form method="POST" action="/plugins/install/${p.id}" style="margin-top:0.25rem">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="btn btn-sm btn-primary">Install</button>
+          <button type="submit" class="btn btn-sm btn-primary">{{ _('Install') }}</button>
         </form>` : ''}
       </div>`;
     });
@@ -273,7 +273,7 @@ fetch('/plugins/repository.json')
   })
   .catch(() => {
     document.getElementById('repoContainer').innerHTML =
-      '<p style="color:var(--text-muted); text-align:center; padding:1rem">Could not load remote repository. Check your internet connection.</p>';
+      '<p style="color:var(--text-muted); text-align:center; padding:1rem">{{ _('Could not load remote repository. Check your internet connection.') }}</p>';
   });
 </script>
 {% endblock %}

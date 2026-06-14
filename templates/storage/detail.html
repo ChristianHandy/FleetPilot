@@ -4,12 +4,12 @@
 {% block page_title %}{{ overview.endpoint_name or "Storage Detail" }}{% endblock %}
 
 {% block nav_extra %}
-  <a href="/storage" class="btn btn-ghost btn-sm">&#x2190; Back</a>
-  <a href="/smart" class="btn btn-secondary btn-sm">&#x1F4CA; SMART Dashboard</a>
+  <a href="/storage" class="btn btn-ghost btn-sm">{{ _('&#x2190; Back') }}</a>
+  <a href="/smart" class="btn btn-secondary btn-sm">{{ _('&#x1F4CA; SMART Dashboard') }}</a>
   {% if is_admin %}
   <form method="POST" action="/storage/{{ ep_id }}/poll" style="display:inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button class="btn btn-secondary btn-sm">&#x1F504; Poll Disks</button>
+    <button class="btn btn-secondary btn-sm">{{ _('&#x1F504; Poll Disks') }}</button>
   </form>
   {% endif %}
 {% endblock %}
@@ -18,7 +18,7 @@
 
 {% if error %}
 <div class="card card-red" style="margin-bottom:1.5rem">
-  <div class="card-header"><h3>&#x26A0; Connection Error</h3></div>
+  <div class="card-header"><h3>{{ _('&#x26A0; Connection Error') }}</h3></div>
   <pre style="white-space:pre-wrap;color:var(--danger)">{{ error }}</pre>
 </div>
 {% endif %}
@@ -69,13 +69,13 @@
     <h3>&#x1F4BE; Disks
       <span class="badge badge-blue" style="margin-left:0.5rem">{{ disks|length }}</span>
     </h3>
-    <small class="text-muted">Disks are registered in the SMART Manager for health tracking</small>
+    <small class="text-muted">{{ _('Disks are registered in the SMART Manager for health tracking') }}</small>
   </div>
   {% if disks %}
   <div style="overflow-x:auto">
   <table class="table">
     <thead>
-      <tr><th>Name</th><th>Model</th><th>Serial</th><th>Size</th><th>Pool</th><th>Temp</th><th>Health</th></tr>
+      <tr><th>{{ _('Name') }}</th><th>{{ _('Model') }}</th><th>{{ _('Serial') }}</th><th>{{ _('Size') }}</th><th>{{ _('Pool') }}</th><th>{{ _('Temp') }}</th><th>{{ _('Health') }}</th></tr>
     </thead>
     <tbody>
     {% for d in disks %}
@@ -106,18 +106,18 @@
   </table>
   </div>
   {% else %}
-  <p class="text-muted" style="padding:1rem">No disks found.</p>
+  <p class="text-muted" style="padding:1rem">{{ _('No disks found.') }}</p>
   {% endif %}
 </div>
 
 <!-- ── TrueNAS: Pools ─────────────────────────────────────────── -->
 {% if platform == "truenas" and overview.pools %}
 <div class="card" style="margin-bottom:1.5rem">
-  <div class="card-header"><h3>&#x1F4E6; ZFS Pools</h3></div>
+  <div class="card-header"><h3>{{ _('&#x1F4E6; ZFS Pools') }}</h3></div>
   <div style="overflow-x:auto">
   <table class="table">
     <thead>
-      <tr><th>Name</th><th>Status</th><th>Size</th><th>Free</th><th>Healthy</th></tr>
+      <tr><th>{{ _('Name') }}</th><th>{{ _('Status') }}</th><th>{{ _('Size') }}</th><th>{{ _('Free') }}</th><th>{{ _('Healthy') }}</th></tr>
     </thead>
     <tbody>
     {% for pool in overview.pools %}
@@ -130,7 +130,7 @@
       </td>
       <td>{{ "%.1f"|format(pool.size / 1e9) if pool.size else "?" }} GB</td>
       <td>{{ "%.1f"|format(pool.free / 1e9) if pool.free else "?" }} GB</td>
-      <td>{% if pool.healthy %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-red">No</span>{% endif %}</td>
+      <td>{% if pool.healthy %}<span class="badge badge-green">{{ _('Yes') }}</span>{% else %}<span class="badge badge-red">{{ _('No') }}</span>{% endif %}</td>
     </tr>
     {% endfor %}
     </tbody>
@@ -145,18 +145,18 @@
 {% set nfs = overview.nfs_shares or [] %}
 {% if smb or nfs %}
 <div class="card" style="margin-bottom:1.5rem">
-  <div class="card-header"><h3>&#x1F4E1; Shares</h3></div>
+  <div class="card-header"><h3>{{ _('&#x1F4E1; Shares') }}</h3></div>
   {% if smb %}
-  <h4 style="padding:0.75rem 1rem 0.25rem;margin:0">SMB Shares</h4>
+  <h4 style="padding:0.75rem 1rem 0.25rem;margin:0">{{ _('SMB Shares') }}</h4>
   <div style="overflow-x:auto">
   <table class="table">
-    <thead><tr><th>Name</th><th>Path</th><th>Enabled</th></tr></thead>
+    <thead><tr><th>{{ _('Name') }}</th><th>{{ _('Path') }}</th><th>{{ _('Enabled') }}</th></tr></thead>
     <tbody>
     {% for s in smb %}
     <tr>
       <td>{{ s.name }}</td>
       <td><code>{{ s.path }}</code></td>
-      <td>{% if s.enabled %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge">No</span>{% endif %}</td>
+      <td>{% if s.enabled %}<span class="badge badge-green">{{ _('Yes') }}</span>{% else %}<span class="badge">{{ _('No') }}</span>{% endif %}</td>
     </tr>
     {% endfor %}
     </tbody>
@@ -164,16 +164,16 @@
   </div>
   {% endif %}
   {% if nfs %}
-  <h4 style="padding:0.75rem 1rem 0.25rem;margin:0">NFS Shares</h4>
+  <h4 style="padding:0.75rem 1rem 0.25rem;margin:0">{{ _('NFS Shares') }}</h4>
   <div style="overflow-x:auto">
   <table class="table">
-    <thead><tr><th>Path</th><th>Hosts</th><th>Enabled</th></tr></thead>
+    <thead><tr><th>{{ _('Path') }}</th><th>{{ _('Hosts') }}</th><th>{{ _('Enabled') }}</th></tr></thead>
     <tbody>
     {% for s in nfs %}
     <tr>
       <td><code>{{ s.path }}</code></td>
       <td>{{ s.hosts or "*" }}</td>
-      <td>{% if s.enabled %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge">No</span>{% endif %}</td>
+      <td>{% if s.enabled %}<span class="badge badge-green">{{ _('Yes') }}</span>{% else %}<span class="badge">{{ _('No') }}</span>{% endif %}</td>
     </tr>
     {% endfor %}
     </tbody>
@@ -187,10 +187,10 @@
 <!-- ── Unraid: Shares ─────────────────────────────────────────── -->
 {% if platform == "unraid" and overview.shares %}
 <div class="card" style="margin-bottom:1.5rem">
-  <div class="card-header"><h3>&#x1F4E1; Unraid Shares</h3></div>
+  <div class="card-header"><h3>{{ _('&#x1F4E1; Unraid Shares') }}</h3></div>
   <div style="overflow-x:auto">
   <table class="table">
-    <thead><tr><th>Name</th><th>Path</th><th>Free</th></tr></thead>
+    <thead><tr><th>{{ _('Name') }}</th><th>{{ _('Path') }}</th><th>{{ _('Free') }}</th></tr></thead>
     <tbody>
     {% for s in overview.shares %}
     <tr>
@@ -213,11 +213,11 @@
   {% for a in alerts[:10] %}
   <div style="padding:0.5rem 1rem;border-bottom:1px solid var(--border)">
     {% if a.level == "CRITICAL" or a.severity == "CRITICAL" %}
-    <span class="badge badge-red">CRITICAL</span>
+    <span class="badge badge-red">{{ _('CRITICAL') }}</span>
     {% elif a.level == "WARNING" or a.severity == "WARNING" %}
-    <span class="badge badge-yellow">WARNING</span>
+    <span class="badge badge-yellow">{{ _('WARNING') }}</span>
     {% else %}
-    <span class="badge">INFO</span>
+    <span class="badge">{{ _('INFO') }}</span>
     {% endif %}
     {{ a.formatted or a.title or a.message or a|string }}
   </div>

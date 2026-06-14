@@ -3,5 +3,5 @@
 {% block content %}
   <h1>Reload for /dev/{{ device }}</h1>
   <p>File created: {{ path }}</p>
-  <a href="{{ url_for('disks_index') }}" class="btn btn-primary">Back to Overview</a>
+  <a href="{{ url_for('disks_index') }}" class="btn btn-primary">{{ _('Back to Overview') }}</a>
 {% endblock %}

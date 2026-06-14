@@ -9,20 +9,20 @@
 {% if update_notification %}
 <div class="card card-blue" style="margin-bottom:1.5rem;">
   <div class="card-header">
-    <h3>&#x1F514; Dashboard Update Available</h3>
+    <h3>{{ _('&#x1F514; Dashboard Update Available') }}</h3>
     <span class="badge badge-blue">{{ update_notification.type }}</span>
   </div>
   <p><strong>{{ update_notification.description }}</strong><br>
      <span class="text-muted">Version {{ update_notification.version }}</span></p>
   <div class="btn-group">
     {% if is_admin %}
-    <a class="btn btn-success btn-sm" href="/dashboard_version/update">&#x2B06; Update Now</a>
+    <a class="btn btn-success btn-sm" href="/dashboard_version/update">{{ _('&#x2B06; Update Now') }}</a>
     {% endif %}
-    <a class="btn btn-purple btn-sm" href="/dashboard_version/check">&#x1F504; Check Again</a>
+    <a class="btn btn-purple btn-sm" href="/dashboard_version/check">{{ _('&#x1F504; Check Again') }}</a>
     {% if update_notification.url %}
-    <a class="btn btn-secondary btn-sm" href="{{ update_notification.url }}" target="_blank">&#x1F517; GitHub</a>
+    <a class="btn btn-secondary btn-sm" href="{{ update_notification.url }}" target="_blank">{{ _('&#x1F517; GitHub') }}</a>
     {% endif %}
-    <a class="btn btn-ghost btn-sm" href="/dashboard_version/dismiss">&#x2715; Dismiss</a>
+    <a class="btn btn-ghost btn-sm" href="/dashboard_version/dismiss">{{ _('&#x2715; Dismiss') }}</a>
   </div>
 </div>
 {% endif %}
@@ -69,7 +69,7 @@
   <!-- Environment Breakdown -->
   <div class="card" style="padding:1.1rem 1.25rem;">
     <div class="card-header" style="margin-bottom:0.75rem;">
-      <h3>&#x1F30D; Environments</h3>
+      <h3>{{ _('&#x1F30D; Environments') }}</h3>
     </div>
     {% if env_counts %}
     <div style="display:flex;flex-direction:column;gap:0.5rem;">
@@ -86,14 +86,14 @@
       {% endfor %}
     </div>
     {% else %}
-    <p class="text-muted" style="font-size:0.85rem;">No environment data yet.</p>
+    <p class="text-muted" style="font-size:0.85rem;">{{ _('No environment data yet.') }}</p>
     {% endif %}
   </div>
 
   <!-- Tag Cloud -->
   <div class="card" style="padding:1.1rem 1.25rem;">
     <div class="card-header" style="margin-bottom:0.75rem;">
-      <h3>&#x1F3F7; Tag Cloud</h3>
+      <h3>{{ _('&#x1F3F7; Tag Cloud') }}</h3>
     </div>
     {% if tag_counts %}
     <div style="display:flex;flex-wrap:wrap;gap:0.4rem;">
@@ -107,7 +107,7 @@
       {% endfor %}
     </div>
     {% else %}
-    <p class="text-muted" style="font-size:0.85rem;">No tags assigned yet. Add tags to your hosts for better organization.</p>
+    <p class="text-muted" style="font-size:0.85rem;">{{ _('No tags assigned yet. Add tags to your hosts for better organization.') }}</p>
     {% endif %}
   </div>
 
@@ -116,8 +116,8 @@
 <!-- Recent Hosts -->
 <div class="card" style="margin-bottom:1.5rem;padding:1.1rem 1.25rem;">
   <div class="card-header" style="margin-bottom:0.75rem;">
-    <h3>&#x1F5A7; Fleet Overview</h3>
-    <a class="btn btn-secondary btn-sm" href="/hosts">View All</a>
+    <h3>{{ _('&#x1F5A7; Fleet Overview') }}</h3>
+    <a class="btn btn-secondary btn-sm" href="/hosts">{{ _('View All') }}</a>
   </div>
   <div style="display:flex;flex-direction:column;gap:0.4rem;">
     {% for name, h in hosts.items() %}
@@ -160,49 +160,49 @@
 
   <div class="card">
     <div class="card-header">
-      <h3>&#x1F504; System Update Manager</h3>
-      <span class="badge badge-blue">Core</span>
+      <h3>{{ _('&#x1F504; System Update Manager') }}</h3>
+      <span class="badge badge-blue">{{ _('Core') }}</span>
     </div>
-    <p>Monitor and update multiple Linux computers remotely via SSH. View host status, trigger updates, and review history.</p>
+    <p>{{ _('Monitor and update multiple Linux computers remotely via SSH. View host status, trigger updates, and review history.') }}</p>
     <div class="btn-group" style="margin-top:0.75rem;">
-      <a class="btn btn-primary btn-sm" href="/dashboard">Open Dashboard</a>
-      <a class="btn btn-success btn-sm" href="/update_settings">Settings</a>
-      <a class="btn btn-secondary btn-sm" href="/email_settings">&#x2709; Email</a>
+      <a class="btn btn-primary btn-sm" href="/dashboard">{{ _('Open Dashboard') }}</a>
+      <a class="btn btn-success btn-sm" href="/update_settings">{{ _('Settings') }}</a>
+      <a class="btn btn-secondary btn-sm" href="/email_settings">{{ _('&#x2709; Email') }}</a>
     </div>
   </div>
 
   <div class="card">
     <div class="card-header">
-      <h3>&#x1F4BE; Disk Management</h3>
-      <span class="badge badge-purple">Tools</span>
+      <h3>{{ _('&#x1F4BE; Disk Management') }}</h3>
+      <span class="badge badge-purple">{{ _('Tools') }}</span>
     </div>
-    <p>Format, test, and validate disk drives with SMART monitoring. Track disk health and manage storage devices.</p>
+    <p>{{ _('Format, test, and validate disk drives with SMART monitoring. Track disk health and manage storage devices.') }}</p>
     <div class="btn-group" style="margin-top:0.75rem;">
-      <a class="btn btn-primary btn-sm" href="/disks">Open Disk Tools</a>
+      <a class="btn btn-primary btn-sm" href="/disks">{{ _('Open Disk Tools') }}</a>
     </div>
   </div>
 
   <div class="card">
     <div class="card-header">
-      <h3>&#x1F5A7; Host Management</h3>
-      <span class="badge badge-green">Network</span>
+      <h3>{{ _('&#x1F5A7; Host Management') }}</h3>
+      <span class="badge badge-green">{{ _('Network') }}</span>
     </div>
-    <p>Add, edit, and remove managed hosts. Assign tags, groups, descriptions and configure SSH keys.</p>
+    <p>{{ _('Add, edit, and remove managed hosts. Assign tags, groups, descriptions and configure SSH keys.') }}</p>
     <div class="btn-group" style="margin-top:0.75rem;">
-      <a class="btn btn-primary btn-sm" href="/hosts">Manage Hosts</a>
-      <a class="btn btn-secondary btn-sm" href="/hosts/arp_table">ARP Table</a>
+      <a class="btn btn-primary btn-sm" href="/hosts">{{ _('Manage Hosts') }}</a>
+      <a class="btn btn-secondary btn-sm" href="/hosts/arp_table">{{ _('ARP Table') }}</a>
     </div>
   </div>
 
   <div class="card">
     <div class="card-header">
-      <h3>&#x1F464; User &amp; Profile</h3>
-      <span class="badge badge-amber">Account</span>
+      <h3>{{ _('&#x1F464; User &amp; Profile') }}</h3>
+      <span class="badge badge-amber">{{ _('Account') }}</span>
     </div>
-    <p>Manage your profile, update credentials, and administer user accounts and roles.</p>
+    <p>{{ _('Manage your profile, update credentials, and administer user accounts and roles.') }}</p>
     <div class="btn-group" style="margin-top:0.75rem;">
-      <a class="btn btn-primary btn-sm" href="/users/profile">My Profile</a>
-      <a class="btn btn-secondary btn-sm" href="/users">User Admin</a>
+      <a class="btn btn-primary btn-sm" href="/users/profile">{{ _('My Profile') }}</a>
+      <a class="btn btn-secondary btn-sm" href="/users">{{ _('User Admin') }}</a>
     </div>
   </div>
 

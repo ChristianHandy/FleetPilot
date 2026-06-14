@@ -12,7 +12,7 @@
   <div>
     <div class="card">
       <div class="card-header">
-        <h3>&#x2699; SMTP Settings</h3>
+        <h3>{{ _('&#x2699; SMTP Settings') }}</h3>
       </div>
       <form method="POST" action="/email_settings">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -22,20 +22,20 @@
           <input type="checkbox" name="email_enabled" id="email_enabled"
                  {% if settings.email_enabled %}checked{% endif %}>
           <label class="form-check-label" for="email_enabled">
-            <strong>Enable Email Notifications</strong>
-            <span>Master switch — when disabled, no emails will be sent.</span>
+            <strong>{{ _('Enable Email Notifications') }}</strong>
+            <span>{{ _('Master switch — when disabled, no emails will be sent.') }}</span>
           </label>
         </div>
 
         <div class="form-group">
-          <label class="form-label">SMTP Server</label>
+          <label class="form-label">{{ _('SMTP Server') }}</label>
           <input type="text" name="smtp_server" value="{{ settings.smtp_server }}"
                  placeholder="smtp.gmail.com">
-          <p class="form-hint">e.g. smtp.gmail.com, smtp.office365.com</p>
+          <p class="form-hint">{{ _('e.g. smtp.gmail.com, smtp.office365.com') }}</p>
         </div>
 
         <div class="form-group">
-          <label class="form-label">SMTP Port</label>
+          <label class="form-label">{{ _('SMTP Port') }}</label>
           <input type="number" name="smtp_port" value="{{ settings.smtp_port }}"
                  placeholder="587">
           <p class="form-hint">587 (TLS) &nbsp;|&nbsp; 465 (SSL) &nbsp;|&nbsp; 25 (unencrypted)</p>
@@ -45,42 +45,42 @@
           <input type="checkbox" name="smtp_use_tls" id="smtp_use_tls"
                  {% if settings.smtp_use_tls %}checked{% endif %}>
           <label class="form-check-label" for="smtp_use_tls">
-            <strong>Use TLS Encryption</strong>
-            <span>Recommended for port 587.</span>
+            <strong>{{ _('Use TLS Encryption') }}</strong>
+            <span>{{ _('Recommended for port 587.') }}</span>
           </label>
         </div>
 
         <div class="form-group">
-          <label class="form-label">SMTP Username</label>
+          <label class="form-label">{{ _('SMTP Username') }}</label>
           <input type="text" name="smtp_username" value="{{ settings.smtp_username }}"
-                 placeholder="your-email@example.com">
-          <p class="form-hint">Usually your email address.</p>
+                 placeholder="{{ _('your-email@example.com') }}">
+          <p class="form-hint">{{ _('Usually your email address.') }}</p>
         </div>
 
         <div class="form-group">
-          <label class="form-label">SMTP Password</label>
+          <label class="form-label">{{ _('SMTP Password') }}</label>
           <input type="password" name="smtp_password" value="{{ settings.smtp_password }}"
-                 placeholder="Password or app-specific password">
-          <p class="form-hint">For Gmail, use an app-specific password.</p>
+                 placeholder="{{ _('Password or app-specific password') }}">
+          <p class="form-hint">{{ _('For Gmail, use an app-specific password.') }}</p>
         </div>
 
         <div class="form-group">
-          <label class="form-label">Sender Email</label>
+          <label class="form-label">{{ _('Sender Email') }}</label>
           <input type="email" name="sender_email" value="{{ settings.sender_email }}"
-                 placeholder="dashboard@example.com">
+                 placeholder="{{ _('dashboard@example.com') }}">
         </div>
 
         <div class="form-group">
-          <label class="form-label">Recipient Emails</label>
+          <label class="form-label">{{ _('Recipient Emails') }}</label>
           <textarea name="recipient_emails" rows="3"
-                    placeholder="admin@example.com&#10;ops@example.com">{{ settings.recipient_emails|join('\n') }}</textarea>
-          <p class="form-hint">One email address per line.</p>
+                    placeholder="{{ _('admin@example.com&#10;ops@example.com') }}">{{ settings.recipient_emails|join('\n') }}</textarea>
+          <p class="form-hint">{{ _('One email address per line.') }}</p>
         </div>
 
         <div class="btn-group">
-          <button type="submit" class="btn btn-primary">&#x1F4BE; Save Settings</button>
-          <button type="submit" name="test_email" value="true" class="btn btn-success">&#x2709; Send Test Email</button>
-          <a class="btn btn-ghost" href="/index">Cancel</a>
+          <button type="submit" class="btn btn-primary">{{ _('&#x1F4BE; Save Settings') }}</button>
+          <button type="submit" name="test_email" value="true" class="btn btn-success">{{ _('&#x2709; Send Test Email') }}</button>
+          <a class="btn btn-ghost" href="/index">{{ _('Cancel') }}</a>
         </div>
       </form>
     </div>
@@ -90,7 +90,7 @@
   <div>
     <div class="card">
       <div class="card-header">
-        <h3>&#x1F4CA; Report Configuration</h3>
+        <h3>{{ _('&#x1F4CA; Report Configuration') }}</h3>
       </div>
       <form method="POST" action="/email_settings">
 
@@ -98,13 +98,13 @@
           <input type="checkbox" name="report_enabled" id="report_enabled"
                  {% if settings.report_enabled %}checked{% endif %}>
           <label class="form-check-label" for="report_enabled">
-            <strong>Enable Scheduled Reports</strong>
-            <span>Send periodic system status reports via email.</span>
+            <strong>{{ _('Enable Scheduled Reports') }}</strong>
+            <span>{{ _('Send periodic system status reports via email.') }}</span>
           </label>
         </div>
 
         <div class="form-group">
-          <label class="form-label">Report Interval</label>
+          <label class="form-label">{{ _('Report Interval') }}</label>
           <select name="report_interval">
             <option value="daily"   {% if settings.report_interval == 'daily'   %}selected{% endif %}>Daily</option>
             <option value="weekly"  {% if settings.report_interval == 'weekly'  %}selected{% endif %}>Weekly</option>
@@ -116,18 +116,18 @@
           <input type="checkbox" name="error_notifications_enabled" id="error_notif"
                  {% if settings.error_notifications_enabled %}checked{% endif %}>
           <label class="form-check-label" for="error_notif">
-            <strong>Enable Error Notifications</strong>
-            <span>Immediate alerts when system updates fail.</span>
+            <strong>{{ _('Enable Error Notifications') }}</strong>
+            <span>{{ _('Immediate alerts when system updates fail.') }}</span>
           </label>
         </div>
 
-        <button type="submit" class="btn btn-primary">&#x1F4BE; Save Report Settings</button>
+        <button type="submit" class="btn btn-primary">{{ _('&#x1F4BE; Save Report Settings') }}</button>
       </form>
     </div>
 
     <!-- Features -->
     <div class="card">
-      <h3 style="margin-bottom:1rem;">&#x2728; Email Features</h3>
+      <h3 style="margin-bottom:1rem;">{{ _('&#x2728; Email Features') }}</h3>
       <div class="feature-grid" style="grid-template-columns:1fr;">
         <div class="feature-item">
           <div class="feature-item-title text-blue">&#x1F4CA; Scheduled Reports</div>
@@ -146,13 +146,13 @@
 
     <!-- Notes -->
     <div class="card card-amber">
-      <h3 style="margin-bottom:0.75rem;">&#x1F4DD; Important Notes</h3>
+      <h3 style="margin-bottom:0.75rem;">{{ _('&#x1F4DD; Important Notes') }}</h3>
       <ul style="font-size:0.875rem; line-height:1.8;">
-        <li><strong>Gmail:</strong> Use an app-specific password. Enable 2FA and generate an app password in Google Account settings.</li>
-        <li><strong>Office 365:</strong> Use your full email address as username and enable Modern Authentication if required.</li>
-        <li><strong>Security:</strong> Credentials are stored in <code>email_settings.json</code>. Ensure proper file permissions.</li>
-        <li><strong>Testing:</strong> Use "Send Test Email" to verify your configuration before enabling automatic reports.</li>
-        <li><strong>Port:</strong> Port 587 with TLS is recommended for most providers.</li>
+        <li><strong>{{ _('Gmail:') }}</strong> Use an app-specific password. Enable 2FA and generate an app password in Google Account settings.</li>
+        <li><strong>{{ _('Office 365:') }}</strong> Use your full email address as username and enable Modern Authentication if required.</li>
+        <li><strong>{{ _('Security:') }}</strong> Credentials are stored in <code>email_settings.json</code>. Ensure proper file permissions.</li>
+        <li><strong>{{ _('Testing:') }}</strong> Use "Send Test Email" to verify your configuration before enabling automatic reports.</li>
+        <li><strong>{{ _('Port:') }}</strong> Port 587 with TLS is recommended for most providers.</li>
       </ul>
     </div>
   </div>

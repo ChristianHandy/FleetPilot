@@ -5,13 +5,13 @@
 {% block page_title %}User Management{% endblock %}
 
 {% block topbar_actions %}
-<a class="btn btn-primary btn-sm" href="/users/add">&#x2795; Add User</a>
+<a class="btn btn-primary btn-sm" href="/users/add">{{ _('&#x2795; Add User') }}</a>
 {% endblock %}
 
 {% block content %}
 
 <div class="card-header" style="margin-bottom:1rem; padding:0;">
-  <h3>&#x1F465; Existing Users</h3>
+  <h3>{{ _('&#x1F465; Existing Users') }}</h3>
   <span class="badge badge-blue">{{ users|length }} users</span>
 </div>
 
@@ -24,14 +24,14 @@
         <div class="host-card-name">
           {{ user.username }}
           {% if not user.active %}
-            <span class="badge badge-red" style="margin-left:0.5rem;">Inactive</span>
+            <span class="badge badge-red" style="margin-left:0.5rem;">{{ _('Inactive') }}</span>
           {% else %}
-            <span class="badge badge-green" style="margin-left:0.5rem;">Active</span>
+            <span class="badge badge-green" style="margin-left:0.5rem;">{{ _('Active') }}</span>
           {% endif %}
         </div>
         <div class="host-card-meta">
           {% if user.email %}&#x2709; {{ user.email }} &bull; {% endif %}
-          &#x1F464; {% if user.id in roles_by_user %}{{ roles_by_user[user.id]|join(', ') }}{% else %}<em>No roles</em>{% endif %}
+          &#x1F464; {% if user.id in roles_by_user %}{{ roles_by_user[user.id]|join(', ') }}{% else %}<em>{{ _('No roles') }}</em>{% endif %}
         </div>
         <div class="host-card-meta" style="margin-top:0.2rem;">
           &#x1F4C5; Created: {{ user.created_at }}
@@ -39,7 +39,7 @@
       </div>
     </div>
     <div class="host-card-actions">
-      <a class="btn btn-secondary btn-sm" href="/users/edit/{{ user.id }}">&#x270F; Edit</a>
+      <a class="btn btn-secondary btn-sm" href="/users/edit/{{ user.id }}">{{ _('&#x270F; Edit') }}</a>
       <form action="/users/delete/{{ user.id }}" method="post" style="display:inline; margin:0;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button class="btn btn-danger btn-sm" type="submit"
@@ -52,9 +52,9 @@
 {% else %}
 <div class="empty-state">
   <div class="empty-state-icon">&#x1F465;</div>
-  <h3>No users found</h3>
-  <p>Create the first user to get started.</p>
-  <a class="btn btn-primary" href="/users/add" style="margin-top:1rem;">&#x2795; Add User</a>
+  <h3>{{ _('No users found') }}</h3>
+  <p>{{ _('Create the first user to get started.') }}</p>
+  <a class="btn btn-primary" href="/users/add" style="margin-top:1rem;">{{ _('&#x2795; Add User') }}</a>
 </div>
 {% endif %}
 

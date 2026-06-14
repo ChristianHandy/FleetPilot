@@ -6,17 +6,17 @@
 {% block content %}
 <div class="card" style="max-width:640px;margin:0 auto">
   <div class="card-header">
-    <h3>&#x1F5C4; New NAS / Storage Endpoint</h3>
+    <h3>{{ _('&#x1F5C4; New NAS / Storage Endpoint') }}</h3>
   </div>
   <form method="POST" action="/storage/add">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="form-group">
-      <label class="form-label">Display Name *</label>
-      <input type="text" name="name" class="form-control" placeholder="e.g. TrueNAS-Main" required>
+      <label class="form-label">{{ _('Display Name *') }}</label>
+      <input type="text" name="name" class="form-control" placeholder="{{ _('e.g. TrueNAS-Main') }}" required>
     </div>
 
     <div class="form-group">
-      <label class="form-label">Platform *</label>
+      <label class="form-label">{{ _('Platform *') }}</label>
       <select name="platform" id="platform-select" class="form-control" onchange="updatePort()">
         <option value="truenas">TrueNAS SCALE / CORE</option>
         <option value="unraid">Unraid</option>
@@ -24,21 +24,21 @@
     </div>
 
     <div class="form-group">
-      <label class="form-label">Host / IP *</label>
+      <label class="form-label">{{ _('Host / IP *') }}</label>
       <input type="text" name="host" class="form-control" placeholder="192.168.1.20" required>
     </div>
 
     <div class="form-group">
-      <label class="form-label">Port *</label>
+      <label class="form-label">{{ _('Port *') }}</label>
       <input type="number" name="port" id="port-input" class="form-control" value="443" required>
-      <small class="text-muted">TrueNAS default: 443 &nbsp;|&nbsp; Unraid default: 80 (HTTP)</small>
+      <small class="text-muted">{{ _('TrueNAS default: 443 &nbsp;|&nbsp; Unraid default: 80 (HTTP)') }}</small>
     </div>
 
     <div class="form-group">
-      <label class="form-label" id="key-label">API Key *</label>
+      <label class="form-label" id="key-label">{{ _('API Key *') }}</label>
       <input type="password" name="api_key" class="form-control" required>
       <small class="text-muted" id="key-hint">
-        TrueNAS: <em>System → API Keys → Add</em>
+        TrueNAS: <em>{{ _('System → API Keys → Add') }}</em>
       </small>
     </div>
 
@@ -49,30 +49,30 @@
     </div>
 
     <div class="form-group">
-      <label class="form-label">Notes</label>
+      <label class="form-label">{{ _('Notes') }}</label>
       <textarea name="notes" class="form-control" rows="2"></textarea>
     </div>
 
     <div class="btn-group">
-      <button type="submit" class="btn btn-success">&#x1F4BE; Save Endpoint</button>
-      <a href="/storage" class="btn btn-ghost">Cancel</a>
+      <button type="submit" class="btn btn-success">{{ _('&#x1F4BE; Save Endpoint') }}</button>
+      <a href="/storage" class="btn btn-ghost">{{ _('Cancel') }}</a>
     </div>
   </form>
 </div>
 
 <div class="card" style="max-width:640px;margin:1.5rem auto 0">
-  <div class="card-header"><h3>&#x2139; API Key Setup</h3></div>
+  <div class="card-header"><h3>{{ _('&#x2139; API Key Setup') }}</h3></div>
   <div id="help-truenas">
-    <strong>TrueNAS SCALE / CORE</strong><br>
+    <strong>{{ _('TrueNAS SCALE / CORE') }}</strong><br>
     1. Log in to the TrueNAS web UI<br>
-    2. Go to <em>System → API Keys</em><br>
-    3. Click <em>Add</em>, give it a name, copy the key<br>
+    2. Go to <em>{{ _('System → API Keys') }}</em><br>
+    3. Click <em>{{ _('Add') }}</em>, give it a name, copy the key<br>
     4. The key grants full API access — store it securely
   </div>
   <div id="help-unraid" style="display:none">
-    <strong>Unraid 6.12+</strong><br>
+    <strong>{{ _('Unraid 6.12+') }}</strong><br>
     1. Log in to the Unraid web UI<br>
-    2. Go to <em>Settings → Management Access → API Keys</em><br>
+    2. Go to <em>{{ _('Settings → Management Access → API Keys') }}</em><br>
     3. Create a new key with appropriate permissions<br>
     <br>
     For older Unraid versions, the JSON API plugin is required.
@@ -84,8 +84,8 @@
 <script>
 const portMap = { truenas: 443, unraid: 80 };
 const hints = {
-  truenas: "TrueNAS: <em>System → API Keys → Add</em>",
-  unraid:  "Unraid: <em>Settings → Management Access → API Keys</em>"
+  truenas: "TrueNAS: <em>{{ _('System → API Keys → Add') }}</em>",
+  unraid:  "Unraid: <em>{{ _('Settings → Management Access → API Keys') }}</em>"
 };
 function updatePort() {
   const p = document.getElementById("platform-select").value;

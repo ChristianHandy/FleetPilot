@@ -26,16 +26,16 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
       <!-- Basic Info -->
-      <div class="form-section"><span class="form-section-title">&#x1F4CB; Basic Information</span></div>
+      <div class="form-section"><span class="form-section-title">{{ _('&#x1F4CB; Basic Information') }}</span></div>
       <div class="form-grid-2">
         <div class="form-group">
           <label class="form-label">{{ _('Display Name') }}</label>
           <input type="text" name="name" value="{{ name }}" placeholder="{{ _('e.g. Web Server') }}" required>
         </div>
         <div class="form-group">
-          <label class="form-label">Description</label>
+          <label class="form-label">{{ _('Description') }}</label>
           <input type="text" name="description" value="{{ data.description or '' }}"
-                 placeholder="Short description of this host">
+                 placeholder="{{ _('Short description of this host') }}">
         </div>
       </div>
       <div class="form-grid-3">
@@ -48,27 +48,27 @@
           <input type="text" name="user" value="{{ data.user }}" placeholder="{{ _('e.g. admin') }}" required>
         </div>
         <div class="form-group">
-          <label class="form-label">SSH Port</label>
+          <label class="form-label">{{ _('SSH Port') }}</label>
           <input type="number" name="port" value="{{ data.port or 22 }}" min="1" max="65535">
         </div>
       </div>
       <div class="form-grid-2">
         <div class="form-group">
           <label class="form-label">{{ _('MAC Address') }} <span class="text-muted">({{ _('optional') }})</span></label>
-          <input type="text" name="mac" value="{{ data.mac or '' }}" placeholder="AA:BB:CC:DD:EE:FF">
+          <input type="text" name="mac" value="{{ data.mac or '' }}" placeholder="{{ _('AA:BB:CC:DD:EE:FF') }}">
           <div class="form-hint">{{ _('Used for automatic IP change detection on DHCP hosts.') }}</div>
         </div>
         <div class="form-group">
-          <label class="form-label">SSH Key Path <span class="text-muted">(optional)</span></label>
-          <input type="text" name="ssh_key" value="{{ data.ssh_key or '' }}" placeholder="~/.ssh/id_rsa">
+          <label class="form-label">SSH Key Path <span class="text-muted">{{ _('(optional)') }}</span></label>
+          <input type="text" name="ssh_key" value="{{ data.ssh_key or '' }}" placeholder="{{ _('~/.ssh/id_rsa') }}">
         </div>
       </div>
 
       <!-- Classification -->
-      <div class="form-section"><span class="form-section-title">&#x1F3F7; Classification</span></div>
+      <div class="form-section"><span class="form-section-title">{{ _('&#x1F3F7; Classification') }}</span></div>
       <div class="form-grid-3">
         <div class="form-group">
-          <label class="form-label">Environment</label>
+          <label class="form-label">{{ _('Environment') }}</label>
           <select name="environment">
             {% for env in environments %}
             <option value="{{ env }}" {% if data.environment == env %}selected{% endif %}>{{ env }}</option>
@@ -76,7 +76,7 @@
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">Criticality</label>
+          <label class="form-label">{{ _('Criticality') }}</label>
           <select name="criticality">
             {% for c in criticalities %}
             <option value="{{ c }}" {% if data.criticality == c %}selected{% endif %}>{{ c }}</option>
@@ -84,25 +84,25 @@
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">Group / Team</label>
+          <label class="form-label">{{ _('Group / Team') }}</label>
           <input type="text" name="group" value="{{ data.group or '' }}"
-                 placeholder="e.g. Backend, DevOps, Lab">
+                 placeholder="{{ _('e.g. Backend, DevOps, Lab') }}">
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">Location / Site</label>
+        <label class="form-label">{{ _('Location / Site') }}</label>
         <input type="text" name="location" value="{{ data.location or '' }}"
-               placeholder="e.g. Rack A3, Home Lab, AWS eu-central-1">
+               placeholder="{{ _('e.g. Rack A3, Home Lab, AWS eu-central-1') }}">
       </div>
 
       <!-- Tags -->
-      <div class="form-section"><span class="form-section-title">&#x1F3F7; Tags</span></div>
+      <div class="form-section"><span class="form-section-title">{{ _('&#x1F3F7; Tags') }}</span></div>
       <div class="form-group">
-        <label class="form-label">Tags</label>
+        <label class="form-label">{{ _('Tags') }}</label>
         <div class="tag-input-wrapper" id="tagWrapper">
           <div id="tagChips" style="display:contents;"></div>
           <input type="text" class="tag-input-inner" id="tagInput"
-                 placeholder="Type tag and press Enter…" autocomplete="off">
+                 placeholder="{{ _('Type tag and press Enter…') }}" autocomplete="off">
           <input type="hidden" name="tags" id="tagsHidden" value="{{ data.tags|join(',') if data.tags else '' }}">
         </div>
         <div class="tag-presets" id="tagPresets">
@@ -114,18 +114,18 @@
       </div>
 
       <!-- Notes -->
-      <div class="form-section"><span class="form-section-title">&#x1F4DD; Notes</span></div>
+      <div class="form-section"><span class="form-section-title">{{ _('&#x1F4DD; Notes') }}</span></div>
       <div class="form-group">
-        <label class="form-label">Notes <span class="text-muted">(internal)</span></label>
+        <label class="form-label">Notes <span class="text-muted">{{ _('(internal)') }}</span></label>
         <textarea name="notes" class="notes-textarea"
-                  placeholder="Internal notes, maintenance info, credentials hints…">{{ data.notes or '' }}</textarea>
+                  placeholder="{{ _('Internal notes, maintenance info, credentials hints…') }}">{{ data.notes or '' }}</textarea>
       </div>
 
       <!-- OS Profiles (Multiboot) -->
       <div class="form-section" style="margin-top:1.25rem;">
         <button type="button" class="collapsible-toggle" id="osToggle" onclick="toggleOS()">
           <span>&#x1F4BF; {{ _('OS Profiles (Multiboot)') }} — <span style="font-weight:400;color:var(--text-muted);">{{ _('optional') }}</span></span>
-          <span class="arrow" id="osArrow">&#x25BC;</span>
+          <span class="arrow" id="osArrow">{{ _('&#x25BC;') }}</span>
         </button>
       </div>
       <div class="collapsible-body {% if data.os_profiles %}open{% endif %}" id="osBody">
@@ -172,7 +172,7 @@ function renderTagChips() {
     const slug = tag.toLowerCase().replace(/\s+/g, '-');
     chip.className = 'tag-chip tag-chip-default tag-chip-' + slug;
     chip.style.cssText = 'display:inline-flex;align-items:center;gap:0.3rem;';
-    chip.innerHTML = tag + ' <button type="button" class="tag-chip-remove" onclick="removeTag(' + i + ')">&#x2715;</button>';
+    chip.innerHTML = tag + ' <button type="button" class="tag-chip-remove" onclick="removeTag(' + i + ')">{{ _('&#x2715;') }}</button>';
     wrapper.insertBefore(chip, input);
   });
   hidden.value = currentTags.join(',');
@@ -225,7 +225,7 @@ function addOsProfile(name='', type='ubuntu', isDefault=false) {
   div.style.cssText = 'display:grid;grid-template-columns:1fr 180px 130px 36px;gap:0.5rem;align-items:center;margin-bottom:0.5rem;';
   const opts = OS_TYPES.map(t => `<option value="${t.value}"${type===t.value?' selected':''}>${t.label}</option>`).join('');
   div.innerHTML = `
-    <input type="text" name="os_name" placeholder="OS Name (e.g. Ubuntu 24.04)" value="${escHtml(name)}">
+    <input type="text" name="os_name" placeholder="{{ _('OS Name (e.g. Ubuntu 24.04)') }}" value="${escHtml(name)}">
     <select name="os_type">${opts}</select>
     <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.85rem;cursor:pointer;
                   padding:0.45rem 0.6rem;border:1px solid var(--border);border-radius:var(--radius-md);
@@ -234,7 +234,7 @@ function addOsProfile(name='', type='ubuntu', isDefault=false) {
              style="width:16px;height:16px;accent-color:var(--accent-blue);">
       Default
     </label>
-    <button type="button" onclick="removeOsProfile(${idx})" class="btn btn-danger btn-sm" style="padding:0.4rem 0.6rem;">&#x2715;</button>`;
+    <button type="button" onclick="removeOsProfile(${idx})" class="btn btn-danger btn-sm" style="padding:0.4rem 0.6rem;">{{ _('&#x2715;') }}</button>`;
   c.appendChild(div);
 }
 function removeOsProfile(idx) {

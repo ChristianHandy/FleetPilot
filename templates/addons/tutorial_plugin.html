@@ -2,17 +2,17 @@
 {% block title %}Tutorial Plugin – {{ device }}{% endblock %}
 {% block content %}
 <div class='container mt-4'>
-  <h1>Tutorial Plugin</h1>
+  <h1>{{ _('Tutorial Plugin') }}</h1>
   <p>This is an example page created with the <code>tutorial_plugin</code>.</p>
   <p>Current device: <strong>{{ device }}</strong></p>
   <hr>
-  <h5>🔧 Notes:</h5>
+  <h5>{{ _('🔧 Notes:') }}</h5>
   <ul>
     <li>This HTML comes from the Python code in <code>tutorial_plugin.py</code>.</li>
     <li>Automatically extracted and saved under <code>templates/addons/tutorial_plugin.html</code>.</li>
-    <li>A button appears automatically behind each disk.</li>
+    <li>{{ _('A button appears automatically behind each disk.') }}</li>
     <li>The page uses <code>disks/base.html</code> as foundation.</li>
   </ul>
-  <a href='{{ url_for('disks_index') }}' class='btn btn-secondary mt-3'>Back</a>
+  <a href='{{ url_for('disks_index') }}' class='btn btn-secondary mt-3'>{{ _('Back') }}</a>
 </div>
 {% endblock %}

@@ -5,7 +5,7 @@
 
 {% block nav_extra %}
   {% if is_admin %}
-  <a class="btn btn-success btn-sm" href="/storage/add">&#x2B; Add Endpoint</a>
+  <a class="btn btn-success btn-sm" href="/storage/add">{{ _('&#x2B; Add Endpoint') }}</a>
   {% endif %}
 {% endblock %}
 
@@ -35,12 +35,12 @@
 {% if endpoints %}
 <div class="card" style="margin-bottom:1.5rem">
   <div class="card-header">
-    <h3>&#x1F5C4; Registered NAS Endpoints</h3>
+    <h3>{{ _('&#x1F5C4; Registered NAS Endpoints') }}</h3>
   </div>
   <div style="overflow-x:auto">
   <table class="table">
     <thead>
-      <tr><th>Name</th><th>Platform</th><th>Host</th><th>Port</th><th>SSL</th><th>Actions</th></tr>
+      <tr><th>{{ _('Name') }}</th><th>{{ _('Platform') }}</th><th>{{ _('Host') }}</th><th>{{ _('Port') }}</th><th>{{ _('SSL') }}</th><th>{{ _('Actions') }}</th></tr>
     </thead>
     <tbody>
     {% for ep in endpoints %}
@@ -50,29 +50,29 @@
       </td>
       <td>
         {% if ep.platform == "truenas" %}
-          <span class="badge badge-blue">&#x1F30A; TrueNAS</span>
+          <span class="badge badge-blue">{{ _('&#x1F30A; TrueNAS') }}</span>
         {% elif ep.platform == "unraid" %}
-          <span class="badge badge-orange" style="background:rgba(251,146,60,0.15);color:#fb923c">&#x1F40B; Unraid</span>
+          <span class="badge badge-orange" style="background:rgba(251,146,60,0.15);color:#fb923c">{{ _('&#x1F40B; Unraid') }}</span>
         {% else %}
           <span class="badge">{{ ep.platform }}</span>
         {% endif %}
       </td>
       <td><code>{{ ep.host }}</code></td>
       <td>{{ ep.port }}</td>
-      <td>{% if ep.verify_ssl %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge">No</span>{% endif %}</td>
+      <td>{% if ep.verify_ssl %}<span class="badge badge-green">{{ _('Yes') }}</span>{% else %}<span class="badge">{{ _('No') }}</span>{% endif %}</td>
       <td>
         <div class="btn-group">
-          <a href="/storage/{{ ep.id }}" class="btn btn-sm btn-primary">&#x1F50D; View</a>
-          <button class="btn btn-sm btn-secondary" onclick="testConn({{ ep.id }}, this)">&#x1F50C; Test</button>
+          <a href="/storage/{{ ep.id }}" class="btn btn-sm btn-primary">{{ _('&#x1F50D; View') }}</a>
+          <button class="btn btn-sm btn-secondary" onclick="testConn({{ ep.id }}, this)">{{ _('&#x1F50C; Test') }}</button>
           {% if is_admin %}
           <form method="POST" action="/storage/{{ ep.id }}/poll" style="display:inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-sm btn-secondary">&#x1F504; Poll</button>
+            <button class="btn btn-sm btn-secondary">{{ _('&#x1F504; Poll') }}</button>
           </form>
           <form method="POST" action="/storage/delete/{{ ep.id }}" style="display:inline"
                 onsubmit="return confirm('Delete endpoint {{ ep.name }}?')">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-sm btn-danger">&#x1F5D1;</button>
+            <button class="btn btn-sm btn-danger">{{ _('&#x1F5D1;') }}</button>
           </form>
           {% endif %}
         </div>
@@ -86,10 +86,10 @@
 </div>
 {% else %}
 <div class="card card-blue" style="margin-bottom:1.5rem">
-  <div class="card-header"><h3>&#x1F4A1; No Storage Endpoints Yet</h3></div>
-  <p>Add a TrueNAS SCALE/CORE or Unraid server to monitor pools, disks, and shares.</p>
+  <div class="card-header"><h3>{{ _('&#x1F4A1; No Storage Endpoints Yet') }}</h3></div>
+  <p>{{ _('Add a TrueNAS SCALE/CORE or Unraid server to monitor pools, disks, and shares.') }}</p>
   {% if is_admin %}
-  <a href="/storage/add" class="btn btn-success">&#x2B; Add First Endpoint</a>
+  <a href="/storage/add" class="btn btn-success">{{ _('&#x2B; Add First Endpoint') }}</a>
   {% endif %}
 </div>
 {% endif %}
@@ -97,11 +97,11 @@
 <!-- ── Recent Events ─────────────────────────────────────────── -->
 {% if events %}
 <div class="card">
-  <div class="card-header"><h3>&#x1F4CB; Recent Events</h3></div>
+  <div class="card-header"><h3>{{ _('&#x1F4CB; Recent Events') }}</h3></div>
   <div style="overflow-x:auto">
   <table class="table">
     <thead>
-      <tr><th>Time</th><th>Endpoint</th><th>Resource</th><th>Action</th><th>Status</th><th>Message</th></tr>
+      <tr><th>{{ _('Time') }}</th><th>{{ _('Endpoint') }}</th><th>{{ _('Resource') }}</th><th>{{ _('Action') }}</th><th>{{ _('Status') }}</th><th>{{ _('Message') }}</th></tr>
     </thead>
     <tbody>
     {% for ev in events %}

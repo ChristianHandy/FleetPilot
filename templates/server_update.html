@@ -5,7 +5,7 @@
 {% block page_title %}Server Update{% endblock %}
 
 {% block topbar_actions %}
-<a class="btn btn-secondary btn-sm" href="/index">&#x2190; Dashboard</a>
+<a class="btn btn-secondary btn-sm" href="/index">{{ _('&#x2190; Dashboard') }}</a>
 {% endblock %}
 
 {% block content %}
@@ -13,15 +13,15 @@
 <!-- Info Card -->
 <div class="card" style="margin-bottom:1.25rem;">
   <div class="card-header">
-    <h3>🖥️ FleetPilot Host — Package Update</h3>
-    <span class="badge badge-amber">Admin Only</span>
+    <h3>{{ _('🖥️ FleetPilot Host — Package Update') }}</h3>
+    <span class="badge badge-amber">{{ _('Admin Only') }}</span>
   </div>
   <p>This tool runs <code>apt-get update &amp;&amp; apt-get upgrade</code> directly on the server that hosts FleetPilot. It requires sudo privileges on the host system. The update runs in the background and streams live output below.</p>
   <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:0.75rem;">
-    <div class="stat-mini"><span class="stat-mini-label">Host</span><span class="stat-mini-value" id="hostInfo">{{ request.host.split(':')[0] }}</span></div>
-    <div class="stat-mini"><span class="stat-mini-label">OS</span><span class="stat-mini-value" id="osInfo">Detecting…</span></div>
-    <div class="stat-mini"><span class="stat-mini-label">Pending Updates</span><span class="stat-mini-value" id="pendingCount">—</span></div>
-    <div class="stat-mini"><span class="stat-mini-label">Status</span><span class="stat-mini-value" id="statusBadge">
+    <div class="stat-mini"><span class="stat-mini-label">{{ _('Host') }}</span><span class="stat-mini-value" id="hostInfo">{{ request.host.split(':')[0] }}</span></div>
+    <div class="stat-mini"><span class="stat-mini-label">{{ _('OS') }}</span><span class="stat-mini-value" id="osInfo">{{ _('Detecting…') }}</span></div>
+    <div class="stat-mini"><span class="stat-mini-label">{{ _('Pending Updates') }}</span><span class="stat-mini-value" id="pendingCount">—</span></div>
+    <div class="stat-mini"><span class="stat-mini-label">{{ _('Status') }}</span><span class="stat-mini-value" id="statusBadge">
       {% if running %}<span class="badge badge-amber">Running</span>{% else %}<span class="badge badge-blue">Idle</span>{% endif %}
     </span></div>
   </div>
@@ -30,19 +30,19 @@
 <!-- Controls -->
 <div class="card" style="margin-bottom:1.25rem;" id="controlCard">
   <div class="card-header">
-    <h3>⚙️ Update Controls</h3>
+    <h3>{{ _('⚙️ Update Controls') }}</h3>
   </div>
 
   <div id="startForm" style="{% if running %}display:none;{% endif %}">
     <div class="form-grid-2" style="margin-bottom:1rem;">
       <div class="form-group">
-        <label class="form-label">Sudo Password <span style="color:var(--text-muted);font-weight:400;">(required for apt)</span></label>
-        <input type="password" id="sudoPassword" placeholder="Enter sudo password for this server"
+        <label class="form-label">Sudo Password <span style="color:var(--text-muted);font-weight:400;">{{ _('(required for apt)') }}</span></label>
+        <input type="password" id="sudoPassword" placeholder="{{ _('Enter sudo password for this server') }}"
                autocomplete="current-password">
         <div class="form-hint">The password is sent over your encrypted session and never stored.</div>
       </div>
       <div class="form-group">
-        <label class="form-label">Update Scope</label>
+        <label class="form-label">{{ _('Update Scope') }}</label>
         <select id="updateScope">
           <option value="upgrade">Security + Regular Updates (apt upgrade)</option>
           <option value="dist-upgrade">Full Upgrade incl. new deps (apt dist-upgrade)</option>
@@ -67,7 +67,7 @@
   <div id="runningControls" style="{% if not running %}display:none;{% endif %}">
     <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
       <div class="spinner" style="width:20px;height:20px;border-width:3px;"></div>
-      <span style="font-weight:600;color:var(--accent-amber);">Update in progress — do not close this page</span>
+      <span style="font-weight:600;color:var(--accent-amber);">{{ _('Update in progress — do not close this page') }}</span>
     </div>
   </div>
 </div>
@@ -75,7 +75,7 @@
 <!-- Live Log -->
 <div class="card">
   <div class="card-header">
-    <h3>📋 Live Output</h3>
+    <h3>{{ _('📋 Live Output') }}</h3>
     <div style="display:flex;gap:0.5rem;align-items:center;">
       <span id="logCount" class="badge badge-blue">0 lines</span>
       <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.8rem;cursor:pointer;">
@@ -164,7 +164,7 @@ function startUpdate() {
         isRunning = true;
         document.getElementById('startForm').style.display = 'none';
         document.getElementById('runningControls').style.display = 'flex';
-        document.getElementById('statusBadge').innerHTML = '<span class="badge badge-amber">Running</span>';
+        document.getElementById('statusBadge').innerHTML = '<span class="badge badge-amber">{{ _('Running') }}</span>';
         startPolling();
       } else {
         alert(data.error || 'Failed to start update.');
@@ -233,7 +233,7 @@ function pollLog() {
         document.getElementById('runningControls').style.display = 'none';
         document.getElementById('startBtn').disabled = false;
         document.getElementById('startBtn').textContent = '▶ Start Update';
-        document.getElementById('statusBadge').innerHTML = '<span class="badge badge-green">Done</span>';
+        document.getElementById('statusBadge').innerHTML = '<span class="badge badge-green">{{ _('Done') }}</span>';
       }
     })
     .catch(() => {});

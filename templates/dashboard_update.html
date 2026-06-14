@@ -7,25 +7,25 @@
 {% block content %}
 
 <div class="warning-box">
-  <h3>&#x26A0; Important Warning</h3>
-  <p>You are about to update the FleetPilot to the latest version. This will pull the latest code from GitHub and may require restarting the application.</p>
+  <h3>{{ _('&#x26A0; Important Warning') }}</h3>
+  <p>{{ _('You are about to update the FleetPilot to the latest version. This will pull the latest code from GitHub and may require restarting the application.') }}</p>
   <ul style="margin-top:0.5rem;">
-    <li><strong>The application must be restarted</strong> after the update completes.</li>
-    <li><strong>Active operations may be interrupted</strong> — ensure no critical tasks are running.</li>
-    <li><strong>Configuration files will be preserved</strong> if the option below is selected.</li>
-    <li><strong>Only administrators can perform this action.</strong></li>
+    <li><strong>{{ _('The application must be restarted') }}</strong> after the update completes.</li>
+    <li><strong>{{ _('Active operations may be interrupted') }}</strong> — ensure no critical tasks are running.</li>
+    <li><strong>{{ _('Configuration files will be preserved') }}</strong> if the option below is selected.</li>
+    <li><strong>{{ _('Only administrators can perform this action.') }}</strong></li>
   </ul>
 </div>
 
 {% if version_data.update_available %}
 <div class="card card-blue">
   <div class="card-header">
-    <h3>&#x1F4E6; Available Update</h3>
+    <h3>{{ _('&#x1F4E6; Available Update') }}</h3>
     <span class="badge badge-blue">{{ version_data.update_type|capitalize }}</span>
   </div>
   <p>
-    <strong>Version:</strong> {{ version_data.latest_version }}<br>
-    <strong>Description:</strong> {{ version_data.update_description }}
+    <strong>{{ _('Version:') }}</strong> {{ version_data.latest_version }}<br>
+    <strong>{{ _('Description:') }}</strong> {{ version_data.update_description }}
   </p>
   {% if version_data.update_url %}
   <a href="{{ version_data.update_url }}" target="_blank" class="btn btn-secondary btn-sm">
@@ -36,17 +36,17 @@
 {% else %}
 <div class="card card-green">
   <div class="card-header">
-    <h3>&#x2714; No Update Available</h3>
+    <h3>{{ _('&#x2714; No Update Available') }}</h3>
   </div>
-  <p>The dashboard is currently up to date.</p>
-  <a class="btn btn-primary btn-sm" href="/dashboard_version/check">&#x1F504; Check for Updates</a>
+  <p>{{ _('The dashboard is currently up to date.') }}</p>
+  <a class="btn btn-primary btn-sm" href="/dashboard_version/check">{{ _('&#x1F504; Check for Updates') }}</a>
 </div>
 {% endif %}
 
 {% if version_data.update_available %}
 <div class="card">
   <div class="card-header">
-    <h3>&#x2699; Update Options</h3>
+    <h3>{{ _('&#x2699; Update Options') }}</h3>
   </div>
   <form method="POST" action="/dashboard_version/update"
         onsubmit="return confirm('Are you sure you want to update the dashboard? This will require restarting the application.');">
@@ -55,22 +55,22 @@
     <div class="form-check">
       <input type="radio" name="preserve_configs" value="yes" id="preserve_yes" checked>
       <label class="form-check-label" for="preserve_yes">
-        <strong>Preserve Configuration Files (Recommended)</strong>
-        <span>Keep existing configuration files: hosts.json, update_settings.json, users.db, etc.</span>
+        <strong>{{ _('Preserve Configuration Files (Recommended)') }}</strong>
+        <span>{{ _('Keep existing configuration files: hosts.json, update_settings.json, users.db, etc.') }}</span>
       </label>
     </div>
 
     <div class="form-check">
       <input type="radio" name="preserve_configs" value="no" id="preserve_no">
       <label class="form-check-label" for="preserve_no">
-        <strong>Clean Update (Reset Configurations)</strong>
-        <span style="color:#fca5a5;">Replace all files with fresh versions. <strong>This will delete your configuration!</strong></span>
+        <strong>{{ _('Clean Update (Reset Configurations)') }}</strong>
+        <span style="color:#fca5a5;">Replace all files with fresh versions. <strong>{{ _('This will delete your configuration!') }}</strong></span>
       </label>
     </div>
 
     <div class="btn-group" style="margin-top:1rem;">
-      <button type="submit" class="btn btn-danger">&#x2B06; Update Dashboard Now</button>
-      <a class="btn btn-ghost" href="/index">Cancel</a>
+      <button type="submit" class="btn btn-danger">{{ _('&#x2B06; Update Dashboard Now') }}</button>
+      <a class="btn btn-ghost" href="/index">{{ _('Cancel') }}</a>
     </div>
   </form>
 </div>
@@ -79,17 +79,17 @@
 <!-- Update Process -->
 <div class="card">
   <div class="card-header">
-    <h3>&#x1F4CB; Update Process</h3>
+    <h3>{{ _('&#x1F4CB; Update Process') }}</h3>
   </div>
   <ol style="line-height:2; color:var(--text-secondary); font-size:0.9rem;">
-    <li>Configuration files are backed up (if "Preserve Configuration Files" is selected).</li>
-    <li>Latest code is fetched from the GitHub repository.</li>
-    <li>Local repository is updated to the latest version.</li>
-    <li>Configuration files are restored from backup.</li>
-    <li>You must restart the application manually to complete the update.</li>
+    <li>{{ _('Configuration files are backed up (if "Preserve Configuration Files" is selected).') }}</li>
+    <li>{{ _('Latest code is fetched from the GitHub repository.') }}</li>
+    <li>{{ _('Local repository is updated to the latest version.') }}</li>
+    <li>{{ _('Configuration files are restored from backup.') }}</li>
+    <li>{{ _('You must restart the application manually to complete the update.') }}</li>
   </ol>
 
-  <h4 style="margin-top:1.25rem; margin-bottom:0.5rem;">Restart the application:</h4>
+  <h4 style="margin-top:1.25rem; margin-bottom:0.5rem;">{{ _('Restart the application:') }}</h4>
   <pre># Stop the current process (Ctrl+C), then restart:
 sudo -E python3 app.py
 

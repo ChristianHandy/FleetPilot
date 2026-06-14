@@ -25,63 +25,63 @@
     <div class="sidebar-brand">
       <div class="sidebar-brand-icon">&#x1F6E9;</div>
       <div class="sidebar-brand-text">
-        <span class="sidebar-brand-title">FleetPilot</span>
-        <span class="sidebar-brand-sub">Linux &amp; Windows</span>
+        <span class="sidebar-brand-title">{{ _('FleetPilot') }}</span>
+        <span class="sidebar-brand-sub">{{ _('Linux &amp; Windows') }}</span>
       </div>
     </div>
 
     <nav class="sidebar-nav">
       <span class="sidebar-section-label">{{ _('Overview') }}</span>
       <a class="sidebar-link {% if request.path == '/index' or request.path == '/' %}active{% endif %}" href="/index">
-        <span class="sidebar-icon">&#x1F3E0;</span> {{ _('Home') }}
+        <span class="sidebar-icon">{{ _('&#x1F3E0;') }}</span> {{ _('Home') }}
       </a>
 
       <span class="sidebar-section-label">{{ _('Management') }}</span>
       <a class="sidebar-link {% if request.path.startswith('/dashboard') %}active{% endif %}" href="/dashboard">
-        <span class="sidebar-icon">&#x1F504;</span> {{ _('Update Dashboard') }}
+        <span class="sidebar-icon">{{ _('&#x1F504;') }}</span> {{ _('Update Dashboard') }}
       </a>
       <a class="sidebar-link {% if request.path.startswith('/hosts') %}active{% endif %}" href="/hosts">
-        <span class="sidebar-icon">&#x1F5A7;</span> {{ _('Manage Hosts') }}
+        <span class="sidebar-icon">{{ _('&#x1F5A7;') }}</span> {{ _('Manage Hosts') }}
       </a>
       <a class="sidebar-link {% if request.path == '/scanner' %}active{% endif %}" href="/scanner">
-        <span class="sidebar-icon">&#x1F50D;</span> {{ _('Network Scanner') }}
+        <span class="sidebar-icon">{{ _('&#x1F50D;') }}</span> {{ _('Network Scanner') }}
       </a>
       <a class="sidebar-link {% if request.path.startswith('/disks') %}active{% endif %}" href="/disks">
-        <span class="sidebar-icon">&#x1F4BE;</span> {{ _('Disk Tools') }}
+        <span class="sidebar-icon">{{ _('&#x1F4BE;') }}</span> {{ _('Disk Tools') }}
       </a>
 
-      <span class="sidebar-section-label">Infrastructure</span>
+      <span class="sidebar-section-label">{{ _('Infrastructure') }}</span>
       <a class="sidebar-link {% if request.path.startswith('/vm') %}active{% endif %}" href="/vm">
-        <span class="sidebar-icon">&#x1F5A5;</span> VM Controller
+        <span class="sidebar-icon">{{ _('&#x1F5A5;') }}</span> VM Controller
       </a>
       <a class="sidebar-link {% if request.path.startswith('/storage') %}active{% endif %}" href="/storage">
-        <span class="sidebar-icon">&#x1F5C4;</span> Storage Controller
+        <span class="sidebar-icon">{{ _('&#x1F5C4;') }}</span> Storage Controller
       </a>
       <a class="sidebar-link {% if request.path.startswith('/smart') %}active{% endif %}" href="/smart">
-        <span class="sidebar-icon">&#x1F4CA;</span> SMART Dashboard
+        <span class="sidebar-icon">{{ _('&#x1F4CA;') }}</span> SMART Dashboard
       </a>
       <a class="sidebar-link {% if request.path.startswith('/checkmk') %}active{% endif %}" href="/checkmk">
-        <span class="sidebar-icon">&#x1F50D;</span> CheckMK
+        <span class="sidebar-icon">{{ _('&#x1F50D;') }}</span> CheckMK
       </a>
 
       <span class="sidebar-section-label">{{ _('Settings') }}</span>
       {% if is_admin is defined and is_admin %}
       <a class="sidebar-link {% if request.path.startswith('/server_update') %}active{% endif %}" href="/server_update">
-        <span class="sidebar-icon">&#x1F504;</span> Server Update
-        <span class="badge badge-amber" style="margin-left:auto;font-size:0.65rem;padding:0.1rem 0.4rem;">Admin</span>
+        <span class="sidebar-icon">{{ _('&#x1F504;') }}</span> Server Update
+        <span class="badge badge-amber" style="margin-left:auto;font-size:0.65rem;padding:0.1rem 0.4rem;">{{ _('Admin') }}</span>
       </a>
       {% endif %}
       <a class="sidebar-link {% if request.path.startswith('/update_settings') %}active{% endif %}" href="/update_settings">
-        <span class="sidebar-icon">&#x2699;&#xFE0F;</span> {{ _('Update Settings') }}
+        <span class="sidebar-icon">{{ _('&#x2699;&#xFE0F;') }}</span> {{ _('Update Settings') }}
       </a>
       <a class="sidebar-link {% if request.path.startswith('/email_settings') %}active{% endif %}" href="/email_settings">
-        <span class="sidebar-icon">&#x2709;&#xFE0F;</span> {{ _('Email Config') }}
+        <span class="sidebar-icon">{{ _('&#x2709;&#xFE0F;') }}</span> {{ _('Email Config') }}
       </a>
 
       {% if is_admin is defined and is_admin %}
       <a class="sidebar-link {% if request.path.startswith('/plugins') %}active{% endif %}" href="/plugins">
-        <span class="sidebar-icon">&#x1F9E9;</span> Plugin Manager
-        <span class="badge badge-blue" style="margin-left:auto;font-size:0.65rem;padding:0.1rem 0.4rem;">Admin</span>
+        <span class="sidebar-icon">{{ _('&#x1F9E9;') }}</span> Plugin Manager
+        <span class="badge badge-blue" style="margin-left:auto;font-size:0.65rem;padding:0.1rem 0.4rem;">{{ _('Admin') }}</span>
       </a>
       {% endif %}
 
@@ -96,11 +96,11 @@
 
       <span class="sidebar-section-label">{{ _('Account') }}</span>
       <a class="sidebar-link {% if request.path.startswith('/users/profile') %}active{% endif %}" href="/users/profile">
-        <span class="sidebar-icon">&#x1F464;</span> {{ _('My Profile') }}
+        <span class="sidebar-icon">{{ _('&#x1F464;') }}</span> {{ _('My Profile') }}
       </a>
       {% if is_admin is defined and is_admin %}
       <a class="sidebar-link {% if request.path.startswith('/users') and not request.path.startswith('/users/profile') %}active{% endif %}" href="/users">
-        <span class="sidebar-icon">&#x1F465;</span> {{ _('User Management') }}
+        <span class="sidebar-icon">{{ _('&#x1F465;') }}</span> {{ _('User Management') }}
       </a>
       {% endif %}
     </nav>
@@ -110,13 +110,13 @@
     <div style="margin:0 0.75rem 0.75rem;padding:0.75rem;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:var(--radius-md);">
       <div style="font-size:0.75rem;font-weight:700;color:var(--accent-amber);margin-bottom:0.3rem;">&#x1F680; Update Available</div>
       <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:0.5rem;line-height:1.4;">{{ update_notification.description[:60] }}{% if update_notification.description|length > 60 %}…{% endif %}</div>
-      <a class="btn btn-sm" href="/dashboard_version/update" style="background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);color:var(--accent-amber);font-size:0.72rem;padding:0.25rem 0.6rem;min-height:auto;">&#x2B06; Update Now</a>
+      <a class="btn btn-sm" href="/dashboard_version/update" style="background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);color:var(--accent-amber);font-size:0.72rem;padding:0.25rem 0.6rem;min-height:auto;">{{ _('&#x2B06; Update Now') }}</a>
     </div>
     {% endif %}
 
     <div class="sidebar-footer">
       <a class="sidebar-link" href="/logout">
-        <span class="sidebar-icon">&#x1F6AA;</span> {{ _('Logout') }}
+        <span class="sidebar-icon">{{ _('&#x1F6AA;') }}</span> {{ _('Logout') }}
       </a>
     </div>
   </aside>
@@ -128,7 +128,7 @@
     <header class="topbar">
       <div class="topbar-left">
         <!-- Hamburger (mobile only) -->
-        <button class="hamburger" id="hamburger" aria-label="Toggle menu" type="button">
+        <button class="hamburger" id="hamburger" aria-label="{{ _('Toggle menu') }}" type="button">
           <span></span><span></span><span></span>
         </button>
         <div class="topbar-title">
@@ -149,12 +149,13 @@
           <option value="de" {% if current_lang == 'de' %}selected{% endif %}>&#x1F1E9;&#x1F1EA; DE</option>
           <option value="es" {% if current_lang == 'es' %}selected{% endif %}>&#x1F1EA;&#x1F1F8; ES</option>
           <option value="fr" {% if current_lang == 'fr' %}selected{% endif %}>&#x1F1EB;&#x1F1F7; FR</option>
+          <option value="nl" {% if current_lang == 'nl' %}selected{% endif %}>&#x1F1F3;&#x1F1F1; NL</option>
         </select>
 
         <!-- Theme Toggle -->
         <button class="theme-toggle" id="theme-toggle" title="{{ _('Toggle theme') }}" type="button">
-          <span class="theme-icon-light">&#x2600;&#xFE0F;</span>
-          <span class="theme-icon-dark">&#x1F319;</span>
+          <span class="theme-icon-light">{{ _('&#x2600;&#xFE0F;') }}</span>
+          <span class="theme-icon-dark">{{ _('&#x1F319;') }}</span>
         </button>
 
         <a class="btn btn-ghost btn-sm" href="/users/profile">&#x1F464; {{ _('Profile') }}</a>
@@ -187,19 +188,19 @@
 <!-- ── Mobile Bottom Nav ─────────────────────────────────── -->
 <nav class="mobile-nav-bar" id="mobileNav">
   <a class="mobile-nav-item {% if request.path == '/index' or request.path == '/' %}active{% endif %}" href="/index">
-    <span class="icon">&#x1F3E0;</span>Home
+    <span class="icon">{{ _('&#x1F3E0;') }}</span>Home
   </a>
   <a class="mobile-nav-item {% if request.path.startswith('/dashboard') %}active{% endif %}" href="/dashboard">
-    <span class="icon">&#x1F504;</span>Updates
+    <span class="icon">{{ _('&#x1F504;') }}</span>Updates
   </a>
   <a class="mobile-nav-item {% if request.path.startswith('/hosts') %}active{% endif %}" href="/hosts">
-    <span class="icon">&#x1F5A7;</span>Hosts
+    <span class="icon">{{ _('&#x1F5A7;') }}</span>Hosts
   </a>
   <a class="mobile-nav-item {% if request.path == '/scanner' %}active{% endif %}" href="/scanner">
-    <span class="icon">&#x1F50D;</span>Scan
+    <span class="icon">{{ _('&#x1F50D;') }}</span>Scan
   </a>
   <a class="mobile-nav-item" href="#" id="mobileMenuBtn">
-    <span class="icon">&#x2630;</span>More
+    <span class="icon">{{ _('&#x2630;') }}</span>More
   </a>
 </nav>
 
@@ -210,12 +211,12 @@
     <div class="update-toast-title" id="toastTitle">FleetPilot Update Available</div>
     <div class="update-toast-msg" id="toastMsg">A new version is ready.</div>
     <div class="update-toast-actions">
-      <a class="btn btn-primary btn-sm" id="toastUpdateBtn" href="/dashboard_update">&#x2B06; Update Now</a>
-      <a class="btn btn-secondary btn-sm" id="toastDetailsBtn" href="#" target="_blank">&#x1F517; Details</a>
-      <button class="btn btn-ghost btn-sm" id="toastDismissBtn" type="button">&#x2715; Dismiss</button>
+      <a class="btn btn-primary btn-sm" id="toastUpdateBtn" href="/dashboard_update">{{ _('&#x2B06; Update Now') }}</a>
+      <a class="btn btn-secondary btn-sm" id="toastDetailsBtn" href="#" target="_blank">{{ _('&#x1F517; Details') }}</a>
+      <button class="btn btn-ghost btn-sm" id="toastDismissBtn" type="button">{{ _('&#x2715; Dismiss') }}</button>
     </div>
   </div>
-  <button class="update-toast-close" id="toastClose" type="button" aria-label="Close">&#x2715;</button>
+  <button class="update-toast-close" id="toastClose" type="button" aria-label="{{ _('Close') }}">{{ _('&#x2715;') }}</button>
 </div>
 
 <!-- ── Scripts ────────────────────────────────────────────── -->

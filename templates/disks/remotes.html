@@ -2,40 +2,40 @@
 {% block title %}Remote Management{% endblock %}
 {% block content %}
 <div class="container mt-4">
-  <h2>Remote Disk Systems</h2>
-  <p class="text-muted">Manage disk operations on remote PCs and servers via SSH</p>
+  <h2>{{ _('Remote Disk Systems') }}</h2>
+  <p class="text-muted">{{ _('Manage disk operations on remote PCs and servers via SSH') }}</p>
   
   <div class="mb-3">
-    <a href="{{ url_for('disks_index') }}" class="btn btn-secondary">← Back to Local Disks</a>
+    <a href="{{ url_for('disks_index') }}" class="btn btn-secondary">{{ _('← Back to Local Disks') }}</a>
   </div>
   
   <form method="post" action="{{ url_for('remotes') }}" class="row g-3 mb-4">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="col-md-4">
-      <label class="form-label">Name</label>
+      <label class="form-label">{{ _('Name') }}</label>
       <input name="name" class="form-control" required />
     </div>
     <div class="col-md-4">
-      <label class="form-label">Host</label>
+      <label class="form-label">{{ _('Host') }}</label>
       <input name="host" class="form-control" required />
     </div>
     <div class="col-md-2">
-      <label class="form-label">Port</label>
+      <label class="form-label">{{ _('Port') }}</label>
       <input name="port" class="form-control" value="22" type="number" />
     </div>
     <div class="col-md-2 align-self-end">
-      <button type="submit" class="btn btn-primary w-100">Add Remote</button>
+      <button type="submit" class="btn btn-primary w-100">{{ _('Add Remote') }}</button>
     </div>
   </form>
 
   <table class="table table-striped">
     <thead>
       <tr>
-        <th>ID</th>
-        <th>Name</th>
-        <th>Host</th>
-        <th>Port</th>
-        <th>Actions</th>
+        <th>{{ _('ID') }}</th>
+        <th>{{ _('Name') }}</th>
+        <th>{{ _('Host') }}</th>
+        <th>{{ _('Port') }}</th>
+        <th>{{ _('Actions') }}</th>
       </tr>
     </thead>
     <tbody>
@@ -46,8 +46,8 @@
         <td>{{ r['host'] }}</td>
         <td>{{ r['port'] }}</td>
         <td>
-          <a href="{{ url_for('remote_disk_list', remote_id=r['id']) }}" class="btn btn-sm btn-primary">View Disks</a>
-          <a href="{{ url_for('remotes_delete', rid=r['id']) }}" class="btn btn-sm btn-danger">Delete</a>
+          <a href="{{ url_for('remote_disk_list', remote_id=r['id']) }}" class="btn btn-sm btn-primary">{{ _('View Disks') }}</a>
+          <a href="{{ url_for('remotes_delete', rid=r['id']) }}" class="btn btn-sm btn-danger">{{ _('Delete') }}</a>
         </td>
       </tr>
     {% endfor %}
@@ -56,18 +56,18 @@
   
   <div class="card mt-4">
     <div class="card-header bg-info text-white">
-      <h5>📋 Setup Instructions</h5>
+      <h5>{{ _('📋 Setup Instructions') }}</h5>
     </div>
     <div class="card-body">
-      <h6>To manage disks on remote systems, you need to:</h6>
+      <h6>{{ _('To manage disks on remote systems, you need to:') }}</h6>
       <ol>
-        <li><strong>Add a remote system</strong> using the form above with hostname/IP and SSH port</li>
-        <li><strong>Configure SSH key authentication</strong> - Use password authentication to install your SSH key on the remote system via the Hosts page</li>
-        <li><strong>Ensure sudo privileges</strong> - The remote user needs passwordless sudo access for disk commands:
+        <li><strong>{{ _('Add a remote system') }}</strong> using the form above with hostname/IP and SSH port</li>
+        <li><strong>{{ _('Configure SSH key authentication') }}</strong> - Use password authentication to install your SSH key on the remote system via the Hosts page</li>
+        <li><strong>{{ _('Ensure sudo privileges') }}</strong> - The remote user needs passwordless sudo access for disk commands:
           <pre class="bg-light p-2 mt-2"><code># Add to /etc/sudoers.d/disk-tools on remote system
 username ALL=(ALL) NOPASSWD: /usr/bin/lsblk, /usr/sbin/smartctl, /usr/sbin/wipefs, /sbin/mkfs.*, /usr/bin/dd</code></pre>
         </li>
-        <li><strong>Install required tools</strong> on remote system:
+        <li><strong>{{ _('Install required tools') }}</strong> on remote system:
           <pre class="bg-light p-2 mt-2"><code>sudo apt install smartmontools parted e2fsprogs xfsprogs dosfstools</code></pre>
         </li>
       </ol>

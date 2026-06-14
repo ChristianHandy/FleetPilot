@@ -4,10 +4,10 @@
 {% block content %}
 <div class="page-header">
   <div>
-    <h1 class="page-title">Plugin Developer Documentation</h1>
-    <p class="page-subtitle">Everything you need to build FleetPilot plugins</p>
+    <h1 class="page-title">{{ _('Plugin Developer Documentation') }}</h1>
+    <p class="page-subtitle">{{ _('Everything you need to build FleetPilot plugins') }}</p>
   </div>
-  <a href="/plugins" class="btn btn-secondary">← Back to Plugin Manager</a>
+  <a href="/plugins" class="btn btn-secondary">{{ _('← Back to Plugin Manager') }}</a>
 </div>
 
 <div style="display:grid; grid-template-columns:220px 1fr; gap:2rem; align-items:start">
@@ -17,12 +17,12 @@
     <div class="card-body" style="padding:1rem">
       <div style="font-size:0.8rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.75rem">Contents</div>
       <nav style="display:flex; flex-direction:column; gap:0.35rem">
-        <a href="#overview" style="font-size:0.85rem; color:var(--text-secondary); text-decoration:none; padding:0.25rem 0.5rem; border-radius:4px">Overview</a>
-        <a href="#structure" style="font-size:0.85rem; color:var(--text-secondary); text-decoration:none; padding:0.25rem 0.5rem; border-radius:4px">Plugin Structure</a>
-        <a href="#hooks" style="font-size:0.85rem; color:var(--text-secondary); text-decoration:none; padding:0.25rem 0.5rem; border-radius:4px">Hook Reference</a>
-        <a href="#routes" style="font-size:0.85rem; color:var(--text-secondary); text-decoration:none; padding:0.25rem 0.5rem; border-radius:4px">Adding Routes</a>
-        <a href="#examples" style="font-size:0.85rem; color:var(--text-secondary); text-decoration:none; padding:0.25rem 0.5rem; border-radius:4px">Examples</a>
-        <a href="#security" style="font-size:0.85rem; color:var(--text-secondary); text-decoration:none; padding:0.25rem 0.5rem; border-radius:4px">Security</a>
+        <a href="#overview" style="font-size:0.85rem; color:var(--text-secondary); text-decoration:none; padding:0.25rem 0.5rem; border-radius:4px">{{ _('Overview') }}</a>
+        <a href="#structure" style="font-size:0.85rem; color:var(--text-secondary); text-decoration:none; padding:0.25rem 0.5rem; border-radius:4px">{{ _('Plugin Structure') }}</a>
+        <a href="#hooks" style="font-size:0.85rem; color:var(--text-secondary); text-decoration:none; padding:0.25rem 0.5rem; border-radius:4px">{{ _('Hook Reference') }}</a>
+        <a href="#routes" style="font-size:0.85rem; color:var(--text-secondary); text-decoration:none; padding:0.25rem 0.5rem; border-radius:4px">{{ _('Adding Routes') }}</a>
+        <a href="#examples" style="font-size:0.85rem; color:var(--text-secondary); text-decoration:none; padding:0.25rem 0.5rem; border-radius:4px">{{ _('Examples') }}</a>
+        <a href="#security" style="font-size:0.85rem; color:var(--text-secondary); text-decoration:none; padding:0.25rem 0.5rem; border-radius:4px">{{ _('Security') }}</a>
       </nav>
     </div>
   </div>
@@ -32,7 +32,7 @@
 
     <section id="overview" class="card" style="margin-bottom:1.5rem">
       <div class="card-body" style="padding:1.5rem">
-        <h2 style="margin:0 0 1rem; font-size:1.1rem; font-weight:600">Overview</h2>
+        <h2 style="margin:0 0 1rem; font-size:1.1rem; font-weight:600">{{ _('Overview') }}</h2>
         <p style="color:var(--text-secondary); line-height:1.7">
           FleetPilot plugins are plain Python files placed in the <code>addons/</code> directory.
           They are loaded automatically at startup. A plugin can inject HTML into any part of the
@@ -43,24 +43,24 @@
           <div style="background:var(--bg-tertiary); padding:1rem; border-radius:8px">
             <div style="font-weight:600; font-size:0.9rem; margin-bottom:0.5rem; color:var(--text-primary)">✅ What plugins CAN do</div>
             <ul style="font-size:0.85rem; color:var(--text-secondary); margin:0; padding-left:1.25rem; line-height:1.8">
-              <li>Add widgets to the dashboard</li>
-              <li>Add buttons to host cards</li>
-              <li>Add tabs to host detail view</li>
-              <li>Add sidebar navigation links</li>
-              <li>React to update events</li>
-              <li>Add Flask routes / pages</li>
-              <li>Run background threads</li>
-              <li>Send external notifications</li>
+              <li>{{ _('Add widgets to the dashboard') }}</li>
+              <li>{{ _('Add buttons to host cards') }}</li>
+              <li>{{ _('Add tabs to host detail view') }}</li>
+              <li>{{ _('Add sidebar navigation links') }}</li>
+              <li>{{ _('React to update events') }}</li>
+              <li>{{ _('Add Flask routes / pages') }}</li>
+              <li>{{ _('Run background threads') }}</li>
+              <li>{{ _('Send external notifications') }}</li>
             </ul>
           </div>
           <div style="background:var(--bg-tertiary); padding:1rem; border-radius:8px">
             <div style="font-weight:600; font-size:0.9rem; margin-bottom:0.5rem; color:var(--text-primary)">⚠️ Security notes</div>
             <ul style="font-size:0.85rem; color:var(--text-secondary); margin:0; padding-left:1.25rem; line-height:1.8">
-              <li>Plugins run with full app privileges</li>
-              <li>Only install from trusted sources</li>
-              <li>Admin role required to install</li>
-              <li>Restart required after install</li>
-              <li>Never store secrets in plugin code</li>
+              <li>{{ _('Plugins run with full app privileges') }}</li>
+              <li>{{ _('Only install from trusted sources') }}</li>
+              <li>{{ _('Admin role required to install') }}</li>
+              <li>{{ _('Restart required after install') }}</li>
+              <li>{{ _('Never store secrets in plugin code') }}</li>
             </ul>
           </div>
         </div>
@@ -69,7 +69,7 @@
 
     <section id="structure" class="card" style="margin-bottom:1.5rem">
       <div class="card-body" style="padding:1.5rem">
-        <h2 style="margin:0 0 1rem; font-size:1.1rem; font-weight:600">Plugin Structure</h2>
+        <h2 style="margin:0 0 1rem; font-size:1.1rem; font-weight:600">{{ _('Plugin Structure') }}</h2>
         <p style="color:var(--text-secondary); margin-bottom:1rem">Every plugin is a single <code>.py</code> file with two optional parts:</p>
         <pre style="background:var(--bg-tertiary); padding:1.25rem; border-radius:8px; font-size:0.8rem; overflow:auto; color:var(--text-primary); line-height:1.7"># my_plugin.py
 # ─────────────────────────────────────────────────────────────────────────────
@@ -107,15 +107,15 @@ def register(app, core):
 
     <section id="hooks" class="card" style="margin-bottom:1.5rem">
       <div class="card-body" style="padding:1.5rem">
-        <h2 style="margin:0 0 1rem; font-size:1.1rem; font-weight:600">Hook Reference</h2>
+        <h2 style="margin:0 0 1rem; font-size:1.1rem; font-weight:600">{{ _('Hook Reference') }}</h2>
         <div style="overflow:auto">
           <table style="width:100%; border-collapse:collapse; font-size:0.85rem">
             <thead>
               <tr style="border-bottom:2px solid var(--border-color)">
-                <th style="text-align:left; padding:0.5rem 0.75rem; color:var(--text-muted); font-weight:600">Hook Key</th>
-                <th style="text-align:left; padding:0.5rem 0.75rem; color:var(--text-muted); font-weight:600">Arguments</th>
-                <th style="text-align:left; padding:0.5rem 0.75rem; color:var(--text-muted); font-weight:600">Returns</th>
-                <th style="text-align:left; padding:0.5rem 0.75rem; color:var(--text-muted); font-weight:600">Injected into</th>
+                <th style="text-align:left; padding:0.5rem 0.75rem; color:var(--text-muted); font-weight:600">{{ _('Hook Key') }}</th>
+                <th style="text-align:left; padding:0.5rem 0.75rem; color:var(--text-muted); font-weight:600">{{ _('Arguments') }}</th>
+                <th style="text-align:left; padding:0.5rem 0.75rem; color:var(--text-muted); font-weight:600">{{ _('Returns') }}</th>
+                <th style="text-align:left; padding:0.5rem 0.75rem; color:var(--text-muted); font-weight:600">{{ _('Injected into') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -148,7 +148,7 @@ def register(app, core):
 
     <section id="routes" class="card" style="margin-bottom:1.5rem">
       <div class="card-body" style="padding:1.5rem">
-        <h2 style="margin:0 0 1rem; font-size:1.1rem; font-weight:600">Adding Flask Routes</h2>
+        <h2 style="margin:0 0 1rem; font-size:1.1rem; font-weight:600">{{ _('Adding Flask Routes') }}</h2>
         <pre style="background:var(--bg-tertiary); padding:1.25rem; border-radius:8px; font-size:0.8rem; overflow:auto; color:var(--text-primary); line-height:1.7">def register(app, core):
     from flask import Blueprint, render_template, jsonify, request, session
     from functools import wraps
@@ -181,8 +181,8 @@ def register(app, core):
 
     <section id="examples" class="card" style="margin-bottom:1.5rem">
       <div class="card-body" style="padding:1.5rem">
-        <h2 style="margin:0 0 1rem; font-size:1.1rem; font-weight:600">Example Plugins</h2>
-        <p style="color:var(--text-secondary); margin-bottom:1rem">These example plugins are included with FleetPilot:</p>
+        <h2 style="margin:0 0 1rem; font-size:1.1rem; font-weight:600">{{ _('Example Plugins') }}</h2>
+        <p style="color:var(--text-secondary); margin-bottom:1rem">{{ _('These example plugins are included with FleetPilot:') }}</p>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem">
           {% for ex in examples %}
           <div style="background:var(--bg-tertiary); padding:1rem; border-radius:8px">
@@ -197,13 +197,13 @@ def register(app, core):
 
     <section id="security" class="card" style="margin-bottom:1.5rem; border-left:4px solid #f59e0b">
       <div class="card-body" style="padding:1.5rem">
-        <h2 style="margin:0 0 1rem; font-size:1.1rem; font-weight:600; color:#f59e0b">Security Guidelines</h2>
+        <h2 style="margin:0 0 1rem; font-size:1.1rem; font-weight:600; color:#f59e0b">{{ _('Security Guidelines') }}</h2>
         <ul style="color:var(--text-secondary); line-height:1.8; margin:0; padding-left:1.25rem; font-size:0.9rem">
-          <li><strong>Plugins run with full application privileges</strong> — treat them like application code, not user content.</li>
-          <li>Only install plugins from sources you trust completely.</li>
-          <li>Never hardcode API keys, passwords, or tokens in plugin files. Use environment variables instead.</li>
-          <li>If your plugin makes outbound HTTP requests, validate all URLs and handle errors gracefully.</li>
-          <li>Sanitize any user input before using it in shell commands or SQL queries.</li>
+          <li><strong>{{ _('Plugins run with full application privileges') }}</strong> — treat them like application code, not user content.</li>
+          <li>{{ _('Only install plugins from sources you trust completely.') }}</li>
+          <li>{{ _('Never hardcode API keys, passwords, or tokens in plugin files. Use environment variables instead.') }}</li>
+          <li>{{ _('If your plugin makes outbound HTTP requests, validate all URLs and handle errors gracefully.') }}</li>
+          <li>{{ _('Sanitize any user input before using it in shell commands or SQL queries.') }}</li>
           <li>Use Flask's <code>login_required</code> pattern on all routes your plugin adds.</li>
         </ul>
       </div>

@@ -2,13 +2,13 @@
 {% block title %}Remote Disk Manager – {{ device }}{% endblock %}
 {% block content %}
 <div class='container mt-4'>
-  <h1>Remote Disk Manager</h1>
-  <p>Manage disks on remote systems via SSH</p>
+  <h1>{{ _('Remote Disk Manager') }}</h1>
+  <p>{{ _('Manage disks on remote systems via SSH') }}</p>
   <p>Local device context: <strong>{{ device }}</strong></p>
 
   <div class="card mb-4">
     <div class="card-header">
-      <h5>Available Remote Systems</h5>
+      <h5>{{ _('Available Remote Systems') }}</h5>
     </div>
     <div class="card-body">
       {% if remotes %}
@@ -31,11 +31,11 @@
           {% endfor %}
         </div>
       {% else %}
-        <p class="text-muted">No remote systems configured. Add remotes in <a href="{{ url_for('remotes') }}">Remote Management</a>.</p>
+        <p class="text-muted">No remote systems configured. Add remotes in <a href="{{ url_for('remotes') }}">{{ _('Remote Management') }}</a>.</p>
       {% endif %}
     </div>
   </div>
 
-  <a href='{{ url_for('disks_index') }}' class='btn btn-secondary'>Back to Disk Overview</a>
+  <a href='{{ url_for('disks_index') }}' class='btn btn-secondary'>{{ _('Back to Disk Overview') }}</a>
 </div>
 {% endblock %}

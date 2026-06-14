@@ -22,10 +22,10 @@
     <table class="table table-hover table-striped">
       <thead class="table-dark">
         <tr>
-          <th>Device</th>
-          <th>Model</th>
-          <th>Size</th>
-          <th>Actions</th>
+          <th>{{ _('Device') }}</th>
+          <th>{{ _('Model') }}</th>
+          <th>{{ _('Size') }}</th>
+          <th>{{ _('Actions') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -55,19 +55,19 @@
   </div>
   {% else %}
   <div class="alert alert-warning">
-    <strong>No disks found</strong> or unable to connect to remote system.
+    <strong>{{ _('No disks found') }}</strong> or unable to connect to remote system.
     <br>Make sure SSH keys are properly configured and the remote user has sudo access.
   </div>
   {% endif %}
   
   <div class="card mt-4">
     <div class="card-header">
-      <h5>Connection Requirements</h5>
+      <h5>{{ _('Connection Requirements') }}</h5>
     </div>
     <div class="card-body">
       <ul>
-        <li>SSH key authentication must be configured (see <a href="{{ url_for('install_key', name=remote.name) }}" target="_blank">Install SSH Key</a>)</li>
-        <li>Remote user must have sudo privileges without password for disk commands</li>
+        <li>SSH key authentication must be configured (see <a href="{{ url_for('install_key', name=remote.name) }}" target="_blank">{{ _('Install SSH Key') }}</a>)</li>
+        <li>{{ _('Remote user must have sudo privileges without password for disk commands') }}</li>
         <li>Required remote utilities: <code>lsblk</code>, <code>smartctl</code>, <code>mkfs.*</code>, <code>wipefs</code></li>
       </ul>
     </div>

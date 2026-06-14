@@ -2,13 +2,13 @@
 {% block title %}Format Remote Disk – {{ device }}{% endblock %}
 {% block content %}
 <div class="container mt-4">
-  <h2>Format Remote Disk</h2>
+  <h2>{{ _('Format Remote Disk') }}</h2>
   <p class="text-muted">Remote: {{ remote.name }} ({{ remote.host }}:{{ remote.port }})</p>
   
   <div class="alert alert-danger">
     <h5><i class="bi bi-exclamation-triangle-fill"></i> WARNING</h5>
     <p><strong>This will PERMANENTLY ERASE ALL DATA on device {{ device|e }}!</strong></p>
-    <p>This action cannot be undone. Make sure you have selected the correct device and have backed up any important data.</p>
+    <p>{{ _('This action cannot be undone. Make sure you have selected the correct device and have backed up any important data.') }}</p>
   </div>
   
   <div class="card">
@@ -19,7 +19,7 @@
       <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="mb-3">
-          <label for="fs" class="form-label">Select Filesystem Type</label>
+          <label for="fs" class="form-label">{{ _('Select Filesystem Type') }}</label>
           <select name="fs" id="fs" class="form-select" required>
             <option value="ext4" selected>ext4 (Linux - Most Common)</option>
             <option value="xfs">XFS (Linux - High Performance)</option>
@@ -29,8 +29,8 @@
             Choose the filesystem type based on your intended use:
             <ul class="mt-2">
               <li><strong>ext4</strong>: Standard Linux filesystem, best for most uses</li>
-              <li><strong>XFS</strong>: High-performance filesystem for large files</li>
-              <li><strong>FAT32</strong>: Compatible with Windows, Mac, and Linux (4GB file size limit)</li>
+              <li><strong>{{ _('XFS') }}</strong>: High-performance filesystem for large files</li>
+              <li><strong>{{ _('FAT32') }}</strong>: Compatible with Windows, Mac, and Linux (4GB file size limit)</li>
             </ul>
           </div>
         </div>
@@ -56,14 +56,14 @@
   
   <div class="card mt-4">
     <div class="card-header">
-      <h6>Important Notes</h6>
+      <h6>{{ _('Important Notes') }}</h6>
     </div>
     <div class="card-body">
       <ul>
-        <li>The format operation may take several minutes depending on disk size</li>
-        <li>Do not disconnect or power off the remote system during formatting</li>
-        <li>Ensure the remote user has sudo privileges without password</li>
-        <li>After formatting, you may need to mount the disk manually</li>
+        <li>{{ _('The format operation may take several minutes depending on disk size') }}</li>
+        <li>{{ _('Do not disconnect or power off the remote system during formatting') }}</li>
+        <li>{{ _('Ensure the remote user has sudo privileges without password') }}</li>
+        <li>{{ _('After formatting, you may need to mount the disk manually') }}</li>
       </ul>
     </div>
   </div>

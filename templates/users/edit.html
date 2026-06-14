@@ -9,7 +9,7 @@
 <div style="max-width:560px;">
   <div class="card">
     <div class="card-header">
-      <h3>&#x270F; Edit User</h3>
+      <h3>{{ _('&#x270F; Edit User') }}</h3>
     </div>
     <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -18,18 +18,18 @@
         <input class="form-control" name="username" value="{{ user.username }}" required>
       </div>
       <div class="form-group">
-        <label class="form-label">Email <span class="text-muted">(optional)</span></label>
-        <input class="form-control" type="email" name="email" value="{{ user.email or '' }}" placeholder="user@example.com">
+        <label class="form-label">Email <span class="text-muted">{{ _('(optional)') }}</span></label>
+        <input class="form-control" type="email" name="email" value="{{ user.email or '' }}" placeholder="{{ _('user@example.com') }}">
       </div>
       <div class="form-group">
-        <label class="form-label">New Password <span class="text-muted">(leave blank to keep current)</span></label>
-        <input class="form-control" type="password" name="password" placeholder="new password">
+        <label class="form-label">New Password <span class="text-muted">{{ _('(leave blank to keep current)') }}</span></label>
+        <input class="form-control" type="password" name="password" placeholder="{{ _('new password') }}">
       </div>
       <div class="form-group">
         <label style="display:flex; align-items:center; gap:0.65rem; padding:0.6rem 0.85rem; background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-md); cursor:pointer;">
           <input type="checkbox" name="active" {% if user.active %}checked{% endif %}
                  style="width:16px; height:16px; accent-color:var(--accent-blue);">
-          <span><strong style="color:var(--text-primary);">Active Account</strong></span>
+          <span><strong style="color:var(--text-primary);">{{ _('Active Account') }}</strong></span>
         </label>
       </div>
       <div class="form-group">
@@ -49,8 +49,8 @@
         </div>
       </div>
       <div class="btn-group">
-        <button class="btn btn-primary" type="submit">&#x1F4BE; Update User</button>
-        <a class="btn btn-ghost" href="/users">&#x2190; Cancel</a>
+        <button class="btn btn-primary" type="submit">{{ _('&#x1F4BE; Update User') }}</button>
+        <a class="btn btn-ghost" href="/users">{{ _('&#x2190; Cancel') }}</a>
       </div>
     </form>
   </div>

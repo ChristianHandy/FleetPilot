@@ -2,17 +2,17 @@
 {% block title %}Plugin Manager{% endblock %}
 {% block content %}
 <div class="container mt-4">
-  <h1 class="mb-4">Plugin Manager</h1>
+  <h1 class="mb-4">{{ _('Plugin Manager') }}</h1>
   
   <!-- Installed Plugins Section -->
-  <h2 class="mb-3">Installed Plugins</h2>
+  <h2 class="mb-3">{{ _('Installed Plugins') }}</h2>
   <table class="table table-hover table-bordered align-middle">
     <thead class="table-dark">
       <tr>
-        <th>Name</th>
-        <th>Status</th>
-        <th>Error</th>
-        <th>Actions</th>
+        <th>{{ _('Name') }}</th>
+        <th>{{ _('Status') }}</th>
+        <th>{{ _('Error') }}</th>
+        <th>{{ _('Actions') }}</th>
       </tr>
     </thead>
     <tbody>
@@ -31,7 +31,7 @@
           {% if is_admin and p.file != 'plugin_manager.py' %}
           <form method="post" action="{{ url_for('plugin_manager.uninstall_plugin', plugin_file=p.file) }}" style="display: inline;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to uninstall this plugin?')">Uninstall</button>
+            <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to uninstall this plugin?')">{{ _('Uninstall') }}</button>
           </form>
           {% else %}
           <span class="text-muted">–</span>
@@ -43,14 +43,14 @@
   </table>
   
   <!-- Available Remote Plugins Section -->
-  <h2 class="mb-3 mt-5">Available Remote Plugins</h2>
+  <h2 class="mb-3 mt-5">{{ _('Available Remote Plugins') }}</h2>
   {% if is_admin %}
   <div class="alert alert-info">
-    <strong>💡 Tip:</strong> Install plugins to extend the dashboard functionality. After installation, restart the application to activate the plugins.
+    <strong>{{ _('💡 Tip:') }}</strong> Install plugins to extend the dashboard functionality. After installation, restart the application to activate the plugins.
   </div>
   {% else %}
   <div class="alert alert-warning">
-    <strong>⚠️ Note:</strong> Only administrators can install or uninstall plugins.
+    <strong>{{ _('⚠️ Note:') }}</strong> Only administrators can install or uninstall plugins.
   </div>
   {% endif %}
   
@@ -63,7 +63,7 @@
           <h5 class="card-title">
             {{ plugin.name }}
             {% if plugin.installed %}
-            <span class="badge bg-success">Installed</span>
+            <span class="badge bg-success">{{ _('Installed') }}</span>
             {% endif %}
           </h5>
           <p class="card-text">{{ plugin.description }}</p>
@@ -75,10 +75,10 @@
           {% if not plugin.installed %}
           <form method="post" action="{{ url_for('plugin_manager.install_plugin', plugin_id=plugin.id) }}" style="display: inline;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="btn btn-primary btn-sm">Install</button>
+            <button type="submit" class="btn btn-primary btn-sm">{{ _('Install') }}</button>
           </form>
           {% else %}
-          <button class="btn btn-secondary btn-sm" disabled>Already Installed</button>
+          <button class="btn btn-secondary btn-sm" disabled>{{ _('Already Installed') }}</button>
           {% endif %}
           {% endif %}
         </div>
@@ -88,10 +88,10 @@
   </div>
   {% else %}
   <div class="alert alert-warning">
-    <strong>⚠️ Note:</strong> Could not fetch remote plugins. Please check your internet connection or try again later.
+    <strong>{{ _('⚠️ Note:') }}</strong> Could not fetch remote plugins. Please check your internet connection or try again later.
   </div>
   {% endif %}
   
-  <a href="{{ url_for('disks_index') }}" class="btn btn-secondary mt-3">Back</a>
+  <a href="{{ url_for('disks_index') }}" class="btn btn-secondary mt-3">{{ _('Back') }}</a>
 </div>
 {% endblock %}

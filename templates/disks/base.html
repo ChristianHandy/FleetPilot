@@ -62,16 +62,16 @@
     <nav class="navbar navbar-expand-lg">
       <div class="container-fluid" style="max-width:1100px; margin:0 auto; padding:0 1.25rem;">
         <a class="navbar-brand d-flex align-items-center gap-2" href="{{ url_for('disks_index') }}">
-          <span style="width:30px;height:30px;background:linear-gradient(135deg,var(--accent-blue),var(--accent-purple));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:0.9rem;">&#x1F4BE;</span>
+          <span style="width:30px;height:30px;background:linear-gradient(135deg,var(--accent-blue),var(--accent-purple));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:0.9rem;">{{ _('&#x1F4BE;') }}</span>
           Disk Tools
         </a>
         <div class="d-flex align-items-center gap-2">
           <!-- Theme Toggle -->
           <button class="theme-toggle" id="disk-theme-toggle" type="button" title="{{ _('Toggle theme') }}" style="border:1px solid var(--border);">
-            <span class="theme-icon-light">&#x2600;&#xFE0F;</span>
-            <span class="theme-icon-dark">&#x1F319;</span>
+            <span class="theme-icon-light">{{ _('&#x2600;&#xFE0F;') }}</span>
+            <span class="theme-icon-dark">{{ _('&#x1F319;') }}</span>
           </button>
-          <a class="btn btn-sm btn-secondary" href="{{ url_for('index') }}">&#x1F6E9; FleetPilot</a>
+          <a class="btn btn-sm btn-secondary" href="{{ url_for('index') }}">{{ _('&#x1F6E9; FleetPilot') }}</a>
           {% block nav_extra %}{% endblock %}
         </div>
       </div>

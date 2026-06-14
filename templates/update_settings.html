@@ -12,7 +12,7 @@
   <div>
     <div class="card">
       <div class="card-header">
-        <h3>&#x2699; Update Configuration</h3>
+        <h3>{{ _('&#x2699; Update Configuration') }}</h3>
       </div>
       <form method="POST" action="/update_settings">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -21,27 +21,27 @@
           <input type="checkbox" name="automatic_updates_enabled" id="auto_updates"
                  {% if settings.automatic_updates_enabled %}checked{% endif %}>
           <label class="form-check-label" for="auto_updates">
-            <strong>Enable Automatic Updates</strong>
-            <span>Automatically update all configured hosts at the specified frequency without manual intervention.</span>
+            <strong>{{ _('Enable Automatic Updates') }}</strong>
+            <span>{{ _('Automatically update all configured hosts at the specified frequency without manual intervention.') }}</span>
           </label>
         </div>
 
         <div class="form-group">
-          <label class="form-label">Update Frequency</label>
+          <label class="form-label">{{ _('Update Frequency') }}</label>
           <select name="update_frequency">
             <option value="daily"   {% if settings.update_frequency == 'daily'   %}selected{% endif %}>Daily</option>
             <option value="weekly"  {% if settings.update_frequency == 'weekly'  %}selected{% endif %}>Weekly</option>
             <option value="monthly" {% if settings.update_frequency == 'monthly' %}selected{% endif %}>Monthly</option>
           </select>
-          <p class="form-hint">Daily = most secure; Weekly/Monthly = better for stable production environments.</p>
+          <p class="form-hint">{{ _('Daily = most secure; Weekly/Monthly = better for stable production environments.') }}</p>
         </div>
 
         <div class="form-check">
           <input type="checkbox" name="notification_enabled" id="notif_enabled"
                  {% if settings.notification_enabled %}checked{% endif %}>
           <label class="form-check-label" for="notif_enabled">
-            <strong>Enable Update Notifications</strong>
-            <span>Show notifications about update status and completion in the dashboard.</span>
+            <strong>{{ _('Enable Update Notifications') }}</strong>
+            <span>{{ _('Show notifications about update status and completion in the dashboard.') }}</span>
           </label>
         </div>
 
@@ -49,20 +49,20 @@
           <input type="checkbox" name="dashboard_update_notifications" id="dash_notif"
                  {% if settings.dashboard_update_notifications %}checked{% endif %}>
           <label class="form-check-label" for="dash_notif">
-            <strong>Dashboard Update Notifications</strong>
-            <span>Get notified when a new version of the FleetPilot is available. Checks daily.</span>
+            <strong>{{ _('Dashboard Update Notifications') }}</strong>
+            <span>{{ _('Get notified when a new version of the FleetPilot is available. Checks daily.') }}</span>
           </label>
         </div>
 
         {% if settings.last_auto_update %}
         <div class="info-box" style="margin-top:1rem;">
-          <p><strong>&#x1F552; Last Automatic Update:</strong> {{ settings.last_auto_update }}</p>
+          <p><strong>{{ _('&#x1F552; Last Automatic Update:') }}</strong> {{ settings.last_auto_update }}</p>
         </div>
         {% endif %}
 
         <div class="btn-group" style="margin-top:1rem;">
-          <button type="submit" class="btn btn-primary">&#x1F4BE; Save Settings</button>
-          <a class="btn btn-ghost" href="/dashboard">Cancel</a>
+          <button type="submit" class="btn btn-primary">{{ _('&#x1F4BE; Save Settings') }}</button>
+          <a class="btn btn-ghost" href="/dashboard">{{ _('Cancel') }}</a>
         </div>
       </form>
     </div>
@@ -70,12 +70,12 @@
     <!-- Update Controls -->
     <div class="card">
       <div class="card-header">
-        <h3>&#x1F3AE; Update Controls</h3>
+        <h3>{{ _('&#x1F3AE; Update Controls') }}</h3>
       </div>
-      <p>Manually trigger updates or navigate to host management.</p>
+      <p>{{ _('Manually trigger updates or navigate to host management.') }}</p>
       <div class="btn-group" style="margin-top:0.75rem;">
-        <a class="btn btn-primary" href="/dashboard">&#x1F504; Update Dashboard</a>
-        <a class="btn btn-success" href="/hosts">&#x1F5A7; Manage Hosts</a>
+        <a class="btn btn-primary" href="/dashboard">{{ _('&#x1F504; Update Dashboard') }}</a>
+        <a class="btn btn-success" href="/hosts">{{ _('&#x1F5A7; Manage Hosts') }}</a>
       </div>
     </div>
   </div>
@@ -83,23 +83,23 @@
   <!-- Right: Notes -->
   <div>
     <div class="card card-amber">
-      <h3 style="margin-bottom:0.75rem;">&#x1F4DD; Important Notes</h3>
+      <h3 style="margin-bottom:0.75rem;">{{ _('&#x1F4DD; Important Notes') }}</h3>
       <ul style="font-size:0.875rem; line-height:1.9;">
-        <li><strong>Roles:</strong> Automatic updates require <em>operator</em> or <em>admin</em> role.</li>
-        <li><strong>Repo Update:</strong> Updates packages while keeping configuration files unchanged.</li>
-        <li><strong>Full Update:</strong> Performs complete system updates including configuration files.</li>
-        <li><strong>Network:</strong> All hosts must be online and accessible via SSH.</li>
-        <li><strong>Security:</strong> Ensure SSH keys are configured for passwordless authentication.</li>
+        <li><strong>{{ _('Roles:') }}</strong> Automatic updates require <em>operator</em> or <em>admin</em> role.</li>
+        <li><strong>{{ _('Repo Update:') }}</strong> Updates packages while keeping configuration files unchanged.</li>
+        <li><strong>{{ _('Full Update:') }}</strong> Performs complete system updates including configuration files.</li>
+        <li><strong>{{ _('Network:') }}</strong> All hosts must be online and accessible via SSH.</li>
+        <li><strong>{{ _('Security:') }}</strong> Ensure SSH keys are configured for passwordless authentication.</li>
       </ul>
     </div>
 
     <div class="card">
-      <h3 style="margin-bottom:0.75rem;">&#x1F517; Quick Links</h3>
+      <h3 style="margin-bottom:0.75rem;">{{ _('&#x1F517; Quick Links') }}</h3>
       <div style="display:flex; flex-direction:column; gap:0.5rem;">
-        <a class="btn btn-ghost btn-sm" href="/dashboard">&#x1F504; Update Dashboard</a>
-        <a class="btn btn-ghost btn-sm" href="/hosts">&#x1F5A7; Manage Hosts</a>
-        <a class="btn btn-ghost btn-sm" href="/email_settings">&#x2709; Email Config</a>
-        <a class="btn btn-ghost btn-sm" href="/dashboard_version/check">&#x1F50D; Check Dashboard Version</a>
+        <a class="btn btn-ghost btn-sm" href="/dashboard">{{ _('&#x1F504; Update Dashboard') }}</a>
+        <a class="btn btn-ghost btn-sm" href="/hosts">{{ _('&#x1F5A7; Manage Hosts') }}</a>
+        <a class="btn btn-ghost btn-sm" href="/email_settings">{{ _('&#x2709; Email Config') }}</a>
+        <a class="btn btn-ghost btn-sm" href="/dashboard_version/check">{{ _('&#x1F50D; Check Dashboard Version') }}</a>
       </div>
     </div>
   </div>

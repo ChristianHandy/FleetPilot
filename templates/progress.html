@@ -12,14 +12,14 @@
 
 <div class="card">
   <div class="card-header">
-    <h3>&#x23F3; Running Update...</h3>
-    <span class="badge badge-amber">Live</span>
+    <h3>{{ _('&#x23F3; Running Update...') }}</h3>
+    <span class="badge badge-amber">{{ _('Live') }}</span>
   </div>
-  <p class="text-muted" style="margin-bottom:1rem;">This page refreshes automatically every 2 seconds.</p>
+  <p class="text-muted" style="margin-bottom:1rem;">{{ _('This page refreshes automatically every 2 seconds.') }}</p>
   <pre>{% for line in log %}{{ line }}
 {% endfor %}</pre>
 </div>
 
-<a class="btn btn-ghost btn-sm" href="/dashboard">&#x2190; Back to Dashboard</a>
+<a class="btn btn-ghost btn-sm" href="/dashboard">{{ _('&#x2190; Back to Dashboard') }}</a>
 
 {% endblock %}
