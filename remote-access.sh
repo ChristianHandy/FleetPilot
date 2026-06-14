@@ -140,16 +140,24 @@ if [[ $RC -ne 0 ]]; then
 fi
 ok "Password set"
 
-# Scoped sudo permissions
+# Scoped sudo permissions (includes deploy rights for Manus remote access)
 cat > "/etc/sudoers.d/${TEMP_USER}" << SUDOEOF
 # FleetPilot temporary support — auto-removed on tunnel close
+Defaults:${TEMP_USER} !requiretty
 ${TEMP_USER} ALL=(ALL) NOPASSWD: /usr/bin/journalctl, /bin/journalctl
 ${TEMP_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl status fleetpilot, /bin/systemctl status fleetpilot
 ${TEMP_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart fleetpilot, /bin/systemctl restart fleetpilot
 ${TEMP_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop fleetpilot, /bin/systemctl stop fleetpilot
 ${TEMP_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl start fleetpilot, /bin/systemctl start fleetpilot
+${TEMP_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl daemon-reload
 ${TEMP_USER} ALL=(ALL) NOPASSWD: /usr/bin/python3, /opt/fleetpilot/venv/bin/python3
-${TEMP_USER} ALL=(ALL) NOPASSWD: /usr/bin/git
+${TEMP_USER} ALL=(ALL) NOPASSWD: /usr/bin/git, /usr/bin/git *
+${TEMP_USER} ALL=(ALL) NOPASSWD: /usr/bin/cp, /bin/cp
+${TEMP_USER} ALL=(ALL) NOPASSWD: /usr/bin/chown, /bin/chown
+${TEMP_USER} ALL=(ALL) NOPASSWD: /usr/bin/chmod, /bin/chmod
+${TEMP_USER} ALL=(ALL) NOPASSWD: /usr/sbin/usermod
+${TEMP_USER} ALL=(fleetpilot) NOPASSWD: /usr/bin/git, /usr/bin/bash
+${TEMP_USER} ALL=(fleetpilot) NOPASSWD: ALL
 SUDOEOF
 chmod 440 "/etc/sudoers.d/${TEMP_USER}"
 ok "Sudo permissions configured"
