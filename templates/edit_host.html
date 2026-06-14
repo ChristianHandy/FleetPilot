@@ -26,7 +26,7 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
       <!-- Basic Info -->
-      <div class="form-section"><span class="form-section-title">{{ _('&#x1F4CB; Basic Information') }}</span></div>
+      <div class="form-section"><span class="form-section-title">&#x1F4CB; Basic Information</span></div>
       <div class="form-grid-2">
         <div class="form-group">
           <label class="form-label">{{ _('Display Name') }}</label>
@@ -65,7 +65,7 @@
       </div>
 
       <!-- Classification -->
-      <div class="form-section"><span class="form-section-title">{{ _('&#x1F3F7; Classification') }}</span></div>
+      <div class="form-section"><span class="form-section-title">&#x1F3F7; Classification</span></div>
       <div class="form-grid-3">
         <div class="form-group">
           <label class="form-label">{{ _('Environment') }}</label>
@@ -96,7 +96,7 @@
       </div>
 
       <!-- Tags -->
-      <div class="form-section"><span class="form-section-title">{{ _('&#x1F3F7; Tags') }}</span></div>
+      <div class="form-section"><span class="form-section-title">&#x1F3F7; Tags</span></div>
       <div class="form-group">
         <label class="form-label">{{ _('Tags') }}</label>
         <div class="tag-input-wrapper" id="tagWrapper">
@@ -114,7 +114,7 @@
       </div>
 
       <!-- Notes -->
-      <div class="form-section"><span class="form-section-title">{{ _('&#x1F4DD; Notes') }}</span></div>
+      <div class="form-section"><span class="form-section-title">&#x1F4DD; Notes</span></div>
       <div class="form-group">
         <label class="form-label">Notes <span class="text-muted">{{ _('(internal)') }}</span></label>
         <textarea name="notes" class="notes-textarea"
@@ -125,7 +125,7 @@
       <div class="form-section" style="margin-top:1.25rem;">
         <button type="button" class="collapsible-toggle" id="osToggle" onclick="toggleOS()">
           <span>&#x1F4BF; {{ _('OS Profiles (Multiboot)') }} — <span style="font-weight:400;color:var(--text-muted);">{{ _('optional') }}</span></span>
-          <span class="arrow" id="osArrow">{{ _('&#x25BC;') }}</span>
+          <span class="arrow" id="osArrow">&#x25BC;</span>
         </button>
       </div>
       <div class="collapsible-body {% if data.os_profiles %}open{% endif %}" id="osBody">
@@ -172,7 +172,7 @@ function renderTagChips() {
     const slug = tag.toLowerCase().replace(/\s+/g, '-');
     chip.className = 'tag-chip tag-chip-default tag-chip-' + slug;
     chip.style.cssText = 'display:inline-flex;align-items:center;gap:0.3rem;';
-    chip.innerHTML = tag + ' <button type="button" class="tag-chip-remove" onclick="removeTag(' + i + ')">{{ _('&#x2715;') }}</button>';
+    chip.innerHTML = tag + ' <button type="button" class="tag-chip-remove" onclick="removeTag(' + i + ')">&#x2715;</button>';
     wrapper.insertBefore(chip, input);
   });
   hidden.value = currentTags.join(',');
@@ -234,7 +234,7 @@ function addOsProfile(name='', type='ubuntu', isDefault=false) {
              style="width:16px;height:16px;accent-color:var(--accent-blue);">
       Default
     </label>
-    <button type="button" onclick="removeOsProfile(${idx})" class="btn btn-danger btn-sm" style="padding:0.4rem 0.6rem;">{{ _('&#x2715;') }}</button>`;
+    <button type="button" onclick="removeOsProfile(${idx})" class="btn btn-danger btn-sm" style="padding:0.4rem 0.6rem;">&#x2715;</button>`;
   c.appendChild(div);
 }
 function removeOsProfile(idx) {

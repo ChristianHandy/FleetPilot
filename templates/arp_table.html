@@ -7,14 +7,14 @@
 {% block content %}
 
 <div class="info-box">
-  <p><strong>{{ _('&#x2139; About ARP Table:') }}</strong> The ARP (Address Resolution Protocol) table shows MAC address to IP address mappings for devices that have recently communicated with this server on the local network.</p>
+  <p><strong>&#x2139; About ARP Table:</strong> The ARP (Address Resolution Protocol) table shows MAC address to IP address mappings for devices that have recently communicated with this server on the local network.</p>
   <p>{{ _('This information is used to detect IP address changes for hosts with known MAC addresses in DHCP environments.') }}</p>
 </div>
 
 {% if arp_mappings %}
 <div class="card">
   <div class="card-header">
-    <h3>{{ _('&#x1F4CB; Current ARP Entries') }}</h3>
+    <h3>&#x1F4CB; Current ARP Entries</h3>
     <span class="badge badge-blue">{{ arp_mappings|length }} entries</span>
   </div>
   <div class="table-wrapper">
@@ -50,7 +50,7 @@
 {% endif %}
 
 <div style="margin-top:1rem;">
-  <a class="btn btn-ghost btn-sm" href="/hosts">{{ _('&#x2190; Back to Hosts') }}</a>
+  <a class="btn btn-ghost btn-sm" href="/hosts">&#x2190; Back to Hosts</a>
 </div>
 
 {% endblock %}

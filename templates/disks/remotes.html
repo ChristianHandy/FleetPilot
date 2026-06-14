@@ -6,7 +6,7 @@
   <p class="text-muted">{{ _('Manage disk operations on remote PCs and servers via SSH') }}</p>
   
   <div class="mb-3">
-    <a href="{{ url_for('disks_index') }}" class="btn btn-secondary">{{ _('← Back to Local Disks') }}</a>
+    <a href="{{ url_for('disks_index') }}" class="btn btn-secondary">← Back to Local Disks</a>
   </div>
   
   <form method="post" action="{{ url_for('remotes') }}" class="row g-3 mb-4">
@@ -56,7 +56,7 @@
   
   <div class="card mt-4">
     <div class="card-header bg-info text-white">
-      <h5>{{ _('📋 Setup Instructions') }}</h5>
+      <h5>📋 Setup Instructions</h5>
     </div>
     <div class="card-body">
       <h6>{{ _('To manage disks on remote systems, you need to:') }}</h6>

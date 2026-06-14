@@ -7,7 +7,7 @@
   {% if is_admin %}
   <form method="POST" action="/smart/poll" style="display:inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button class="btn btn-success btn-sm">{{ _('&#x1F504; Poll Now') }}</button>
+    <button class="btn btn-success btn-sm">&#x1F504; Poll Now</button>
   </form>
   {% endif %}
 {% endblock %}
@@ -70,10 +70,10 @@
         {% if is_admin %}
         <form method="POST" action="/smart/alert/{{ a.id }}/ack" style="display:inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button class="btn btn-sm btn-ghost">{{ _('&#x2713; Ack') }}</button>
+          <button class="btn btn-sm btn-ghost">&#x2713; Ack</button>
         </form>
         {% endif %}
-        <a href="/smart/disk/{{ a.disk_id }}" class="btn btn-sm btn-secondary">{{ _('&#x1F4CA; Detail') }}</a>
+        <a href="/smart/disk/{{ a.disk_id }}" class="btn btn-sm btn-secondary">&#x1F4CA; Detail</a>
       </td>
     </tr>
     {% endfor %}
@@ -86,7 +86,7 @@
 <!-- ── Disk Registry ──────────────────────────────────────────── -->
 <div class="card" style="margin-bottom:1.5rem">
   <div class="card-header">
-    <h3>{{ _('&#x1F4BE; All Registered Disks') }}</h3>
+    <h3>&#x1F4BE; All Registered Disks</h3>
     <small class="text-muted">
       Sources: local Linux disks + Proxmox nodes + TrueNAS + Unraid
     </small>
@@ -138,7 +138,7 @@
       </td>
       <td><small>{{ d.last_smart or "Never" }}</small></td>
       <td>
-        <a href="/smart/disk/{{ d.id }}" class="btn btn-sm btn-secondary">{{ _('&#x1F4CA; History') }}</a>
+        <a href="/smart/disk/{{ d.id }}" class="btn btn-sm btn-secondary">&#x1F4CA; History</a>
       </td>
     </tr>
     {% endfor %}
@@ -154,11 +154,11 @@
       {% if is_admin %}
       <form method="POST" action="/smart/poll">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="btn btn-success">{{ _('&#x1F504; Poll Local Disks') }}</button>
+        <button class="btn btn-success">&#x1F504; Poll Local Disks</button>
       </form>
       {% endif %}
-      <a href="/vm" class="btn btn-secondary">{{ _('&#x1F5A5; VM Controller') }}</a>
-      <a href="/storage" class="btn btn-secondary">{{ _('&#x1F5C4; Storage Controller') }}</a>
+      <a href="/vm" class="btn btn-secondary">&#x1F5A5; VM Controller</a>
+      <a href="/storage" class="btn btn-secondary">&#x1F5C4; Storage Controller</a>
     </div>
   </div>
   {% endif %}
@@ -168,13 +168,13 @@
 {% if is_admin %}
 <div class="card" style="margin-bottom:1.5rem">
   <div class="card-header">
-    <h3>{{ _('&#x1F4E5; Import Disks from Sources') }}</h3>
+    <h3>&#x1F4E5; Import Disks from Sources</h3>
     <small class="text-muted">{{ _('Import SMART data from configured SSH hosts, Proxmox nodes and NAS endpoints') }}</small>
   </div>
   <div style="padding:0.75rem 0">
     {% if hosts %}
     <div style="margin-bottom:1rem">
-      <strong style="font-size:0.85rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">{{ _('&#x1F4BB; SSH Hosts') }}</strong>
+      <strong style="font-size:0.85rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">&#x1F4BB; SSH Hosts</strong>
       <div class="btn-group" style="flex-wrap:wrap;margin-top:0.5rem">
         {% for hname, hdata in hosts.items() %}
         <button class="btn btn-sm btn-secondary" onclick="importHost('{{ hname }}')"
@@ -186,8 +186,8 @@
     </div>
     {% endif %}
     <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
-      <a href="/vm" class="btn btn-sm btn-secondary">{{ _('&#x1F5A5; Proxmox Endpoints') }}</a>
-      <a href="/storage" class="btn btn-sm btn-secondary">{{ _('&#x1F5C4; Storage Endpoints') }}</a>
+      <a href="/vm" class="btn btn-sm btn-secondary">&#x1F5A5; Proxmox Endpoints</a>
+      <a href="/storage" class="btn btn-sm btn-secondary">&#x1F5C4; Storage Endpoints</a>
     </div>
   </div>
   <div id="import-result" style="display:none;padding:0.5rem 0"></div>
@@ -197,7 +197,7 @@
 <!-- ── Polling Config ─────────────────────────────────────────── -->
 {% if is_admin %}
 <div class="card">
-  <div class="card-header"><h3>{{ _('&#x23F0; Polling Configuration') }}</h3></div>
+  <div class="card-header"><h3>&#x23F0; Polling Configuration</h3></div>
   <form method="POST" action="/smart/config">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;padding:0 0 0.5rem">
@@ -212,7 +212,7 @@
                  {% if poll_cfg.enabled %}checked{% endif %}> Auto-polling enabled
         </label>
       </div>
-      <button type="submit" class="btn btn-primary">{{ _('&#x1F4BE; Save') }}</button>
+      <button type="submit" class="btn btn-primary">&#x1F4BE; Save</button>
     </div>
     <small class="text-muted" style="padding:0 0 0.5rem;display:block">
       Last poll: {{ poll_cfg.last_poll or "Never" }}

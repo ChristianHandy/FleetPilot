@@ -5,7 +5,7 @@
 {% block page_title %}Server Update{% endblock %}
 
 {% block topbar_actions %}
-<a class="btn btn-secondary btn-sm" href="/index">{{ _('&#x2190; Dashboard') }}</a>
+<a class="btn btn-secondary btn-sm" href="/index">&#x2190; Dashboard</a>
 {% endblock %}
 
 {% block content %}
@@ -13,7 +13,7 @@
 <!-- Info Card -->
 <div class="card" style="margin-bottom:1.25rem;">
   <div class="card-header">
-    <h3>{{ _('🖥️ FleetPilot Host — Package Update') }}</h3>
+    <h3>🖥️ FleetPilot Host — Package Update</h3>
     <span class="badge badge-amber">{{ _('Admin Only') }}</span>
   </div>
   <p>This tool runs <code>apt-get update &amp;&amp; apt-get upgrade</code> directly on the server that hosts FleetPilot. It requires sudo privileges on the host system. The update runs in the background and streams live output below.</p>
@@ -30,7 +30,7 @@
 <!-- Controls -->
 <div class="card" style="margin-bottom:1.25rem;" id="controlCard">
   <div class="card-header">
-    <h3>{{ _('⚙️ Update Controls') }}</h3>
+    <h3>⚙️ Update Controls</h3>
   </div>
 
   <div id="startForm" style="{% if running %}display:none;{% endif %}">
@@ -75,7 +75,7 @@
 <!-- Live Log -->
 <div class="card">
   <div class="card-header">
-    <h3>{{ _('📋 Live Output') }}</h3>
+    <h3>📋 Live Output</h3>
     <div style="display:flex;gap:0.5rem;align-items:center;">
       <span id="logCount" class="badge badge-blue">0 lines</span>
       <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.8rem;cursor:pointer;">

@@ -12,7 +12,7 @@
   <div>
     <div class="card">
       <div class="card-header">
-        <h3>{{ _('&#x2699; SMTP Settings') }}</h3>
+        <h3>&#x2699; SMTP Settings</h3>
       </div>
       <form method="POST" action="/email_settings">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -78,8 +78,8 @@
         </div>
 
         <div class="btn-group">
-          <button type="submit" class="btn btn-primary">{{ _('&#x1F4BE; Save Settings') }}</button>
-          <button type="submit" name="test_email" value="true" class="btn btn-success">{{ _('&#x2709; Send Test Email') }}</button>
+          <button type="submit" class="btn btn-primary">&#x1F4BE; Save Settings</button>
+          <button type="submit" name="test_email" value="true" class="btn btn-success">&#x2709; Send Test Email</button>
           <a class="btn btn-ghost" href="/index">{{ _('Cancel') }}</a>
         </div>
       </form>
@@ -90,7 +90,7 @@
   <div>
     <div class="card">
       <div class="card-header">
-        <h3>{{ _('&#x1F4CA; Report Configuration') }}</h3>
+        <h3>&#x1F4CA; Report Configuration</h3>
       </div>
       <form method="POST" action="/email_settings">
 
@@ -121,13 +121,13 @@
           </label>
         </div>
 
-        <button type="submit" class="btn btn-primary">{{ _('&#x1F4BE; Save Report Settings') }}</button>
+        <button type="submit" class="btn btn-primary">&#x1F4BE; Save Report Settings</button>
       </form>
     </div>
 
     <!-- Features -->
     <div class="card">
-      <h3 style="margin-bottom:1rem;">{{ _('&#x2728; Email Features') }}</h3>
+      <h3 style="margin-bottom:1rem;">&#x2728; Email Features</h3>
       <div class="feature-grid" style="grid-template-columns:1fr;">
         <div class="feature-item">
           <div class="feature-item-title text-blue">&#x1F4CA; Scheduled Reports</div>
@@ -146,7 +146,7 @@
 
     <!-- Notes -->
     <div class="card card-amber">
-      <h3 style="margin-bottom:0.75rem;">{{ _('&#x1F4DD; Important Notes') }}</h3>
+      <h3 style="margin-bottom:0.75rem;">&#x1F4DD; Important Notes</h3>
       <ul style="font-size:0.875rem; line-height:1.8;">
         <li><strong>{{ _('Gmail:') }}</strong> Use an app-specific password. Enable 2FA and generate an app password in Google Account settings.</li>
         <li><strong>{{ _('Office 365:') }}</strong> Use your full email address as username and enable Modern Authentication if required.</li>

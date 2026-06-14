@@ -4,15 +4,15 @@
 {% block page_title %}Proxmox Node Disks{% endblock %}
 
 {% block nav_extra %}
-  <a href="/vm/{{ ep_id }}" class="btn btn-ghost btn-sm">{{ _('&#x2190; Back') }}</a>
-  <a href="/smart" class="btn btn-secondary btn-sm">{{ _('&#x1F4CA; SMART Dashboard') }}</a>
+  <a href="/vm/{{ ep_id }}" class="btn btn-ghost btn-sm">&#x2190; Back</a>
+  <a href="/smart" class="btn btn-secondary btn-sm">&#x1F4CA; SMART Dashboard</a>
 {% endblock %}
 
 {% block content %}
 
 {% if error %}
 <div class="card card-red" style="margin-bottom:1.5rem">
-  <div class="card-header"><h3>{{ _('&#x26A0; Error') }}</h3></div>
+  <div class="card-header"><h3>&#x26A0; Error</h3></div>
   <pre style="white-space:pre-wrap;color:var(--danger)">{{ error }}</pre>
 </div>
 {% endif %}
@@ -46,7 +46,7 @@
         {% else %}<span class="badge">{{ d.health or "?" }}</span>{% endif %}
       </td>
       <td>
-        <a href="/smart" class="btn btn-sm btn-secondary">{{ _('&#x1F4CA; SMART') }}</a>
+        <a href="/smart" class="btn btn-sm btn-secondary">&#x1F4CA; SMART</a>
       </td>
     </tr>
     {% endfor %}

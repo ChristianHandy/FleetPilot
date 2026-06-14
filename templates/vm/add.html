@@ -6,7 +6,7 @@
 {% block content %}
 <div class="card" style="max-width:640px;margin:0 auto">
   <div class="card-header">
-    <h3>{{ _('&#x1F5A5; New VM / Backup Endpoint') }}</h3>
+    <h3>&#x1F5A5; New VM / Backup Endpoint</h3>
   </div>
   <form method="POST" action="/vm/add">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -57,7 +57,7 @@
     </div>
 
     <div class="btn-group">
-      <button type="submit" class="btn btn-success">{{ _('&#x1F4BE; Save Endpoint') }}</button>
+      <button type="submit" class="btn btn-success">&#x1F4BE; Save Endpoint</button>
       <a href="/vm" class="btn btn-ghost">{{ _('Cancel') }}</a>
     </div>
   </form>
@@ -65,7 +65,7 @@
 
 <!-- Platform-specific help -->
 <div class="card" style="max-width:640px;margin:1.5rem auto 0">
-  <div class="card-header"><h3>{{ _('&#x2139; Connection Help') }}</h3></div>
+  <div class="card-header"><h3>&#x2139; Connection Help</h3></div>
   <div id="help-proxmox">
     <strong>{{ _('Proxmox VE') }}</strong><br>
     Use <code>root@pam</code> or a dedicated API user with <code>PVEAdmin</code> role.<br>

@@ -4,12 +4,12 @@
 {% block page_title %}{{ overview.endpoint_name or "Storage Detail" }}{% endblock %}
 
 {% block nav_extra %}
-  <a href="/storage" class="btn btn-ghost btn-sm">{{ _('&#x2190; Back') }}</a>
-  <a href="/smart" class="btn btn-secondary btn-sm">{{ _('&#x1F4CA; SMART Dashboard') }}</a>
+  <a href="/storage" class="btn btn-ghost btn-sm">&#x2190; Back</a>
+  <a href="/smart" class="btn btn-secondary btn-sm">&#x1F4CA; SMART Dashboard</a>
   {% if is_admin %}
   <form method="POST" action="/storage/{{ ep_id }}/poll" style="display:inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button class="btn btn-secondary btn-sm">{{ _('&#x1F504; Poll Disks') }}</button>
+    <button class="btn btn-secondary btn-sm">&#x1F504; Poll Disks</button>
   </form>
   {% endif %}
 {% endblock %}
@@ -18,7 +18,7 @@
 
 {% if error %}
 <div class="card card-red" style="margin-bottom:1.5rem">
-  <div class="card-header"><h3>{{ _('&#x26A0; Connection Error') }}</h3></div>
+  <div class="card-header"><h3>&#x26A0; Connection Error</h3></div>
   <pre style="white-space:pre-wrap;color:var(--danger)">{{ error }}</pre>
 </div>
 {% endif %}
@@ -113,7 +113,7 @@
 <!-- ── TrueNAS: Pools ─────────────────────────────────────────── -->
 {% if platform == "truenas" and overview.pools %}
 <div class="card" style="margin-bottom:1.5rem">
-  <div class="card-header"><h3>{{ _('&#x1F4E6; ZFS Pools') }}</h3></div>
+  <div class="card-header"><h3>&#x1F4E6; ZFS Pools</h3></div>
   <div style="overflow-x:auto">
   <table class="table">
     <thead>
@@ -145,7 +145,7 @@
 {% set nfs = overview.nfs_shares or [] %}
 {% if smb or nfs %}
 <div class="card" style="margin-bottom:1.5rem">
-  <div class="card-header"><h3>{{ _('&#x1F4E1; Shares') }}</h3></div>
+  <div class="card-header"><h3>&#x1F4E1; Shares</h3></div>
   {% if smb %}
   <h4 style="padding:0.75rem 1rem 0.25rem;margin:0">{{ _('SMB Shares') }}</h4>
   <div style="overflow-x:auto">
@@ -187,7 +187,7 @@
 <!-- ── Unraid: Shares ─────────────────────────────────────────── -->
 {% if platform == "unraid" and overview.shares %}
 <div class="card" style="margin-bottom:1.5rem">
-  <div class="card-header"><h3>{{ _('&#x1F4E1; Unraid Shares') }}</h3></div>
+  <div class="card-header"><h3>&#x1F4E1; Unraid Shares</h3></div>
   <div style="overflow-x:auto">
   <table class="table">
     <thead><tr><th>{{ _('Name') }}</th><th>{{ _('Path') }}</th><th>{{ _('Free') }}</th></tr></thead>

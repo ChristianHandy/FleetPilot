@@ -5,7 +5,7 @@
 
 {% block nav_extra %}
   {% if is_admin %}
-  <a class="btn btn-success btn-sm" href="/vm/add">{{ _('&#x2B; Add Endpoint') }}</a>
+  <a class="btn btn-success btn-sm" href="/vm/add">&#x2B; Add Endpoint</a>
   {% endif %}
 {% endblock %}
 
@@ -35,7 +35,7 @@
 {% if endpoints %}
 <div class="card" style="margin-bottom:1.5rem">
   <div class="card-header">
-    <h3>{{ _('&#x1F5A5; Registered Endpoints') }}</h3>
+    <h3>&#x1F5A5; Registered Endpoints</h3>
   </div>
   <div style="overflow-x:auto">
   <table class="table">
@@ -58,9 +58,9 @@
       </td>
       <td>
         {% if ep.platform == "proxmox" %}
-          <span class="badge badge-blue">{{ _('&#x1F4BB; Proxmox VE') }}</span>
+          <span class="badge badge-blue">&#x1F4BB; Proxmox VE</span>
         {% elif ep.platform == "veeam" %}
-          <span class="badge badge-purple">{{ _('&#x1F4BE; Veeam') }}</span>
+          <span class="badge badge-purple">&#x1F4BE; Veeam</span>
         {% else %}
           <span class="badge">{{ ep.platform }}</span>
         {% endif %}
@@ -71,16 +71,16 @@
       <td>{% if ep.verify_ssl %}<span class="badge badge-green">{{ _('Yes') }}</span>{% else %}<span class="badge">{{ _('No') }}</span>{% endif %}</td>
       <td>
         <div class="btn-group">
-          <a href="/vm/{{ ep.id }}" class="btn btn-sm btn-primary">{{ _('&#x1F50D; View') }}</a>
-          <button class="btn btn-sm btn-secondary" onclick="testConn({{ ep.id }}, this)">{{ _('&#x1F50C; Test') }}</button>
+          <a href="/vm/{{ ep.id }}" class="btn btn-sm btn-primary">&#x1F50D; View</a>
+          <button class="btn btn-sm btn-secondary" onclick="testConn({{ ep.id }}, this)">&#x1F50C; Test</button>
           {% if ep.platform == "proxmox" %}
-          <a href="/vm/{{ ep.id }}/disks" class="btn btn-sm btn-secondary">{{ _('&#x1F4BE; Disks') }}</a>
+          <a href="/vm/{{ ep.id }}/disks" class="btn btn-sm btn-secondary">&#x1F4BE; Disks</a>
           {% endif %}
           {% if is_admin %}
           <form method="POST" action="/vm/delete/{{ ep.id }}" style="display:inline"
                 onsubmit="return confirm('Delete endpoint {{ ep.name }}?')">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-sm btn-danger">{{ _('&#x1F5D1;') }}</button>
+            <button class="btn btn-sm btn-danger">&#x1F5D1;</button>
           </form>
           {% endif %}
         </div>
@@ -94,10 +94,10 @@
 </div>
 {% else %}
 <div class="card card-blue" style="margin-bottom:1.5rem">
-  <div class="card-header"><h3>{{ _('&#x1F4A1; No Endpoints Yet') }}</h3></div>
+  <div class="card-header"><h3>&#x1F4A1; No Endpoints Yet</h3></div>
   <p>{{ _('Add a Proxmox VE or Veeam Backup &amp; Replication server to get started.') }}</p>
   {% if is_admin %}
-  <a href="/vm/add" class="btn btn-success">{{ _('&#x2B; Add First Endpoint') }}</a>
+  <a href="/vm/add" class="btn btn-success">&#x2B; Add First Endpoint</a>
   {% endif %}
 </div>
 {% endif %}
@@ -106,7 +106,7 @@
 {% if events %}
 <div class="card">
   <div class="card-header">
-    <h3>{{ _('&#x1F4CB; Recent Events') }}</h3>
+    <h3>&#x1F4CB; Recent Events</h3>
   </div>
   <div style="overflow-x:auto">
   <table class="table">

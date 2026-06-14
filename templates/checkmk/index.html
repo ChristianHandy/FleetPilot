@@ -4,8 +4,8 @@
 {% block page_title %}CheckMK Integration{% endblock %}
 
 {% block nav_extra %}
-  <a href="/checkmk/download_script/local" class="btn btn-secondary btn-sm">{{ _('&#x2B07; Local Check Script') }}</a>
-  <a href="/checkmk/download_script/piggyback" class="btn btn-secondary btn-sm">{{ _('&#x2B07; Piggyback Script') }}</a>
+  <a href="/checkmk/download_script/local" class="btn btn-secondary btn-sm">&#x2B07; Local Check Script</a>
+  <a href="/checkmk/download_script/piggyback" class="btn btn-secondary btn-sm">&#x2B07; Piggyback Script</a>
 {% endblock %}
 
 {% block content %}
@@ -45,17 +45,17 @@
 <!-- ── API Token ──────────────────────────────────────────────────────────── -->
 <div class="card" style="margin-bottom:1.5rem">
   <div class="card-header">
-    <h3>{{ _('&#x1F511; API Token') }}</h3>
+    <h3>&#x1F511; API Token</h3>
     <small class="text-muted">{{ _('Use this token to authenticate CheckMK against FleetPilot') }}</small>
   </div>
   <div style="padding:0.75rem 0">
     <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
       <code id="token-display" style="font-size:0.8rem;background:var(--bg-elevated);padding:0.4rem 0.75rem;border-radius:6px;border:1px solid var(--border);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ token }}</code>
-      <button class="btn btn-sm btn-secondary" onclick="copyToken()">{{ _('&#x1F4CB; Copy') }}</button>
+      <button class="btn btn-sm btn-secondary" onclick="copyToken()">&#x1F4CB; Copy</button>
       {% if is_admin %}
       <form method="POST" action="/checkmk/regenerate_token" style="display:inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="btn btn-sm btn-danger" onclick="return confirm('Regenerate token? All existing CheckMK scripts will need updating.')">{{ _('&#x1F504; Regenerate') }}</button>
+        <button class="btn btn-sm btn-danger" onclick="return confirm('Regenerate token? All existing CheckMK scripts will need updating.')">&#x1F504; Regenerate</button>
       </form>
       {% endif %}
     </div>
@@ -69,7 +69,7 @@
 <!-- ── API Endpoints ──────────────────────────────────────────────────────── -->
 <div class="card" style="margin-bottom:1.5rem">
   <div class="card-header">
-    <h3>{{ _('&#x1F310; API Endpoints') }}</h3>
+    <h3>&#x1F310; API Endpoints</h3>
   </div>
   <div style="overflow-x:auto">
   <table class="table">
@@ -116,7 +116,7 @@
 <!-- ── Setup Instructions ─────────────────────────────────────────────────── -->
 <div class="card" style="margin-bottom:1.5rem">
   <div class="card-header">
-    <h3>{{ _('&#x1F4CB; Setup Instructions') }}</h3>
+    <h3>&#x1F4CB; Setup Instructions</h3>
   </div>
   <div style="padding:0.5rem 0">
 
@@ -135,7 +135,7 @@
         It queries FleetPilot and outputs CheckMK-compatible service lines.
       </p>
       <ol style="padding-left:1.25rem;line-height:2">
-        <li>Download the script: <a href="/checkmk/download_script/local" class="btn btn-sm btn-secondary">{{ _('&#x2B07; fleetpilot_check') }}</a></li>
+        <li>Download the script: <a href="/checkmk/download_script/local" class="btn btn-sm btn-secondary">&#x2B07; fleetpilot_check</a></li>
         <li>Copy to CheckMK agent local directory:<br>
           <code>cp fleetpilot_check /usr/lib/check_mk_agent/local/</code></li>
         <li>Make executable:<br>
@@ -155,7 +155,7 @@
         host in CheckMK with its own services (updates, disks, etc.).
       </p>
       <ol style="padding-left:1.25rem;line-height:2">
-        <li>Download: <a href="/checkmk/download_script/piggyback" class="btn btn-sm btn-secondary">{{ _('&#x2B07; fleetpilot_piggyback') }}</a></li>
+        <li>Download: <a href="/checkmk/download_script/piggyback" class="btn btn-sm btn-secondary">&#x2B07; fleetpilot_piggyback</a></li>
         <li><code>cp fleetpilot_piggyback /usr/lib/check_mk_agent/local/</code></li>
         <li><code>chmod +x /usr/lib/check_mk_agent/local/fleetpilot_piggyback</code></li>
         <li>In CheckMK: enable <em>{{ _('Piggyback') }}</em> for the monitoring host</li>
@@ -182,7 +182,7 @@
       <div style="background:var(--bg-elevated);padding:0.75rem;border-radius:6px;border:1px solid var(--border);margin-top:0.5rem">
         <strong>{{ _('Direct URL:') }}</strong><br>
         <code style="font-size:0.8rem;word-break:break-all">{{ base_url }}/api/checkmk/agent?token={{ token }}</code>
-        <button class="btn btn-sm btn-secondary" style="margin-left:0.5rem" onclick="copyText('{{ base_url }}/api/checkmk/agent?token={{ token }}')">{{ _('&#x1F4CB; Copy') }}</button>
+        <button class="btn btn-sm btn-secondary" style="margin-left:0.5rem" onclick="copyText('{{ base_url }}/api/checkmk/agent?token={{ token }}')">&#x1F4CB; Copy</button>
       </div>
     </div>
 
@@ -220,8 +220,8 @@
 <!-- ── Live Agent Output Preview ─────────────────────────────────────────── -->
 <div class="card" style="margin-bottom:1.5rem">
   <div class="card-header">
-    <h3>{{ _('&#x1F441; Live Agent Output Preview') }}</h3>
-    <button class="btn btn-sm btn-secondary" onclick="loadAgentPreview()">{{ _('&#x1F504; Refresh') }}</button>
+    <h3>&#x1F441; Live Agent Output Preview</h3>
+    <button class="btn btn-sm btn-secondary" onclick="loadAgentPreview()">&#x1F504; Refresh</button>
   </div>
   <div id="agent-preview-loading" style="padding:1rem;color:var(--text-muted)">Click Refresh to load live output...</div>
   <pre id="agent-preview" style="display:none;background:var(--bg-elevated);padding:0.75rem;border-radius:6px;font-size:0.75rem;max-height:400px;overflow:auto;white-space:pre-wrap;border:1px solid var(--border);margin:0"></pre>
@@ -231,7 +231,7 @@
 {% if status.failed_disks %}
 <div class="card card-red" style="margin-bottom:1.5rem">
   <div class="card-header">
-    <h3>{{ _('&#x26A0; Failed / Critical Disks') }}</h3>
+    <h3>&#x26A0; Failed / Critical Disks</h3>
     <span class="badge badge-red">{{ status.failed_disks|length }} disk(s)</span>
   </div>
   <div style="overflow-x:auto">
@@ -259,7 +259,7 @@
 {% if status.hosts %}
 <div class="card">
   <div class="card-header">
-    <h3>{{ _('&#x1F4BB; Host Status Overview') }}</h3>
+    <h3>&#x1F4BB; Host Status Overview</h3>
   </div>
   <div style="overflow-x:auto">
   <table class="table">

@@ -11,7 +11,7 @@
   <!-- Account Info -->
   <div class="card">
     <div class="card-header">
-      <h3>{{ _('&#x1F464; Account Information') }}</h3>
+      <h3>&#x1F464; Account Information</h3>
     </div>
     <div style="display:flex; flex-direction:column; gap:0.75rem; font-size:0.9rem;">
       <div>
@@ -40,7 +40,7 @@
   <!-- Update Profile -->
   <div class="card">
     <div class="card-header">
-      <h3>{{ _('&#x270F; Update Profile') }}</h3>
+      <h3>&#x270F; Update Profile</h3>
     </div>
     <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -52,7 +52,7 @@
         <label class="form-label">New Password <span class="text-muted">{{ _('(leave blank to keep current)') }}</span></label>
         <input class="form-control" type="password" name="password" placeholder="{{ _('new password') }}">
       </div>
-      <button class="btn btn-primary" type="submit">{{ _('&#x1F4BE; Update Profile') }}</button>
+      <button class="btn btn-primary" type="submit">&#x1F4BE; Update Profile</button>
     </form>
   </div>
 

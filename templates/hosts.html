@@ -7,7 +7,7 @@
 {% block topbar_actions %}
 <a class="btn btn-secondary btn-sm" href="/dashboard">&#x1F504; {{ _('Dashboard') }}</a>
 {% if not current_user_id or 'operator' in current_user_roles or 'admin' in current_user_roles %}
-<a class="btn btn-secondary btn-sm" href="/hosts/arp_table">{{ _('&#x1F4CB; ARP') }}</a>
+<a class="btn btn-secondary btn-sm" href="/hosts/arp_table">&#x1F4CB; ARP</a>
 <a class="btn btn-secondary btn-sm" href="/hosts/scan_ip_changes">&#x1F50D; {{ _('Scan IPs') }}</a>
 <a class="btn btn-primary btn-sm" href="#add-host-form">&#x2B; {{ _('Add Host') }}</a>
 {% endif %}
@@ -19,7 +19,7 @@
 {% if hosts %}
 <div class="search-filter-bar">
   <div class="search-input-wrapper">
-    <span class="search-icon">{{ _('&#x1F50D;') }}</span>
+    <span class="search-icon">&#x1F50D;</span>
     <input type="text" id="hostSearch" placeholder="{{ _('Search by name, IP, group, tag, description…') }}" oninput="filterHosts()">
   </div>
   <select class="filter-select" id="filterEnv" onchange="filterHosts()">
@@ -57,8 +57,8 @@
     {% endfor %}
   </select>
   <div class="view-toggle">
-    <button class="view-toggle-btn active" id="viewGrid" onclick="setView('grid')" title="{{ _('Grid view') }}">{{ _('&#x229E;') }}</button>
-    <button class="view-toggle-btn" id="viewList" onclick="setView('list')" title="{{ _('List view') }}">{{ _('&#x2630;') }}</button>
+    <button class="view-toggle-btn active" id="viewGrid" onclick="setView('grid')" title="{{ _('Grid view') }}">&#x229E;</button>
+    <button class="view-toggle-btn" id="viewList" onclick="setView('list')" title="{{ _('List view') }}">&#x2630;</button>
   </div>
   <span class="filter-count" id="filterCount">{{ hosts|length }} {{ _('hosts') }}</span>
 </div>
@@ -87,7 +87,7 @@
         <div class="hc-title-row">
           <span class="hc-name">{{ name }}</span>
           {% if h.host in localhost_identifiers or h.host|lower in localhost_identifiers %}
-            <span class="badge badge-local">{{ _('&#x1F3E0; Local') }}</span>
+            <span class="badge badge-local">&#x1F3E0; Local</span>
           {% endif %}
         </div>
         <div class="hc-badges" style="margin-top:0.4rem;">
@@ -113,16 +113,16 @@
 
     <!-- Meta info -->
     <div class="hc-meta">
-      <span class="hc-meta-item"><span class="icon">{{ _('&#x1F4BB;') }}</span> {{ h.host }}{% if h.port and h.port != 22 %}:{{ h.port }}{% endif %}</span>
-      <span class="hc-meta-item"><span class="icon">{{ _('&#x1F464;') }}</span> {{ h.user }}</span>
+      <span class="hc-meta-item"><span class="icon">&#x1F4BB;</span> {{ h.host }}{% if h.port and h.port != 22 %}:{{ h.port }}{% endif %}</span>
+      <span class="hc-meta-item"><span class="icon">&#x1F464;</span> {{ h.user }}</span>
       {% if h.location %}
-      <span class="hc-meta-item"><span class="icon">{{ _('&#x1F4CD;') }}</span> {{ h.location }}</span>
+      <span class="hc-meta-item"><span class="icon">&#x1F4CD;</span> {{ h.location }}</span>
       {% endif %}
       {% if h.mac %}
-      <span class="hc-meta-item"><span class="icon">{{ _('&#x1F4E1;') }}</span> {{ h.mac }}</span>
+      <span class="hc-meta-item"><span class="icon">&#x1F4E1;</span> {{ h.mac }}</span>
       {% endif %}
       {% if h.last_update %}
-      <span class="hc-meta-item"><span class="icon">{{ _('&#x1F504;') }}</span> {{ h.last_update }}</span>
+      <span class="hc-meta-item"><span class="icon">&#x1F504;</span> {{ h.last_update }}</span>
       {% endif %}
     </div>
 
@@ -158,10 +158,10 @@
     <div class="hc-actions">
       <a class="btn btn-secondary btn-sm" href="/hosts/edit/{{ name }}">&#x270F; {{ _('Edit') }}</a>
       {% if h.host not in localhost_identifiers and h.host|lower not in localhost_identifiers %}
-      <a class="btn btn-secondary btn-sm" href="/hosts/install_key/{{ name }}">{{ _('&#x1F511; SSH') }}</a>
-      <a class="btn btn-ghost btn-sm" href="/hosts/detect_mac/{{ name }}">{{ _('&#x1F50D; MAC') }}</a>
+      <a class="btn btn-secondary btn-sm" href="/hosts/install_key/{{ name }}">&#x1F511; SSH</a>
+      <a class="btn btn-ghost btn-sm" href="/hosts/detect_mac/{{ name }}">&#x1F50D; MAC</a>
       {% endif %}
-      <a class="btn btn-primary btn-sm" href="/update/{{ name }}">{{ _('&#x2B06; Update') }}</a>
+      <a class="btn btn-primary btn-sm" href="/update/{{ name }}">&#x2B06; Update</a>
       {# Plugin hook: host_card_actions #}
       {% if addon_mgr is defined %}
         {{ addon_mgr.render_hooks('host_card_actions', host=h) | safe }}
@@ -170,7 +170,7 @@
             onsubmit="return confirm('Delete {{ name }}?')">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn btn-danger btn-sm">{{ _('&#x1F5D1;') }}</button>
+        <button type="submit" class="btn btn-danger btn-sm">&#x1F5D1;</button>
       </form>
     </div>
     {% endif %}
@@ -208,11 +208,11 @@
     </div>
     {% if not current_user_id or 'operator' in current_user_roles or 'admin' in current_user_roles %}
     <div class="hli-actions">
-      <a class="btn btn-secondary btn-sm" href="/hosts/edit/{{ name }}">{{ _('&#x270F;') }}</a>
-      <a class="btn btn-primary btn-sm" href="/update/{{ name }}">{{ _('&#x2B06;') }}</a>
+      <a class="btn btn-secondary btn-sm" href="/hosts/edit/{{ name }}">&#x270F;</a>
+      <a class="btn btn-primary btn-sm" href="/update/{{ name }}">&#x2B06;</a>
       <form method="post" action="/hosts/delete/{{ name }}" style="margin:0;"
             onsubmit="return confirm('Delete {{ name }}?')">
-        <button type="submit" class="btn btn-danger btn-sm">{{ _('&#x1F5D1;') }}</button>
+        <button type="submit" class="btn btn-danger btn-sm">&#x1F5D1;</button>
       </form>
     </div>
     {% endif %}
@@ -243,7 +243,7 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
     <!-- Basic Info -->
-    <div class="form-section"><span class="form-section-title">{{ _('&#x1F4CB; Basic Information') }}</span></div>
+    <div class="form-section"><span class="form-section-title">&#x1F4CB; Basic Information</span></div>
     <div class="form-grid-2">
       <div class="form-group">
         <label class="form-label">{{ _('Display Name') }} <span style="color:var(--accent-red)">*</span></label>
@@ -281,7 +281,7 @@
     </div>
 
     <!-- Classification -->
-    <div class="form-section"><span class="form-section-title">{{ _('&#x1F3F7; Classification') }}</span></div>
+    <div class="form-section"><span class="form-section-title">&#x1F3F7; Classification</span></div>
     <div class="form-grid-3">
       <div class="form-group">
         <label class="form-label">{{ _('Environment') }}</label>
@@ -310,7 +310,7 @@
     </div>
 
     <!-- Tags -->
-    <div class="form-section"><span class="form-section-title">{{ _('&#x1F3F7; Tags') }}</span></div>
+    <div class="form-section"><span class="form-section-title">&#x1F3F7; Tags</span></div>
     <div class="form-group">
       <label class="form-label">{{ _('Tags') }}</label>
       <div class="tag-input-wrapper" id="tagWrapper">
@@ -328,7 +328,7 @@
     </div>
 
     <!-- Notes -->
-    <div class="form-section"><span class="form-section-title">{{ _('&#x1F4DD; Notes') }}</span></div>
+    <div class="form-section"><span class="form-section-title">&#x1F4DD; Notes</span></div>
     <div class="form-group">
       <label class="form-label">Notes <span class="text-muted">{{ _('(internal)') }}</span></label>
       <textarea name="notes" class="notes-textarea"
@@ -339,7 +339,7 @@
     <div class="form-section" style="margin-top:1.25rem;">
       <button type="button" class="collapsible-toggle" id="osToggle" onclick="toggleOS()">
         <span>&#x1F4BF; {{ _('OS Profiles (Multiboot)') }} — <span style="font-weight:400;color:var(--text-muted);">{{ _('optional') }}</span></span>
-        <span class="arrow" id="osArrow">{{ _('&#x25BC;') }}</span>
+        <span class="arrow" id="osArrow">&#x25BC;</span>
       </button>
     </div>
     <div class="collapsible-body" id="osBody">
@@ -356,7 +356,7 @@
 
 <!-- Tips -->
 <div class="card card-blue" style="margin-top:1.5rem;">
-  <div class="card-header"><h3>{{ _('&#x1F4A1; Tips') }}</h3></div>
+  <div class="card-header"><h3>&#x1F4A1; Tips</h3></div>
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:0.75rem;">
     <div class="feature-item">
       <div class="feature-item-title">&#x1F3E0; Localhost</div>
@@ -401,7 +401,7 @@ function renderTagChips() {
     const slug = tag.toLowerCase().replace(/\s+/g, '-');
     chip.className = 'tag-chip tag-chip-default tag-chip-' + slug;
     chip.style.cssText = 'display:inline-flex;align-items:center;gap:0.3rem;';
-    chip.innerHTML = tag + ' <button type="button" class="tag-chip-remove" onclick="removeTag(' + i + ')">{{ _('&#x2715;') }}</button>';
+    chip.innerHTML = tag + ' <button type="button" class="tag-chip-remove" onclick="removeTag(' + i + ')">&#x2715;</button>';
     wrapper.insertBefore(chip, input);
   });
   hidden.value = currentTags.join(',');
@@ -468,7 +468,7 @@ function addOsProfile(name='', type='ubuntu', isDefault=false) {
              style="width:16px;height:16px;accent-color:var(--accent-blue);">
       Default
     </label>
-    <button type="button" onclick="removeOsProfile(${idx})" class="btn btn-danger btn-sm" style="padding:0.4rem 0.6rem;">{{ _('&#x2715;') }}</button>`;
+    <button type="button" onclick="removeOsProfile(${idx})" class="btn btn-danger btn-sm" style="padding:0.4rem 0.6rem;">&#x2715;</button>`;
   c.appendChild(div);
   document.getElementById('osBody').classList.add('open');
   document.getElementById('osToggle').classList.add('open');

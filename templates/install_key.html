@@ -11,7 +11,7 @@
   {% if name is none and hosts is defined %}
   <div class="card">
     <div class="card-header">
-      <h3>{{ _('&#x1F511; Install SSH Key — Select Host') }}</h3>
+      <h3>&#x1F511; Install SSH Key — Select Host</h3>
     </div>
     <p>{{ _('Select a host to install the SSH public key for passwordless authentication.') }}</p>
     {% if hosts %}
@@ -25,23 +25,23 @@
     {% else %}
     <p class="text-muted">No hosts configured. <a href="/hosts">{{ _('Add a host first.') }}</a></p>
     {% endif %}
-    <a class="btn btn-ghost btn-sm" href="/hosts" style="margin-top:0.75rem;">{{ _('&#x2190; Back to Hosts') }}</a>
+    <a class="btn btn-ghost btn-sm" href="/hosts" style="margin-top:0.75rem;">&#x2190; Back to Hosts</a>
   </div>
   {% elif error %}
   <div class="card card-red">
     <div class="card-header">
-      <h3>{{ _('&#x274C; Installation Failed') }}</h3>
+      <h3>&#x274C; Installation Failed</h3>
     </div>
     <pre>{{ error }}</pre>
-    <a class="btn btn-ghost btn-sm" href="/hosts" style="margin-top:0.75rem;">{{ _('&#x2190; Back to Hosts') }}</a>
+    <a class="btn btn-ghost btn-sm" href="/hosts" style="margin-top:0.75rem;">&#x2190; Back to Hosts</a>
   </div>
   {% elif success %}
   <div class="card card-green">
     <div class="card-header">
-      <h3>{{ _('&#x2714; SSH Key Installed Successfully') }}</h3>
+      <h3>&#x2714; SSH Key Installed Successfully</h3>
     </div>
     <p>Public key installed into <code>~/.ssh/authorized_keys</code> on the remote host. Passwordless authentication is now available.</p>
-    <a class="btn btn-primary btn-sm" href="/hosts" style="margin-top:0.75rem;">{{ _('&#x2190; Back to Hosts') }}</a>
+    <a class="btn btn-primary btn-sm" href="/hosts" style="margin-top:0.75rem;">&#x2190; Back to Hosts</a>
   </div>
   {% else %}
   <div class="card">
@@ -57,8 +57,8 @@
         <p class="form-hint">{{ _('Used once to copy the SSH key. Not stored anywhere.') }}</p>
       </div>
       <div class="btn-group">
-        <button class="btn btn-primary" type="submit">{{ _('&#x1F511; Install Key') }}</button>
-        <a class="btn btn-ghost" href="/hosts">{{ _('&#x2190; Cancel') }}</a>
+        <button class="btn btn-primary" type="submit">&#x1F511; Install Key</button>
+        <a class="btn btn-ghost" href="/hosts">&#x2190; Cancel</a>
       </div>
     </form>
   </div>

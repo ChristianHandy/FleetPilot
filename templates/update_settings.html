@@ -12,7 +12,7 @@
   <div>
     <div class="card">
       <div class="card-header">
-        <h3>{{ _('&#x2699; Update Configuration') }}</h3>
+        <h3>&#x2699; Update Configuration</h3>
       </div>
       <form method="POST" action="/update_settings">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -56,12 +56,12 @@
 
         {% if settings.last_auto_update %}
         <div class="info-box" style="margin-top:1rem;">
-          <p><strong>{{ _('&#x1F552; Last Automatic Update:') }}</strong> {{ settings.last_auto_update }}</p>
+          <p><strong>&#x1F552; Last Automatic Update:</strong> {{ settings.last_auto_update }}</p>
         </div>
         {% endif %}
 
         <div class="btn-group" style="margin-top:1rem;">
-          <button type="submit" class="btn btn-primary">{{ _('&#x1F4BE; Save Settings') }}</button>
+          <button type="submit" class="btn btn-primary">&#x1F4BE; Save Settings</button>
           <a class="btn btn-ghost" href="/dashboard">{{ _('Cancel') }}</a>
         </div>
       </form>
@@ -70,12 +70,12 @@
     <!-- Update Controls -->
     <div class="card">
       <div class="card-header">
-        <h3>{{ _('&#x1F3AE; Update Controls') }}</h3>
+        <h3>&#x1F3AE; Update Controls</h3>
       </div>
       <p>{{ _('Manually trigger updates or navigate to host management.') }}</p>
       <div class="btn-group" style="margin-top:0.75rem;">
-        <a class="btn btn-primary" href="/dashboard">{{ _('&#x1F504; Update Dashboard') }}</a>
-        <a class="btn btn-success" href="/hosts">{{ _('&#x1F5A7; Manage Hosts') }}</a>
+        <a class="btn btn-primary" href="/dashboard">&#x1F504; Update Dashboard</a>
+        <a class="btn btn-success" href="/hosts">&#x1F5A7; Manage Hosts</a>
       </div>
     </div>
   </div>
@@ -83,7 +83,7 @@
   <!-- Right: Notes -->
   <div>
     <div class="card card-amber">
-      <h3 style="margin-bottom:0.75rem;">{{ _('&#x1F4DD; Important Notes') }}</h3>
+      <h3 style="margin-bottom:0.75rem;">&#x1F4DD; Important Notes</h3>
       <ul style="font-size:0.875rem; line-height:1.9;">
         <li><strong>{{ _('Roles:') }}</strong> Automatic updates require <em>operator</em> or <em>admin</em> role.</li>
         <li><strong>{{ _('Repo Update:') }}</strong> Updates packages while keeping configuration files unchanged.</li>
@@ -94,12 +94,12 @@
     </div>
 
     <div class="card">
-      <h3 style="margin-bottom:0.75rem;">{{ _('&#x1F517; Quick Links') }}</h3>
+      <h3 style="margin-bottom:0.75rem;">&#x1F517; Quick Links</h3>
       <div style="display:flex; flex-direction:column; gap:0.5rem;">
-        <a class="btn btn-ghost btn-sm" href="/dashboard">{{ _('&#x1F504; Update Dashboard') }}</a>
-        <a class="btn btn-ghost btn-sm" href="/hosts">{{ _('&#x1F5A7; Manage Hosts') }}</a>
-        <a class="btn btn-ghost btn-sm" href="/email_settings">{{ _('&#x2709; Email Config') }}</a>
-        <a class="btn btn-ghost btn-sm" href="/dashboard_version/check">{{ _('&#x1F50D; Check Dashboard Version') }}</a>
+        <a class="btn btn-ghost btn-sm" href="/dashboard">&#x1F504; Update Dashboard</a>
+        <a class="btn btn-ghost btn-sm" href="/hosts">&#x1F5A7; Manage Hosts</a>
+        <a class="btn btn-ghost btn-sm" href="/email_settings">&#x2709; Email Config</a>
+        <a class="btn btn-ghost btn-sm" href="/dashboard_version/check">&#x1F50D; Check Dashboard Version</a>
       </div>
     </div>
   </div>

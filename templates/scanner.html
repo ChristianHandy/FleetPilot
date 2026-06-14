@@ -5,7 +5,7 @@
 {% block page_title %}Network Scanner{% endblock %}
 
 {% block topbar_actions %}
-<a class="btn btn-secondary btn-sm" href="/hosts">{{ _('&#x1F5A7; Hosts') }}</a>
+<a class="btn btn-secondary btn-sm" href="/hosts">&#x1F5A7; Hosts</a>
 {% endblock %}
 
 {% block content %}
@@ -13,7 +13,7 @@
 <!-- Intro Card -->
 <div class="card" style="margin-bottom:1.25rem;">
   <div class="card-header">
-    <h3>{{ _('&#x1F50D; Discover Devices on Your Network') }}</h3>
+    <h3>&#x1F50D; Discover Devices on Your Network</h3>
     <span class="badge badge-blue">{{ _('Auto-Discovery') }}</span>
   </div>
   <p>{{ _('Scan a subnet to find reachable devices. FleetPilot pings each IP, checks for open SSH ports, and lets you add discovered devices as managed hosts in one click.') }}</p>
@@ -23,7 +23,7 @@
 <div class="scanner-card">
   <div class="scanner-input-row">
     <div class="form-group">
-      <label class="form-label">{{ _('&#x1F4E1; Network Prefix') }}</label>
+      <label class="form-label">&#x1F4E1; Network Prefix</label>
       <input type="text" id="networkPrefix" value="{{ default_prefix }}"
              placeholder="{{ _('e.g. 192.168.1') }}" style="font-family:monospace;">
       <div class="form-hint">Enter the first three octets of your subnet (e.g. 192.168.1)</div>
@@ -63,11 +63,11 @@
 <!-- Results -->
 <div id="scanResultsSection" style="display:none;">
   <div class="card-header" style="padding:0;margin-bottom:0.75rem;">
-    <h3>{{ _('&#x1F4CB; Scan Results') }}</h3>
+    <h3>&#x1F4CB; Scan Results</h3>
     <div style="display:flex;gap:0.5rem;align-items:center;">
       <span class="badge badge-green" id="foundCount">0 found</span>
       <span class="badge badge-blue" id="sshCount">0 SSH</span>
-      <button class="btn btn-ghost btn-sm" onclick="clearResults()">{{ _('&#x2715; Clear') }}</button>
+      <button class="btn btn-ghost btn-sm" onclick="clearResults()">&#x2715; Clear</button>
     </div>
   </div>
 
@@ -90,8 +90,8 @@ const MANAGED_HOSTS = {{ managed_host_ips | tojson }};
 <div class="modal-backdrop" id="quickAddModal">
   <div class="modal">
     <div class="modal-header">
-      <h3>{{ _('&#x2795; Quick Add Host') }}</h3>
-      <button class="modal-close" onclick="closeModal()" type="button">{{ _('&#x2715;') }}</button>
+      <h3>&#x2795; Quick Add Host</h3>
+      <button class="modal-close" onclick="closeModal()" type="button">&#x2715;</button>
     </div>
     <form id="quickAddForm" method="POST" action="/hosts/quick_add">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -149,7 +149,7 @@ const MANAGED_HOSTS = {{ managed_host_ips | tojson }};
         <input type="hidden" name="tags" id="qaTagsHidden">
       </div>
       <div class="btn-group" style="margin-top:1.25rem;">
-        <button class="btn btn-primary" type="submit">{{ _('&#x1F4BE; Add Host') }}</button>
+        <button class="btn btn-primary" type="submit">&#x1F4BE; Add Host</button>
         <button class="btn btn-ghost" type="button" onclick="closeModal()">{{ _('Cancel') }}</button>
       </div>
     </form>
@@ -297,8 +297,8 @@ function addResultCard(r, sshPort) {
       ${r.ssh ? `<span>&#x1F511; SSH port ${sshPort} open</span>` : ''}
     </div>
     <div class="scan-device-actions">
-      ${!isManaged && r.ssh ? `<button class="btn btn-primary btn-sm" onclick="openModal('${r.ip}','${r.mac||''}',${sshPort})">{{ _('&#x2795; Add Host') }}</button>` : ''}
-      ${isManaged ? '<span class="badge badge-green">{{ _('&#x2714; Already managed') }}</span>' : ''}
+      ${!isManaged && r.ssh ? `<button class="btn btn-primary btn-sm" onclick="openModal('${r.ip}','${r.mac||''}',${sshPort})">&#x2795; Add Host</button>` : ''}
+      ${isManaged ? '<span class="badge badge-green">&#x2714; Already managed</span>' : ''}
       ${!r.ssh && !isManaged ? '<span style="font-size:0.75rem;color:var(--text-muted);">{{ _('No SSH — ping only') }}</span>' : ''}
     </div>`;
   grid.appendChild(div);
