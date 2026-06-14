@@ -1207,17 +1207,38 @@ def _check_ssh_port(ip, port=22, timeout=1.5):
         return False
 
 def _ping_ip(ip, timeout=1):
-    """Fast ping check."""
+    """Check if a host is reachable.
+    Uses TCP socket probes on common ports (no ping binary required).
+    Falls back to ICMP ping via subprocess if available.
+    """
+    # TCP probe on common ports — works without ping binary and even through some firewalls
+    probe_ports = [22, 80, 443, 445, 8080, 3389, 8443, 5900]
+    for p in probe_ports:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(timeout)
+            if s.connect_ex((ip, p)) == 0:
+                s.close()
+                return True
+            s.close()
+        except Exception:
+            pass
+    # Fallback: ICMP ping via subprocess (may not be available in all environments)
     try:
         import platform
         flag = '-n' if platform.system().lower() == 'windows' else '-c'
-        result = subprocess.run(
-            ['ping', flag, '1', '-W', str(timeout), ip],
-            capture_output=True, timeout=timeout + 1
-        )
-        return result.returncode == 0
+        for ping_bin in ['ping', '/bin/ping', '/usr/bin/ping', '/usr/sbin/ping']:
+            try:
+                result = subprocess.run(
+                    [ping_bin, flag, '1', '-W', str(timeout), ip],
+                    capture_output=True, timeout=timeout + 2
+                )
+                return result.returncode == 0
+            except FileNotFoundError:
+                continue
     except Exception:
-        return False
+        pass
+    return False
 
 @app.route('/scanner')
 @login_required
