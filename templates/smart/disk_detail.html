@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% block title %}{{ disk.device }} SMART History — FleetPilot{% endblock %}
+{% block page_icon %}&#x1F4CA;{% endblock %}
+{% block page_title %}{{ disk.device }} — SMART History{% endblock %}
+
+{% block nav_extra %}
+  <a href="/smart" class="btn btn-ghost btn-sm">&#x2190; Back</a>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Disk Info ──────────────────────────────────────────────── -->
+<div class="card" style="margin-bottom:1.5rem">
+  <div class="card-header">
+    <h3>&#x1F4BE; {{ disk.model or disk.device }}</h3>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:1rem;padding:0.5rem 0">
+    <div><span class="text-muted">Device:</span> <code>{{ disk.device }}</code></div>
+    <div><span class="text-muted">Serial:</span> {{ disk.serial or "—" }}</div>
+    <div><span class="text-muted">Model:</span> {{ disk.model or "—" }}</div>
+    <div><span class="text-muted">Size:</span> {{ "%.1f"|format(disk.size_gb) if disk.size_gb else "—" }} GB</div>
+    <div><span class="text-muted">Source:</span> <span class="badge">{{ disk.source }}</span></div>
+    <div><span class="text-muted">First Seen:</span> {{ disk.first_seen }}</div>
+  </div>
+</div>
+
+<!-- ── Snapshot History ───────────────────────────────────────── -->
+{% if snapshots %}
+<div class="card" style="margin-bottom:1.5rem">
+  <div class="card-header">
+    <h3>&#x1F4C5; Health Snapshot History (last {{ snapshots|length }})</h3>
+  </div>
+  <div style="overflow-x:auto">
+  <table class="table">
+    <thead>
+      <tr><th>Time</th><th>Health</th><th>Status</th><th>Temp</th><th>POH</th><th>Reallocated</th><th>Pending</th><th>Uncorrectable</th></tr>
+    </thead>
+    <tbody>
+    {% for s in snapshots %}
+    <tr>
+      <td><small>{{ s.ts }}</small></td>
+      <td>
+        {% if s.health == "GOOD" %}<span class="badge badge-green">&#x2705; GOOD</span>
+        {% elif s.health == "WARNING" %}<span class="badge badge-yellow">&#x26A0; WARNING</span>
+        {% elif s.health == "CRITICAL" %}<span class="badge badge-red">&#x1F534; CRITICAL</span>
+        {% elif s.health == "FAILED" %}<span class="badge badge-red">&#x274C; FAILED</span>
+        {% else %}<span class="badge">{{ s.health or "?" }}</span>{% endif %}
+      </td>
+      <td>
+        {% if s.overall_status == "PASSED" %}<span class="badge badge-green">PASSED</span>
+        {% elif s.overall_status == "FAILED" %}<span class="badge badge-red">FAILED</span>
+        {% else %}<span class="badge">{{ s.overall_status or "?" }}</span>{% endif %}
+      </td>
+      <td>
+        {% if s.temp %}
+          {% if s.temp >= 55 %}<span style="color:var(--danger)">{{ s.temp }}°C</span>
+          {% elif s.temp >= 45 %}<span style="color:var(--warning)">{{ s.temp }}°C</span>
+          {% else %}{{ s.temp }}°C{% endif %}
+        {% else %}—{% endif %}
+      </td>
+      <td>{{ "{:,}".format(s.poh) if s.poh else "—" }}h</td>
+      <td>
+        {% if s.reallocated and s.reallocated > 0 %}<span style="color:var(--danger)">{{ s.reallocated }}</span>
+        {% else %}{{ s.reallocated or 0 }}{% endif %}
+      </td>
+      <td>
+        {% if s.pending and s.pending > 0 %}<span style="color:var(--danger)">{{ s.pending }}</span>
+        {% else %}{{ s.pending or 0 }}{% endif %}
+      </td>
+      <td>
+        {% if s.uncorrectable and s.uncorrectable > 0 %}<span style="color:var(--danger)">{{ s.uncorrectable }}</span>
+        {% else %}{{ s.uncorrectable or 0 }}{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── Attribute Trends ───────────────────────────────────────── -->
+{% if attr_trends %}
+<div class="card" style="margin-bottom:1.5rem">
+  <div class="card-header">
+    <h3>&#x1F4C8; SMART Attribute Trends</h3>
+    <small class="text-muted">Raw values over time — higher is not always better (depends on attribute)</small>
+  </div>
+
+  <!-- Temperature trend chart -->
+  {% if 194 in attr_trends or 190 in attr_trends %}
+  {% set temp_attr = attr_trends.get(194) or attr_trends.get(190) %}
+  <div style="padding:1rem">
+    <h4 style="margin:0 0 0.5rem">Temperature (°C)</h4>
+    <canvas id="chart-temp" height="80"></canvas>
+  </div>
+  {% endif %}
+
+  <!-- Critical attributes table -->
+  <div style="padding:1rem">
+    <h4 style="margin:0 0 0.5rem">Critical Attributes</h4>
+    <div style="overflow-x:auto">
+    <table class="table">
+      <thead>
+        <tr><th>ID</th><th>Name</th><th>Latest Raw</th><th>Trend</th></tr>
+      </thead>
+      <tbody>
+      {% set critical_ids = [5, 10, 184, 187, 188, 196, 197, 198, 201] %}
+      {% for attr_id in critical_ids %}
+      {% if attr_id in attr_trends %}
+      {% set attr = attr_trends[attr_id] %}
+      {% set latest = attr.data[0].raw if attr.data else 0 %}
+      <tr>
+        <td><code>{{ attr_id }}</code></td>
+        <td>{{ attr.name }}</td>
+        <td>
+          {% if latest > 0 %}<span style="color:var(--danger);font-weight:600">{{ latest }}</span>
+          {% else %}<span style="color:var(--success)">0</span>{% endif %}
+        </td>
+        <td>
+          {% if attr.data|length > 1 %}
+          {% set prev = attr.data[1].raw %}
+          {% if latest > prev %}<span style="color:var(--danger)">&#x2191; Rising</span>
+          {% elif latest < prev %}<span style="color:var(--success)">&#x2193; Falling</span>
+          {% else %}<span class="text-muted">&#x2192; Stable</span>{% endif %}
+          {% else %}<span class="text-muted">—</span>{% endif %}
+        </td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <!-- All attributes -->
+  <details style="padding:1rem">
+    <summary style="cursor:pointer;font-weight:600">All SMART Attributes ({{ attr_trends|length }})</summary>
+    <div style="overflow-x:auto;margin-top:0.5rem">
+    <table class="table">
+      <thead>
+        <tr><th>ID</th><th>Name</th><th>Latest Raw</th><th>Snapshots</th></tr>
+      </thead>
+      <tbody>
+      {% for attr_id, attr in attr_trends.items()|sort %}
+      <tr>
+        <td><code>{{ attr_id }}</code></td>
+        <td>{{ attr.name }}</td>
+        <td>{{ attr.data[0].raw if attr.data else "—" }}</td>
+        <td>{{ attr.data|length }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </details>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+{% if attr_trends %}
+{% set temp_attr = attr_trends.get(194) or attr_trends.get(190) %}
+{% if temp_attr %}
+const tempData = {{ temp_attr.data | tojson }};
+const labels = tempData.map(d => d.ts.substring(0,16)).reverse();
+const values = tempData.map(d => d.raw).reverse();
+const ctx = document.getElementById("chart-temp");
+if (ctx) {
+  new Chart(ctx, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [{
+        label: "Temperature (°C)",
+        data: values,
+        borderColor: "#6366f1",
+        backgroundColor: "rgba(99,102,241,0.1)",
+        tension: 0.3,
+        fill: true,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: {
+          min: 20, max: 70,
+          grid: { color: "rgba(255,255,255,0.05)" },
+          ticks: { color: "var(--text-muted)" }
+        },
+        x: {
+          ticks: { color: "var(--text-muted)", maxTicksLimit: 10 },
+          grid: { color: "rgba(255,255,255,0.05)" }
+        }
+      }
+    }
+  });
+}
+{% endif %}
+{% endif %}
+</script>
+{% endblock %}

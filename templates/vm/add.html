@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Add VM Endpoint — FleetPilot{% endblock %}
+{% block page_icon %}&#x2B;{% endblock %}
+{% block page_title %}Add VM Endpoint{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:640px;margin:0 auto">
+  <div class="card-header">
+    <h3>&#x1F5A5; New VM / Backup Endpoint</h3>
+  </div>
+  <form method="POST" action="/vm/add">
+    <div class="form-group">
+      <label class="form-label">Display Name *</label>
+      <input type="text" name="name" class="form-control" placeholder="e.g. Proxmox-Home" required>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Platform *</label>
+      <select name="platform" id="platform-select" class="form-control" onchange="updatePort()">
+        <option value="proxmox">Proxmox VE</option>
+        <option value="veeam">Veeam Backup &amp; Replication</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Host / IP *</label>
+      <input type="text" name="host" class="form-control" placeholder="192.168.1.10" required>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Port *</label>
+      <input type="number" name="port" id="port-input" class="form-control" value="8006" required>
+      <small class="text-muted">Proxmox default: 8006 &nbsp;|&nbsp; Veeam default: 9419</small>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Username *</label>
+      <input type="text" name="username" class="form-control" placeholder="root@pam  or  Administrator" required>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Password *</label>
+      <input type="password" name="password" class="form-control" required>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">
+        <input type="checkbox" name="verify_ssl" value="1"> Verify SSL Certificate
+      </label>
+      <small class="text-muted" style="display:block">Disable for self-signed certificates (common in home labs)</small>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Notes</label>
+      <textarea name="notes" class="form-control" rows="2" placeholder="Optional description"></textarea>
+    </div>
+
+    <div class="btn-group">
+      <button type="submit" class="btn btn-success">&#x1F4BE; Save Endpoint</button>
+      <a href="/vm" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+
+<!-- Platform-specific help -->
+<div class="card" style="max-width:640px;margin:1.5rem auto 0">
+  <div class="card-header"><h3>&#x2139; Connection Help</h3></div>
+  <div id="help-proxmox">
+    <strong>Proxmox VE</strong><br>
+    Use <code>root@pam</code> or a dedicated API user with <code>PVEAdmin</code> role.<br>
+    To create an API user: <em>Datacenter → Permissions → Users → Add</em><br>
+    URL pattern: <code>https://&lt;host&gt;:8006/api2/json</code>
+  </div>
+  <div id="help-veeam" style="display:none">
+    <strong>Veeam Backup &amp; Replication 12</strong><br>
+    Use the <code>Administrator</code> account or a dedicated service account.<br>
+    REST API must be enabled: <em>Main Menu → REST API</em><br>
+    URL pattern: <code>https://&lt;host&gt;:9419/api/v1</code>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const portMap = { proxmox: 8006, veeam: 9419 };
+const helpMap  = { proxmox: "help-proxmox", veeam: "help-veeam" };
+function updatePort() {
+  const p = document.getElementById("platform-select").value;
+  document.getElementById("port-input").value = portMap[p] || 443;
+  Object.values(helpMap).forEach(id => document.getElementById(id).style.display = "none");
+  if (helpMap[p]) document.getElementById(helpMap[p]).style.display = "";
+}
+</script>
+{% endblock %}

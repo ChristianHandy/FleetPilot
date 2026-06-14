@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}VM Controller — FleetPilot{% endblock %}
+{% block page_icon %}&#x1F5A5;{% endblock %}
+{% block page_title %}VM Controller{% endblock %}
+
+{% block nav_extra %}
+  {% if is_admin %}
+  <a class="btn btn-success btn-sm" href="/vm/add">&#x2B; Add Endpoint</a>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Stats Bar ─────────────────────────────────────────────── -->
+<div class="stats-grid" style="margin-bottom:1.5rem">
+  <div class="stat-card">
+    <div class="stat-value">{{ endpoints|length }}</div>
+    <div class="stat-label">Endpoints</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ endpoints|selectattr("platform","eq","proxmox")|list|length }}</div>
+    <div class="stat-label">Proxmox</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ endpoints|selectattr("platform","eq","veeam")|list|length }}</div>
+    <div class="stat-label">Veeam</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ events|length }}</div>
+    <div class="stat-label">Recent Events</div>
+  </div>
+</div>
+
+<!-- ── Endpoint Cards ─────────────────────────────────────────── -->
+{% if endpoints %}
+<div class="card" style="margin-bottom:1.5rem">
+  <div class="card-header">
+    <h3>&#x1F5A5; Registered Endpoints</h3>
+  </div>
+  <div style="overflow-x:auto">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Platform</th>
+        <th>Host</th>
+        <th>Port</th>
+        <th>User</th>
+        <th>SSL</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for ep in endpoints %}
+    <tr>
+      <td><strong>{{ ep.name }}</strong>
+        {% if ep.notes %}<br><small class="text-muted">{{ ep.notes }}</small>{% endif %}
+      </td>
+      <td>
+        {% if ep.platform == "proxmox" %}
+          <span class="badge badge-blue">&#x1F4BB; Proxmox VE</span>
+        {% elif ep.platform == "veeam" %}
+          <span class="badge badge-purple">&#x1F4BE; Veeam</span>
+        {% else %}
+          <span class="badge">{{ ep.platform }}</span>
+        {% endif %}
+      </td>
+      <td><code>{{ ep.host }}</code></td>
+      <td>{{ ep.port }}</td>
+      <td>{{ ep.username }}</td>
+      <td>{% if ep.verify_ssl %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge">No</span>{% endif %}</td>
+      <td>
+        <div class="btn-group">
+          <a href="/vm/{{ ep.id }}" class="btn btn-sm btn-primary">&#x1F50D; View</a>
+          <button class="btn btn-sm btn-secondary" onclick="testConn({{ ep.id }}, this)">&#x1F50C; Test</button>
+          {% if ep.platform == "proxmox" %}
+          <a href="/vm/{{ ep.id }}/disks" class="btn btn-sm btn-secondary">&#x1F4BE; Disks</a>
+          {% endif %}
+          {% if is_admin %}
+          <form method="POST" action="/vm/delete/{{ ep.id }}" style="display:inline"
+                onsubmit="return confirm('Delete endpoint {{ ep.name }}?')">
+            <button class="btn btn-sm btn-danger">&#x1F5D1;</button>
+          </form>
+          {% endif %}
+        </div>
+        <span id="test-result-{{ ep.id }}" style="margin-left:0.5rem;font-size:0.8rem"></span>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% else %}
+<div class="card card-blue" style="margin-bottom:1.5rem">
+  <div class="card-header"><h3>&#x1F4A1; No Endpoints Yet</h3></div>
+  <p>Add a Proxmox VE or Veeam Backup &amp; Replication server to get started.</p>
+  {% if is_admin %}
+  <a href="/vm/add" class="btn btn-success">&#x2B; Add First Endpoint</a>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- ── Recent Events ─────────────────────────────────────────── -->
+{% if events %}
+<div class="card">
+  <div class="card-header">
+    <h3>&#x1F4CB; Recent Events</h3>
+  </div>
+  <div style="overflow-x:auto">
+  <table class="table">
+    <thead>
+      <tr><th>Time</th><th>Endpoint</th><th>VM / Job</th><th>Action</th><th>Status</th><th>Message</th></tr>
+    </thead>
+    <tbody>
+    {% for ev in events %}
+    <tr>
+      <td><small>{{ ev.ts }}</small></td>
+      <td>{{ ev.endpoint_name or ev.endpoint_id }}</td>
+      <td>{{ ev.vm_name or ev.vm_id }}</td>
+      <td><code>{{ ev.action }}</code></td>
+      <td>
+        {% if ev.status == "ok" %}<span class="badge badge-green">OK</span>
+        {% else %}<span class="badge badge-red">{{ ev.status }}</span>{% endif %}
+      </td>
+      <td><small>{{ ev.message or "" }}</small></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function testConn(epId, btn) {
+  btn.disabled = true;
+  btn.textContent = "Testing…";
+  const span = document.getElementById("test-result-" + epId);
+  fetch("/vm/test/" + epId)
+    .then(r => r.json())
+    .then(d => {
+      span.textContent = d.ok ? "✅ " + d.message : "❌ " + d.message;
+      span.style.color = d.ok ? "var(--success)" : "var(--danger)";
+    })
+    .catch(e => { span.textContent = "❌ " + e; span.style.color = "var(--danger)"; })
+    .finally(() => { btn.disabled = false; btn.textContent = "🔌 Test"; });
+}
+</script>
+{% endblock %}

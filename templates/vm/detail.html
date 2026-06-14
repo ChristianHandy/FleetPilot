@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}{{ ep.name }} — VM Controller{% endblock %}
+{% block page_icon %}&#x1F5A5;{% endblock %}
+{% block page_title %}{{ ep.name }}{% endblock %}
+
+{% block nav_extra %}
+  <a href="/vm" class="btn btn-ghost btn-sm">&#x2190; Back</a>
+  {% if ep.platform == "proxmox" %}
+  <a href="/vm/{{ ep.id }}/disks" class="btn btn-secondary btn-sm">&#x1F4BE; Disks</a>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+
+{% if error %}
+<div class="card card-red" style="margin-bottom:1.5rem">
+  <div class="card-header"><h3>&#x26A0; Connection Error</h3></div>
+  <pre style="white-space:pre-wrap;color:var(--danger)">{{ error }}</pre>
+  <p class="text-muted">Check host, port, credentials and network connectivity.</p>
+</div>
+{% endif %}
+
+<!-- ── Proxmox: VM / Container List ──────────────────────────── -->
+{% if ep.platform == "proxmox" %}
+
+<!-- Node summary -->
+{% if nodes %}
+<div class="stats-grid" style="margin-bottom:1.5rem">
+  {% for node in nodes %}
+  <div class="stat-card">
+    <div class="stat-value" style="font-size:1.1rem">{{ node.node }}</div>
+    <div class="stat-label">
+      CPU: {{ "%.1f"|format(node.cpu * 100) }}% &nbsp;|&nbsp;
+      RAM: {{ "%.1f"|format(node.mem / node.maxmem * 100) if node.maxmem else "?" }}%
+    </div>
+    <div class="stat-label">
+      {% if node.status == "online" %}<span class="badge badge-green">online</span>
+      {% else %}<span class="badge badge-red">{{ node.status }}</span>{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-header">
+    <h3>&#x1F4BB; Virtual Machines &amp; Containers
+      <span class="badge badge-blue" style="margin-left:0.5rem">{{ vms|length }}</span>
+    </h3>
+  </div>
+  {% if vms %}
+  <div style="overflow-x:auto">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>VMID</th><th>Name</th><th>Type</th><th>Node</th>
+        <th>Status</th><th>CPU</th><th>RAM</th><th>Uptime</th>
+        {% if is_admin %}<th>Actions</th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+    {% for vm in vms|sort(attribute="vmid") %}
+    <tr id="vm-row-{{ vm.vmid }}">
+      <td><code>{{ vm.vmid }}</code></td>
+      <td><strong>{{ vm.name or "(no name)" }}</strong></td>
+      <td>
+        {% if vm.type == "qemu" %}<span class="badge badge-blue">VM</span>
+        {% else %}<span class="badge badge-purple">LXC</span>{% endif %}
+      </td>
+      <td>{{ vm.node }}</td>
+      <td id="status-{{ vm.vmid }}">
+        {% if vm.status == "running" %}<span class="badge badge-green">&#x25CF; running</span>
+        {% elif vm.status == "stopped" %}<span class="badge">&#x25A0; stopped</span>
+        {% elif vm.status == "paused" %}<span class="badge badge-yellow">&#x23F8; paused</span>
+        {% else %}<span class="badge">{{ vm.status }}</span>{% endif %}
+      </td>
+      <td>{{ "%.1f"|format(vm.cpu * 100) if vm.cpu else "—" }}%</td>
+      <td>{{ "%.0f"|format(vm.mem / 1048576) if vm.mem else "—" }} MB</td>
+      <td>{{ vm.uptime or "—" }}s</td>
+      {% if is_admin %}
+      <td>
+        <div class="btn-group">
+          {% if vm.status != "running" %}
+          <button class="btn btn-sm btn-success" onclick="vmAction({{ ep.id }},'{{ vm.node }}',{{ vm.vmid }},'start','{{ vm.type }}')">&#x25B6;</button>
+          {% endif %}
+          {% if vm.status == "running" %}
+          <button class="btn btn-sm btn-warning" onclick="vmAction({{ ep.id }},'{{ vm.node }}',{{ vm.vmid }},'shutdown','{{ vm.type }}')">&#x23F9;</button>
+          <button class="btn btn-sm btn-danger"  onclick="vmAction({{ ep.id }},'{{ vm.node }}',{{ vm.vmid }},'stop','{{ vm.type }}')">&#x26A1;</button>
+          <button class="btn btn-sm btn-secondary" onclick="vmAction({{ ep.id }},'{{ vm.node }}',{{ vm.vmid }},'reboot','{{ vm.type }}')">&#x1F504;</button>
+          {% endif %}
+        </div>
+      </td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="text-muted" style="padding:1rem">No VMs or containers found on this endpoint.</p>
+  {% endif %}
+</div>
+
+{% elif ep.platform == "veeam" %}
+
+<!-- ── Veeam: Backup Jobs ─────────────────────────────────────── -->
+<div class="card">
+  <div class="card-header">
+    <h3>&#x1F4BE; Backup Jobs
+      <span class="badge badge-purple" style="margin-left:0.5rem">{{ jobs|length }}</span>
+    </h3>
+  </div>
+  {% if jobs %}
+  <div style="overflow-x:auto">
+  <table class="table">
+    <thead>
+      <tr><th>Name</th><th>Type</th><th>Status</th><th>Last Run</th><th>Next Run</th>{% if is_admin %}<th>Actions</th>{% endif %}</tr>
+    </thead>
+    <tbody>
+    {% for job in jobs %}
+    {% set state = job.state or {} %}
+    <tr>
+      <td><strong>{{ job.name }}</strong></td>
+      <td>{{ job.type or "—" }}</td>
+      <td>
+        {% set s = state.get("status", job.get("lastResult","")) %}
+        {% if s in ("Success","success") %}<span class="badge badge-green">&#x2705; Success</span>
+        {% elif s in ("Running","running") %}<span class="badge badge-blue">&#x1F504; Running</span>
+        {% elif s in ("Warning","warning") %}<span class="badge badge-yellow">&#x26A0; Warning</span>
+        {% elif s in ("Failed","failed","Error","error") %}<span class="badge badge-red">&#x274C; Failed</span>
+        {% else %}<span class="badge">{{ s or "Unknown" }}</span>{% endif %}
+      </td>
+      <td><small>{{ state.get("lastRun", job.get("lastRun","—")) }}</small></td>
+      <td><small>{{ state.get("nextRun", job.get("nextRun","—")) }}</small></td>
+      {% if is_admin %}
+      <td>
+        <div class="btn-group">
+          <button class="btn btn-sm btn-success" onclick="veeamStartJob({{ ep.id }},'{{ job.id }}',this)">&#x25B6; Start</button>
+        </div>
+      </td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="text-muted" style="padding:1rem">No backup jobs found.</p>
+  {% endif %}
+</div>
+
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function vmAction(epId, node, vmid, action, rtype) {
+  if (!confirm(`${action.toUpperCase()} VM ${vmid}?`)) return;
+  const fd = new FormData();
+  fd.append("node", node); fd.append("vmid", vmid);
+  fd.append("action", action); fd.append("rtype", rtype);
+  fetch(`/vm/${epId}/action`, { method: "POST", body: fd })
+    .then(r => r.json())
+    .then(d => {
+      const msg = d.ok ? `✅ ${action} sent` : `❌ ${d.error || "Error"}`;
+      alert(msg);
+      if (d.ok) setTimeout(() => location.reload(), 2000);
+    })
+    .catch(e => alert("❌ " + e));
+}
+
+function veeamStartJob(epId, jobId, btn) {
+  if (!confirm("Start backup job?")) return;
+  btn.disabled = true;
+  fetch(`/vm/${epId}/veeam/job/${jobId}/start`, { method: "POST" })
+    .then(r => r.json())
+    .then(d => { alert(d.ok ? "✅ Job started" : "❌ " + (d.error || "Error")); })
+    .catch(e => alert("❌ " + e))
+    .finally(() => { btn.disabled = false; });
+}
+</script>
+{% endblock %}

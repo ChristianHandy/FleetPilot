@@ -12,6 +12,9 @@ import email_config
 import email_notifier
 from constants import is_localhost, LOCALHOST_IDENTIFIERS
 import arp_tracker
+import vm_controller
+import storage_controller
+import smart_manager
 
 # Load environment variables from .env file if python-dotenv is available
 try:
@@ -45,6 +48,10 @@ with app.app_context():
     if user_management.migrate_env_user_to_db():
         print(f"INFO: Migrated env-var user '{USERNAME}' to database.")
     disktool_core.init_db()
+    vm_controller.init_db()
+    storage_controller.init_db()
+    smart_manager.init_db()
+    smart_manager.start_polling()
 
 # Template function for HTML extensions
 @app.context_processor
@@ -1708,6 +1715,332 @@ def plugin_install_remote(plugin_id):
     except Exception as exc:
         flash(f"Install failed: {exc}", "error")
     return redirect("/plugins")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# VM CONTROLLER ROUTES
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/vm")
+@login_required
+def vm_index():
+    """VM Controller — overview of all endpoints."""
+    endpoints = vm_controller.list_endpoints()
+    events = vm_controller.get_events(limit=20)
+    return render_template("vm/index.html", endpoints=endpoints, events=events)
+
+
+@app.route("/vm/add", methods=["GET", "POST"])
+@login_required
+def vm_add():
+    """Add a new VM endpoint (Proxmox or Veeam)."""
+    if not current_user_has_role("admin"):
+        flash("Only administrators can add VM endpoints.", "error")
+        return redirect("/vm")
+    if request.method == "POST":
+        try:
+            vm_controller.add_endpoint(
+                name=request.form["name"],
+                platform=request.form["platform"],
+                host=request.form["host"],
+                port=int(request.form.get("port", 8006)),
+                username=request.form["username"],
+                password=request.form["password"],
+                verify_ssl=bool(request.form.get("verify_ssl")),
+                notes=request.form.get("notes", ""),
+            )
+            flash("VM endpoint added successfully.", "success")
+        except Exception as exc:
+            flash(f"Error: {exc}", "error")
+        return redirect("/vm")
+    return render_template("vm/add.html")
+
+
+@app.route("/vm/delete/<int:ep_id>", methods=["POST"])
+@login_required
+def vm_delete(ep_id):
+    if not current_user_has_role("admin"):
+        flash("Only administrators can delete VM endpoints.", "error")
+        return redirect("/vm")
+    vm_controller.delete_endpoint(ep_id)
+    flash("Endpoint deleted.", "success")
+    return redirect("/vm")
+
+
+@app.route("/vm/test/<int:ep_id>")
+@login_required
+def vm_test(ep_id):
+    result = vm_controller.test_connection(ep_id)
+    return json.dumps(result), 200, {"Content-Type": "application/json"}
+
+
+@app.route("/vm/<int:ep_id>")
+@login_required
+def vm_detail(ep_id):
+    """Show VMs / backup jobs for one endpoint."""
+    ep = vm_controller.list_endpoints()
+    ep = next((e for e in ep if e["id"] == ep_id), None)
+    if not ep:
+        flash("Endpoint not found.", "error")
+        return redirect("/vm")
+    vms = []
+    jobs = []
+    nodes = []
+    error = None
+    try:
+        if ep["platform"] == "proxmox":
+            client = vm_controller.connect(ep_id)
+            nodes = client.get_nodes()
+            vms = client.get_vms()
+        elif ep["platform"] == "veeam":
+            jobs = vm_controller.get_all_jobs(ep_id)
+    except Exception as exc:
+        error = str(exc)
+    return render_template("vm/detail.html",
+                           ep=ep, vms=vms, jobs=jobs, nodes=nodes, error=error)
+
+
+@app.route("/vm/<int:ep_id>/action", methods=["POST"])
+@login_required
+def vm_action(ep_id):
+    """Perform a power action on a Proxmox VM."""
+    if not current_user_has_role("admin"):
+        return json.dumps({"ok": False, "error": "Permission denied"}), 403, {"Content-Type": "application/json"}
+    node   = request.form.get("node", "")
+    vmid   = int(request.form.get("vmid", 0))
+    action = request.form.get("action", "")
+    rtype  = request.form.get("rtype", "qemu")
+    if action not in ("start", "stop", "shutdown", "reboot", "suspend", "resume"):
+        return json.dumps({"ok": False, "error": "Invalid action"}), 400, {"Content-Type": "application/json"}
+    result = vm_controller.vm_power_action(ep_id, node, vmid, action, rtype)
+    return json.dumps(result), 200, {"Content-Type": "application/json"}
+
+
+@app.route("/vm/<int:ep_id>/veeam/job/<job_id>/start", methods=["POST"])
+@login_required
+def veeam_start_job(ep_id, job_id):
+    if not current_user_has_role("admin"):
+        return json.dumps({"ok": False, "error": "Permission denied"}), 403, {"Content-Type": "application/json"}
+    try:
+        client = vm_controller.connect(ep_id)
+        result = client.start_job(job_id)
+        vm_controller.log_event(ep_id, job_id, job_id, "START_JOB",
+                                 "ok" if result.get("ok") else "error")
+        return json.dumps(result), 200, {"Content-Type": "application/json"}
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)}), 500, {"Content-Type": "application/json"}
+
+
+@app.route("/vm/<int:ep_id>/disks")
+@login_required
+def vm_disks(ep_id):
+    """Show physical disks on a Proxmox node."""
+    node = request.args.get("node", "")
+    disks = []
+    error = None
+    try:
+        disks = vm_controller.get_proxmox_disks(ep_id, node)
+        # Register disks in SMART manager
+        for d in disks:
+            dev = d.get("dev", d.get("devpath", "")).lstrip("/dev/")
+            if dev:
+                smart_manager.register_disk(
+                    source="proxmox",
+                    device=dev,
+                    serial=d.get("serial"),
+                    model=d.get("model"),
+                    size_gb=round(d.get("size", 0) / 1e9, 1) if d.get("size") else None,
+                    source_id=str(ep_id)
+                )
+    except Exception as exc:
+        error = str(exc)
+    return render_template("vm/disks.html", ep_id=ep_id, node=node, disks=disks, error=error)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STORAGE CONTROLLER ROUTES
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/storage")
+@login_required
+def storage_index():
+    """Storage Controller — overview of all NAS endpoints."""
+    endpoints = storage_controller.list_endpoints()
+    events = storage_controller.get_events(limit=20)
+    return render_template("storage/index.html", endpoints=endpoints, events=events)
+
+
+@app.route("/storage/add", methods=["GET", "POST"])
+@login_required
+def storage_add():
+    if not current_user_has_role("admin"):
+        flash("Only administrators can add storage endpoints.", "error")
+        return redirect("/storage")
+    if request.method == "POST":
+        try:
+            storage_controller.add_endpoint(
+                name=request.form["name"],
+                platform=request.form["platform"],
+                host=request.form["host"],
+                port=int(request.form.get("port", 443)),
+                api_key=request.form["api_key"],
+                verify_ssl=bool(request.form.get("verify_ssl")),
+                notes=request.form.get("notes", ""),
+            )
+            flash("Storage endpoint added successfully.", "success")
+        except Exception as exc:
+            flash(f"Error: {exc}", "error")
+        return redirect("/storage")
+    return render_template("storage/add.html")
+
+
+@app.route("/storage/delete/<int:ep_id>", methods=["POST"])
+@login_required
+def storage_delete(ep_id):
+    if not current_user_has_role("admin"):
+        flash("Only administrators can delete storage endpoints.", "error")
+        return redirect("/storage")
+    storage_controller.delete_endpoint(ep_id)
+    flash("Endpoint deleted.", "success")
+    return redirect("/storage")
+
+
+@app.route("/storage/test/<int:ep_id>")
+@login_required
+def storage_test(ep_id):
+    result = storage_controller.test_connection(ep_id)
+    return json.dumps(result), 200, {"Content-Type": "application/json"}
+
+
+@app.route("/storage/<int:ep_id>")
+@login_required
+def storage_detail(ep_id):
+    """Show full overview for one storage endpoint."""
+    overview = {}
+    error = None
+    try:
+        overview = storage_controller.get_storage_overview(ep_id)
+        # Register disks in SMART manager
+        for d in overview.get("disks", []):
+            smart_manager.register_disk(
+                source=overview.get("platform", "storage"),
+                device=d["name"],
+                serial=d.get("serial"),
+                model=d.get("model"),
+                size_gb=d.get("size_gb"),
+                source_id=str(ep_id)
+            )
+    except Exception as exc:
+        error = str(exc)
+        overview = {"error": error}
+    return render_template("storage/detail.html", ep_id=ep_id, overview=overview, error=error)
+
+
+@app.route("/storage/<int:ep_id>/poll", methods=["POST"])
+@login_required
+def storage_poll(ep_id):
+    """Manually trigger a disk health poll for a storage endpoint."""
+    if not current_user_has_role("admin"):
+        return json.dumps({"ok": False, "error": "Permission denied"}), 403, {"Content-Type": "application/json"}
+    try:
+        storage_controller.poll_and_log_disks(ep_id)
+        return json.dumps({"ok": True, "message": "Poll complete"}), 200, {"Content-Type": "application/json"}
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)}), 500, {"Content-Type": "application/json"}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SMART MANAGER / DISK HEALTH ROUTES
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/smart")
+@login_required
+def smart_dashboard():
+    """SMART Manager — unified disk health dashboard."""
+    disks = smart_manager.get_all_disks()
+    summary = smart_manager.get_health_summary()
+    alerts = smart_manager.get_active_alerts()
+    poll_cfg = smart_manager.get_poll_config()
+    return render_template("smart/dashboard.html",
+                           disks=disks, summary=summary,
+                           alerts=alerts, poll_cfg=poll_cfg)
+
+
+@app.route("/smart/poll", methods=["POST"])
+@login_required
+def smart_poll_now():
+    """Trigger an immediate SMART poll of all local disks."""
+    if not current_user_has_role("admin"):
+        flash("Only administrators can trigger SMART polls.", "error")
+        return redirect("/smart")
+    try:
+        results = smart_manager.collect_all_local_disks()
+        flash(f"SMART poll complete — {len(results)} disk(s) scanned.", "success")
+    except Exception as exc:
+        flash(f"Poll failed: {exc}", "error")
+    return redirect("/smart")
+
+
+@app.route("/smart/config", methods=["POST"])
+@login_required
+def smart_config():
+    """Update SMART polling configuration."""
+    if not current_user_has_role("admin"):
+        flash("Only administrators can change SMART config.", "error")
+        return redirect("/smart")
+    try:
+        interval = int(request.form.get("interval_minutes", 60))
+        enabled  = bool(request.form.get("enabled"))
+        smart_manager.set_poll_config(interval, enabled)
+        flash("SMART polling configuration updated.", "success")
+    except Exception as exc:
+        flash(f"Config error: {exc}", "error")
+    return redirect("/smart")
+
+
+@app.route("/smart/disk/<int:disk_id>")
+@login_required
+def smart_disk_detail(disk_id):
+    """Detailed SMART history and attribute trends for one disk."""
+    disk = smart_manager.get_disk_by_id(disk_id)
+    if not disk:
+        flash("Disk not found.", "error")
+        return redirect("/smart")
+    snapshots = smart_manager.get_disk_snapshots(disk_id, limit=30)
+    attributes = smart_manager.get_disk_attributes(disk_id, limit=200)
+    # Build attribute trend data for charts
+    attr_trends = {}
+    for a in attributes:
+        aid = a["attr_id"]
+        if aid not in attr_trends:
+            attr_trends[aid] = {"name": a["attr_name"], "data": []}
+        attr_trends[aid]["data"].append({"ts": a["ts"], "raw": a["raw_value"]})
+    return render_template("smart/disk_detail.html",
+                           disk=disk, snapshots=snapshots,
+                           attr_trends=attr_trends)
+
+
+@app.route("/smart/alert/<int:alert_id>/ack", methods=["POST"])
+@login_required
+def smart_ack_alert(alert_id):
+    smart_manager.acknowledge_alert(alert_id)
+    flash("Alert acknowledged.", "success")
+    return redirect("/smart")
+
+
+@app.route("/api/smart/summary")
+@login_required
+def api_smart_summary():
+    """JSON API: disk health summary for widgets."""
+    return json.dumps(smart_manager.get_health_summary()), 200, {"Content-Type": "application/json"}
+
+
+@app.route("/api/smart/disks")
+@login_required
+def api_smart_disks():
+    """JSON API: full disk list with latest health status."""
+    disks = smart_manager.get_all_disks()
+    return json.dumps(disks, default=str), 200, {"Content-Type": "application/json"}
 
 
 if __name__ == "__main__":

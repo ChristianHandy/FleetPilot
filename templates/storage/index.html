@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}Storage Controller — FleetPilot{% endblock %}
+{% block page_icon %}&#x1F5C4;{% endblock %}
+{% block page_title %}Storage Controller{% endblock %}
+
+{% block nav_extra %}
+  {% if is_admin %}
+  <a class="btn btn-success btn-sm" href="/storage/add">&#x2B; Add Endpoint</a>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Stats ─────────────────────────────────────────────────── -->
+<div class="stats-grid" style="margin-bottom:1.5rem">
+  <div class="stat-card">
+    <div class="stat-value">{{ endpoints|length }}</div>
+    <div class="stat-label">Endpoints</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ endpoints|selectattr("platform","eq","truenas")|list|length }}</div>
+    <div class="stat-label">TrueNAS</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ endpoints|selectattr("platform","eq","unraid")|list|length }}</div>
+    <div class="stat-label">Unraid</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ events|length }}</div>
+    <div class="stat-label">Recent Events</div>
+  </div>
+</div>
+
+<!-- ── Endpoint Table ─────────────────────────────────────────── -->
+{% if endpoints %}
+<div class="card" style="margin-bottom:1.5rem">
+  <div class="card-header">
+    <h3>&#x1F5C4; Registered NAS Endpoints</h3>
+  </div>
+  <div style="overflow-x:auto">
+  <table class="table">
+    <thead>
+      <tr><th>Name</th><th>Platform</th><th>Host</th><th>Port</th><th>SSL</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+    {% for ep in endpoints %}
+    <tr>
+      <td><strong>{{ ep.name }}</strong>
+        {% if ep.notes %}<br><small class="text-muted">{{ ep.notes }}</small>{% endif %}
+      </td>
+      <td>
+        {% if ep.platform == "truenas" %}
+          <span class="badge badge-blue">&#x1F30A; TrueNAS</span>
+        {% elif ep.platform == "unraid" %}
+          <span class="badge badge-orange" style="background:rgba(251,146,60,0.15);color:#fb923c">&#x1F40B; Unraid</span>
+        {% else %}
+          <span class="badge">{{ ep.platform }}</span>
+        {% endif %}
+      </td>
+      <td><code>{{ ep.host }}</code></td>
+      <td>{{ ep.port }}</td>
+      <td>{% if ep.verify_ssl %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge">No</span>{% endif %}</td>
+      <td>
+        <div class="btn-group">
+          <a href="/storage/{{ ep.id }}" class="btn btn-sm btn-primary">&#x1F50D; View</a>
+          <button class="btn btn-sm btn-secondary" onclick="testConn({{ ep.id }}, this)">&#x1F50C; Test</button>
+          {% if is_admin %}
+          <form method="POST" action="/storage/{{ ep.id }}/poll" style="display:inline">
+            <button class="btn btn-sm btn-secondary">&#x1F504; Poll</button>
+          </form>
+          <form method="POST" action="/storage/delete/{{ ep.id }}" style="display:inline"
+                onsubmit="return confirm('Delete endpoint {{ ep.name }}?')">
+            <button class="btn btn-sm btn-danger">&#x1F5D1;</button>
+          </form>
+          {% endif %}
+        </div>
+        <span id="test-result-{{ ep.id }}" style="margin-left:0.5rem;font-size:0.8rem"></span>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% else %}
+<div class="card card-blue" style="margin-bottom:1.5rem">
+  <div class="card-header"><h3>&#x1F4A1; No Storage Endpoints Yet</h3></div>
+  <p>Add a TrueNAS SCALE/CORE or Unraid server to monitor pools, disks, and shares.</p>
+  {% if is_admin %}
+  <a href="/storage/add" class="btn btn-success">&#x2B; Add First Endpoint</a>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- ── Recent Events ─────────────────────────────────────────── -->
+{% if events %}
+<div class="card">
+  <div class="card-header"><h3>&#x1F4CB; Recent Events</h3></div>
+  <div style="overflow-x:auto">
+  <table class="table">
+    <thead>
+      <tr><th>Time</th><th>Endpoint</th><th>Resource</th><th>Action</th><th>Status</th><th>Message</th></tr>
+    </thead>
+    <tbody>
+    {% for ev in events %}
+    <tr>
+      <td><small>{{ ev.ts }}</small></td>
+      <td>{{ ev.endpoint_name or ev.endpoint_id }}</td>
+      <td>{{ ev.resource }}</td>
+      <td><code>{{ ev.action }}</code></td>
+      <td>
+        {% if ev.status == "ok" %}<span class="badge badge-green">OK</span>
+        {% else %}<span class="badge badge-red">{{ ev.status }}</span>{% endif %}
+      </td>
+      <td><small>{{ ev.message or "" }}</small></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function testConn(epId, btn) {
+  btn.disabled = true; btn.textContent = "Testing…";
+  const span = document.getElementById("test-result-" + epId);
+  fetch("/storage/test/" + epId)
+    .then(r => r.json())
+    .then(d => {
+      span.textContent = d.ok ? "✅ " + d.message : "❌ " + d.message;
+      span.style.color = d.ok ? "var(--success)" : "var(--danger)";
+    })
+    .catch(e => { span.textContent = "❌ " + e; span.style.color = "var(--danger)"; })
+    .finally(() => { btn.disabled = false; btn.textContent = "🔌 Test"; });
+}
+</script>
+{% endblock %}

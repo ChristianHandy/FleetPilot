@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block title %}SMART Dashboard — FleetPilot{% endblock %}
+{% block page_icon %}&#x1F4CA;{% endblock %}
+{% block page_title %}SMART Disk Health{% endblock %}
+
+{% block nav_extra %}
+  {% if is_admin %}
+  <form method="POST" action="/smart/poll" style="display:inline">
+    <button class="btn btn-success btn-sm">&#x1F504; Poll Now</button>
+  </form>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Health Summary ─────────────────────────────────────────── -->
+<div class="stats-grid" style="margin-bottom:1.5rem">
+  <div class="stat-card">
+    <div class="stat-value">{{ summary.total }}</div>
+    <div class="stat-label">Total Disks</div>
+  </div>
+  <div class="stat-card" style="border-left:3px solid var(--success)">
+    <div class="stat-value" style="color:var(--success)">{{ summary.counts.GOOD }}</div>
+    <div class="stat-label">Good</div>
+  </div>
+  <div class="stat-card" style="border-left:3px solid var(--warning)">
+    <div class="stat-value" style="color:var(--warning)">{{ summary.counts.WARNING }}</div>
+    <div class="stat-label">Warning</div>
+  </div>
+  <div class="stat-card" style="border-left:3px solid var(--danger)">
+    <div class="stat-value" style="color:var(--danger)">{{ (summary.counts.CRITICAL or 0) + (summary.counts.FAILED or 0) }}</div>
+    <div class="stat-label">Critical / Failed</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ summary.counts.UNKNOWN }}</div>
+    <div class="stat-label">Unknown</div>
+  </div>
+  <div class="stat-card" style="border-left:3px solid var(--danger)">
+    <div class="stat-value" style="color:var(--danger)">{{ summary.active_alerts }}</div>
+    <div class="stat-label">Active Alerts</div>
+  </div>
+</div>
+
+<!-- ── Active Alerts ─────────────────────────────────────────── -->
+{% if alerts %}
+<div class="card card-red" style="margin-bottom:1.5rem">
+  <div class="card-header">
+    <h3>&#x1F6A8; Active Disk Alerts ({{ alerts|length }})</h3>
+  </div>
+  <div style="overflow-x:auto">
+  <table class="table">
+    <thead>
+      <tr><th>Disk</th><th>Model</th><th>Source</th><th>Level</th><th>Message</th><th>Time</th><th>Action</th></tr>
+    </thead>
+    <tbody>
+    {% for a in alerts %}
+    <tr>
+      <td><code>{{ a.device }}</code></td>
+      <td>{{ a.model or "—" }}</td>
+      <td><span class="badge">{{ a.source }}</span></td>
+      <td>
+        {% if a.level == "FAILED" %}<span class="badge badge-red">&#x274C; FAILED</span>
+        {% elif a.level == "CRITICAL" %}<span class="badge badge-red">&#x1F534; CRITICAL</span>
+        {% else %}<span class="badge badge-yellow">&#x26A0; WARNING</span>{% endif %}
+      </td>
+      <td>{{ a.message }}</td>
+      <td><small>{{ a.ts }}</small></td>
+      <td>
+        {% if is_admin %}
+        <form method="POST" action="/smart/alert/{{ a.id }}/ack" style="display:inline">
+          <button class="btn btn-sm btn-ghost">&#x2713; Ack</button>
+        </form>
+        {% endif %}
+        <a href="/smart/disk/{{ a.disk_id }}" class="btn btn-sm btn-secondary">&#x1F4CA; Detail</a>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── Disk Registry ──────────────────────────────────────────── -->
+<div class="card" style="margin-bottom:1.5rem">
+  <div class="card-header">
+    <h3>&#x1F4BE; All Registered Disks</h3>
+    <small class="text-muted">
+      Sources: local Linux disks + Proxmox nodes + TrueNAS + Unraid
+    </small>
+  </div>
+  {% if disks %}
+  <div style="overflow-x:auto">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Device</th><th>Model</th><th>Serial</th><th>Size</th>
+        <th>Source</th><th>Health</th><th>Temp</th><th>POH</th>
+        <th>Last SMART</th><th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for d in disks %}
+    <tr>
+      <td><code>{{ d.device }}</code></td>
+      <td>{{ d.model or "—" }}</td>
+      <td><small>{{ d.serial or "—" }}</small></td>
+      <td>{{ "%.1f"|format(d.size_gb) if d.size_gb else "—" }} GB</td>
+      <td>
+        {% if d.source == "local" %}<span class="badge">&#x1F4BB; local</span>
+        {% elif d.source == "proxmox" %}<span class="badge badge-blue">Proxmox</span>
+        {% elif d.source == "truenas" %}<span class="badge badge-blue">TrueNAS</span>
+        {% elif d.source == "unraid" %}<span class="badge" style="background:rgba(251,146,60,0.15);color:#fb923c">Unraid</span>
+        {% else %}<span class="badge">{{ d.source }}</span>{% endif %}
+      </td>
+      <td>
+        {% set h = d.health %}
+        {% if h == "GOOD" %}<span class="badge badge-green">&#x2705; GOOD</span>
+        {% elif h == "WARNING" %}<span class="badge badge-yellow">&#x26A0; WARNING</span>
+        {% elif h == "CRITICAL" %}<span class="badge badge-red">&#x1F534; CRITICAL</span>
+        {% elif h == "FAILED" %}<span class="badge badge-red">&#x274C; FAILED</span>
+        {% else %}<span class="badge">{{ h or "?" }}</span>{% endif %}
+      </td>
+      <td>
+        {% if d.temp %}
+          {% if d.temp >= 55 %}<span style="color:var(--danger)">&#x1F525; {{ d.temp }}°C</span>
+          {% elif d.temp >= 45 %}<span style="color:var(--warning)">{{ d.temp }}°C</span>
+          {% else %}{{ d.temp }}°C{% endif %}
+        {% else %}—{% endif %}
+      </td>
+      <td>
+        {% if d.poh %}
+          {% if d.poh >= 50000 %}<span style="color:var(--warning)">{{ "{:,}".format(d.poh) }}h</span>
+          {% else %}{{ "{:,}".format(d.poh) }}h{% endif %}
+        {% else %}—{% endif %}
+      </td>
+      <td><small>{{ d.last_smart or "Never" }}</small></td>
+      <td>
+        <a href="/smart/disk/{{ d.id }}" class="btn btn-sm btn-secondary">&#x1F4CA; History</a>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <div style="padding:2rem;text-align:center;color:var(--text-muted)">
+    <div style="font-size:3rem;margin-bottom:1rem">&#x1F4BE;</div>
+    <p>No disks registered yet.</p>
+    <p>Click <strong>Poll Now</strong> to scan local disks, or add a Proxmox/TrueNAS/Unraid endpoint.</p>
+    <div class="btn-group" style="justify-content:center">
+      {% if is_admin %}
+      <form method="POST" action="/smart/poll">
+        <button class="btn btn-success">&#x1F504; Poll Local Disks</button>
+      </form>
+      {% endif %}
+      <a href="/vm" class="btn btn-secondary">&#x1F5A5; VM Controller</a>
+      <a href="/storage" class="btn btn-secondary">&#x1F5C4; Storage Controller</a>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- ── Polling Config ─────────────────────────────────────────── -->
+{% if is_admin %}
+<div class="card">
+  <div class="card-header"><h3>&#x23F0; Polling Configuration</h3></div>
+  <form method="POST" action="/smart/config">
+    <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;padding:0 0 0.5rem">
+      <div class="form-group" style="margin:0">
+        <label class="form-label">Interval (minutes)</label>
+        <input type="number" name="interval_minutes" class="form-control"
+               value="{{ poll_cfg.interval_minutes }}" min="5" max="1440" style="width:120px">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label class="form-label">
+          <input type="checkbox" name="enabled" value="1"
+                 {% if poll_cfg.enabled %}checked{% endif %}> Auto-polling enabled
+        </label>
+      </div>
+      <button type="submit" class="btn btn-primary">&#x1F4BE; Save</button>
+    </div>
+    <small class="text-muted" style="padding:0 0 0.5rem;display:block">
+      Last poll: {{ poll_cfg.last_poll or "Never" }}
+    </small>
+  </form>
+</div>
+{% endif %}
+
+{% endblock %}

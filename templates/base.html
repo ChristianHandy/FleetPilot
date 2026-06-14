@@ -50,6 +50,17 @@
         <span class="sidebar-icon">&#x1F4BE;</span> {{ _('Disk Tools') }}
       </a>
 
+      <span class="sidebar-section-label">Infrastructure</span>
+      <a class="sidebar-link {% if request.path.startswith('/vm') %}active{% endif %}" href="/vm">
+        <span class="sidebar-icon">&#x1F5A5;</span> VM Controller
+      </a>
+      <a class="sidebar-link {% if request.path.startswith('/storage') %}active{% endif %}" href="/storage">
+        <span class="sidebar-icon">&#x1F5C4;</span> Storage Controller
+      </a>
+      <a class="sidebar-link {% if request.path.startswith('/smart') %}active{% endif %}" href="/smart">
+        <span class="sidebar-icon">&#x1F4CA;</span> SMART Dashboard
+      </a>
+
       <span class="sidebar-section-label">{{ _('Settings') }}</span>
       {% if is_admin is defined and is_admin %}
       <a class="sidebar-link {% if request.path.startswith('/server_update') %}active{% endif %}" href="/server_update">

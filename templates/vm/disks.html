@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Proxmox Disks — FleetPilot{% endblock %}
+{% block page_icon %}&#x1F4BE;{% endblock %}
+{% block page_title %}Proxmox Node Disks{% endblock %}
+
+{% block nav_extra %}
+  <a href="/vm/{{ ep_id }}" class="btn btn-ghost btn-sm">&#x2190; Back</a>
+  <a href="/smart" class="btn btn-secondary btn-sm">&#x1F4CA; SMART Dashboard</a>
+{% endblock %}
+
+{% block content %}
+
+{% if error %}
+<div class="card card-red" style="margin-bottom:1.5rem">
+  <div class="card-header"><h3>&#x26A0; Error</h3></div>
+  <pre style="white-space:pre-wrap;color:var(--danger)">{{ error }}</pre>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-header">
+    <h3>&#x1F4BE; Physical Disks on Node <code>{{ node }}</code></h3>
+    <small class="text-muted">Disks are automatically registered in the SMART Manager</small>
+  </div>
+  {% if disks %}
+  <div style="overflow-x:auto">
+  <table class="table">
+    <thead>
+      <tr><th>Device</th><th>Model</th><th>Serial</th><th>Size</th><th>Type</th><th>Health</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+    {% for d in disks %}
+    <tr>
+      <td><code>{{ d.dev or d.devpath or "?" }}</code></td>
+      <td>{{ d.model or "—" }}</td>
+      <td><small>{{ d.serial or "—" }}</small></td>
+      <td>{{ "%.1f"|format(d.size / 1e9) if d.size else "—" }} GB</td>
+      <td>
+        {% if d.type == "ssd" or d.rpm == 0 %}<span class="badge badge-blue">SSD</span>
+        {% elif d.type == "nvme" %}<span class="badge badge-purple">NVMe</span>
+        {% else %}<span class="badge">HDD</span>{% endif %}
+      </td>
+      <td>
+        {% if d.health == "PASSED" %}<span class="badge badge-green">&#x2705; PASSED</span>
+        {% elif d.health == "FAILED" %}<span class="badge badge-red">&#x274C; FAILED</span>
+        {% else %}<span class="badge">{{ d.health or "?" }}</span>{% endif %}
+      </td>
+      <td>
+        <a href="/smart" class="btn btn-sm btn-secondary">&#x1F4CA; SMART</a>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="text-muted" style="padding:1rem">No disks found. Make sure the Proxmox node is online and the user has sufficient permissions.</p>
+  {% endif %}
+</div>
+
+{% endblock %}
