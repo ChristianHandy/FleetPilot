@@ -2115,24 +2115,91 @@ def smart_dashboard():
     summary = smart_manager.get_health_summary()
     alerts = smart_manager.get_active_alerts()
     poll_cfg = smart_manager.get_poll_config()
+    hosts = load_hosts()
     return render_template("smart/dashboard.html",
                            disks=disks, summary=summary,
-                           alerts=alerts, poll_cfg=poll_cfg)
+                           alerts=alerts, poll_cfg=poll_cfg,
+                           hosts=hosts)
 
 
 @app.route("/smart/poll", methods=["POST"])
 @login_required
 def smart_poll_now():
-    """Trigger an immediate SMART poll of all local disks."""
+    """Trigger an immediate SMART poll of ALL sources (local + SSH hosts + Proxmox + Storage)."""
     if not current_user_has_role("admin"):
         flash("Only administrators can trigger SMART polls.", "error")
         return redirect("/smart")
+    total = 0
+    errors = []
     try:
-        results = smart_manager.collect_all_local_disks()
-        flash(f"SMART poll complete — {len(results)} disk(s) scanned.", "success")
+        # 1. Local disks
+        local = smart_manager.collect_all_local_disks()
+        total += len(local)
     except Exception as exc:
-        flash(f"Poll failed: {exc}", "error")
+        errors.append(f"Local: {exc}")
+    try:
+        # 2. SSH-configured hosts
+        ssh_disks = smart_manager.collect_all_ssh_hosts()
+        total += len(ssh_disks)
+    except Exception as exc:
+        errors.append(f"SSH hosts: {exc}")
+    try:
+        # 3. Proxmox endpoints
+        for ep in vm_controller.list_endpoints():
+            if ep.get("platform") == "proxmox" and ep.get("enabled", 1):
+                try:
+                    client = vm_controller.connect(ep["id"])
+                    for node in client.get_nodes():
+                        smart_manager.collect_proxmox_disks(ep["id"], node["node"])
+                except Exception as exc:
+                    errors.append(f"Proxmox {ep['name']}: {exc}")
+    except Exception as exc:
+        errors.append(f"Proxmox: {exc}")
+    try:
+        # 4. Storage endpoints
+        for ep in storage_controller.list_endpoints():
+            if ep.get("enabled", 1):
+                try:
+                    smart_manager.collect_remote_storage_disks(ep["id"])
+                except Exception as exc:
+                    errors.append(f"Storage {ep['name']}: {exc}")
+    except Exception as exc:
+        errors.append(f"Storage: {exc}")
+
+    all_disks = smart_manager.get_all_disks()
+    msg = f"Full SMART import complete — {len(all_disks)} disk(s) in registry."
+    if errors:
+        msg += f" Warnings: {'; '.join(errors[:3])}"
+    flash(msg, "success" if not errors else "warning")
     return redirect("/smart")
+
+
+@app.route("/smart/import_host/<host_name>", methods=["POST"])
+@login_required
+def smart_import_host(host_name):
+    """Import disks from a single SSH-configured host into the SMART registry."""
+    if not current_user_has_role("admin"):
+        return json.dumps({"ok": False, "error": "Permission denied"}), 403, {"Content-Type": "application/json"}
+    hosts = load_hosts()
+    if host_name not in hosts:
+        return json.dumps({"ok": False, "error": "Host not found"}), 404, {"Content-Type": "application/json"}
+    h = hosts[host_name]
+    ip = h.get("host", "")
+    user = h.get("user", "root")
+    port = int(h.get("port", 22))
+    key_path = h.get("ssh_key") or None
+    if ip in ("localhost", "127.0.0.1", "::1", ""):
+        # Localhost: use local collection
+        results = smart_manager.collect_all_local_disks()
+    else:
+        results = smart_manager.collect_ssh_host_disks(
+            host_name=host_name, host_ip=ip, user=user,
+            port=port, key_path=key_path
+        )
+    return json.dumps({"ok": True, "imported": len(results),
+                       "disks": [{"device": r["device"], "health": r["health"],
+                                   "model": r.get("model"), "temp": r.get("temp")} for r in results]}), \
+           200, {"Content-Type": "application/json"}
 
 
 @app.route("/smart/config", methods=["POST"])

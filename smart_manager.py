@@ -418,6 +418,135 @@ def _check_and_alert(disk_id: int, health: str, parsed: Dict):
         )
 
 
+# ── SSH-Host disk import ─────────────────────────────────────────────────────
+
+def collect_ssh_host_disks(host_name: str, host_ip: str, user: str,
+                           port: int = 22, password: str = None,
+                           key_path: str = None) -> List[Dict]:
+    """
+    Connect to a remote Linux host via SSH, run lsblk + smartctl,
+    and import all disks into the SMART registry.
+    Returns list of imported disk dicts.
+    """
+    try:
+        import paramiko
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        connect_kwargs = dict(hostname=host_ip, username=user, port=port, timeout=10)
+        if key_path and Path(key_path).exists():
+            connect_kwargs["key_filename"] = key_path
+        elif password:
+            connect_kwargs["password"] = password
+        else:
+            # Try default key
+            default_key = Path.home() / ".ssh" / "id_rsa"
+            if default_key.exists():
+                connect_kwargs["key_filename"] = str(default_key)
+        ssh.connect(**connect_kwargs)
+    except Exception as exc:
+        logger.warning("[smart_manager] SSH connect failed for %s (%s): %s", host_name, host_ip, exc)
+        return []
+
+    results = []
+    try:
+        # Discover disks via lsblk
+        _, stdout, _ = ssh.exec_command("lsblk -J -d -o NAME,SIZE,MODEL,TYPE 2>/dev/null", timeout=10)
+        raw = stdout.read().decode(errors="replace")
+        try:
+            devices = [d["name"] for d in json.loads(raw).get("blockdevices", [])
+                       if d.get("type") == "disk"]
+        except Exception:
+            devices = []
+
+        for dev in devices:
+            try:
+                # Get SMART info
+                _, so, _ = ssh.exec_command(f"sudo smartctl -a /dev/{dev} 2>/dev/null", timeout=20)
+                smart_out = so.read().decode(errors="replace")
+                _, si, _ = ssh.exec_command(f"sudo smartctl -i /dev/{dev} 2>/dev/null", timeout=10)
+                info_out = si.read().decode(errors="replace")
+
+                serial, model, size_gb = None, None, None
+                for line in info_out.splitlines():
+                    if "Serial Number" in line:
+                        serial = line.split(":", 1)[1].strip()
+                    elif "Device Model" in line or "Model Number" in line:
+                        model = line.split(":", 1)[1].strip()
+                    elif "User Capacity" in line:
+                        m = re.search(r"([\d,]+)\s+bytes", line)
+                        if m:
+                            size_gb = round(int(m.group(1).replace(",", "")) / 1e9, 1)
+
+                # Use host_name as source_id so we know which host this disk belongs to
+                disk_id = register_disk(
+                    source="ssh_host",
+                    device=f"{host_name}:{dev}",
+                    serial=serial,
+                    model=model,
+                    size_gb=size_gb,
+                    source_id=host_name
+                )
+
+                parsed = parse_smartctl_output(smart_out)
+                health = classify_health(parsed)
+                snapshot_id = _save_snapshot(disk_id, parsed, health)
+                _save_attributes(snapshot_id, disk_id, parsed["attributes"])
+                _check_and_alert(disk_id, health, parsed)
+
+                results.append({
+                    "disk_id": disk_id,
+                    "host": host_name,
+                    "device": dev,
+                    "serial": serial,
+                    "model": model,
+                    "health": health,
+                    "temp": parsed["temp"],
+                    "poh": parsed["poh"],
+                })
+            except Exception as exc:
+                logger.warning("[smart_manager] SSH SMART failed for %s:/dev/%s: %s", host_name, dev, exc)
+    finally:
+        ssh.close()
+
+    logger.info("[smart_manager] SSH import: %d disk(s) from %s (%s)",
+                len(results), host_name, host_ip)
+    return results
+
+
+def collect_all_ssh_hosts() -> List[Dict]:
+    """
+    Import disks from all configured SSH hosts in hosts.json.
+    Skips localhost and hosts without SSH key or password.
+    """
+    results = []
+    try:
+        import json as _json
+        hosts_file = Path(__file__).parent / "hosts.json"
+        if not hosts_file.exists():
+            return results
+        with open(hosts_file) as f:
+            hosts = _json.load(f)
+        for name, h in hosts.items():
+            ip = h.get("host", "")
+            user = h.get("user", "root")
+            port = int(h.get("port", 22))
+            # Skip localhost
+            if ip in ("localhost", "127.0.0.1", "::1", ""):
+                continue
+            key_path = h.get("ssh_key") or str(Path.home() / ".ssh" / "id_rsa")
+            try:
+                r = collect_ssh_host_disks(
+                    host_name=name, host_ip=ip, user=user,
+                    port=port, key_path=key_path
+                )
+                results.extend(r)
+            except Exception as exc:
+                logger.warning("[smart_manager] SSH host %s failed: %s", name, exc)
+    except Exception as exc:
+        logger.error("[smart_manager] collect_all_ssh_hosts error: %s", exc)
+    return results
+
+
 # ── Collect all local disks ───────────────────────────────────────────────────
 
 def collect_all_local_disks() -> List[Dict]:
@@ -636,9 +765,43 @@ def _poll_worker():
     while not _stop_event.is_set():
         cfg = get_poll_config()
         if cfg.get("enabled", 1):
-            logger.info("[smart_manager] Running scheduled SMART poll")
+            logger.info("[smart_manager] Running scheduled SMART poll (all sources)")
             try:
+                # 1. Local disks
                 collect_all_local_disks()
+
+                # 2. SSH-configured hosts
+                try:
+                    collect_all_ssh_hosts()
+                except Exception as exc:
+                    logger.error("[smart_manager] SSH hosts poll error: %s", exc)
+
+                # 3. Proxmox endpoints
+                try:
+                    import vm_controller as _vc
+                    for ep in _vc.list_endpoints():
+                        if ep.get("platform") == "proxmox" and ep.get("enabled", 1):
+                            try:
+                                client = _vc.connect(ep["id"])
+                                for node in client.get_nodes():
+                                    collect_proxmox_disks(ep["id"], node["node"])
+                            except Exception as exc:
+                                logger.warning("[smart_manager] Proxmox ep %d poll error: %s", ep["id"], exc)
+                except Exception as exc:
+                    logger.error("[smart_manager] Proxmox poll error: %s", exc)
+
+                # 4. Storage endpoints (TrueNAS / Unraid)
+                try:
+                    import storage_controller as _sc
+                    for ep in _sc.list_endpoints():
+                        if ep.get("enabled", 1):
+                            try:
+                                collect_remote_storage_disks(ep["id"])
+                            except Exception as exc:
+                                logger.warning("[smart_manager] Storage ep %d poll error: %s", ep["id"], exc)
+                except Exception as exc:
+                    logger.error("[smart_manager] Storage poll error: %s", exc)
+
                 # Update last_poll timestamp
                 with get_db() as db:
                     db.execute(

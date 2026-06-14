@@ -164,6 +164,36 @@
   {% endif %}
 </div>
 
+<!-- SSH Host Import -->
+{% if is_admin %}
+<div class="card" style="margin-bottom:1.5rem">
+  <div class="card-header">
+    <h3>&#x1F4E5; Import Disks from Sources</h3>
+    <small class="text-muted">Import SMART data from configured SSH hosts, Proxmox nodes and NAS endpoints</small>
+  </div>
+  <div style="padding:0.75rem 0">
+    {% if hosts %}
+    <div style="margin-bottom:1rem">
+      <strong style="font-size:0.85rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">&#x1F4BB; SSH Hosts</strong>
+      <div class="btn-group" style="flex-wrap:wrap;margin-top:0.5rem">
+        {% for hname, hdata in hosts.items() %}
+        <button class="btn btn-sm btn-secondary" onclick="importHost('{{ hname }}')"
+                id="btn-import-{{ hname }}">
+          &#x1F4E5; {{ hname }} <small style="opacity:0.7">({{ hdata.host }})</small>
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+      <a href="/vm" class="btn btn-sm btn-secondary">&#x1F5A5; Proxmox Endpoints</a>
+      <a href="/storage" class="btn btn-sm btn-secondary">&#x1F5C4; Storage Endpoints</a>
+    </div>
+  </div>
+  <div id="import-result" style="display:none;padding:0.5rem 0"></div>
+</div>
+{% endif %}
+
 <!-- ── Polling Config ─────────────────────────────────────────── -->
 {% if is_admin %}
 <div class="card">
@@ -191,4 +221,51 @@
 </div>
 {% endif %}
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+function importHost(hostName) {
+  const btn = document.getElementById('btn-import-' + hostName);
+  const resultDiv = document.getElementById('import-result');
+  if (btn) { btn.disabled = true; btn.textContent = '\u23F3 Importing\u2026'; }
+  if (resultDiv) resultDiv.style.display = 'none';
+
+  fetch('/smart/import_host/' + encodeURIComponent(hostName), { method: 'POST',
+    headers: {'X-CSRFToken': document.querySelector('[name=csrf_token]') ?
+               document.querySelector('[name=csrf_token]').value : ''}
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (resultDiv) {
+      resultDiv.style.display = 'block';
+      if (d.ok) {
+        let html = `<div class="alert alert-success">\u2705 Imported ${d.imported} disk(s) from <strong>${hostName}</strong>`;
+        if (d.disks && d.disks.length) {
+          html += '<ul style="margin:0.5rem 0 0">';
+          d.disks.forEach(dk => {
+            const hClass = dk.health === 'GOOD' ? 'badge-green' : dk.health === 'WARNING' ? 'badge-yellow' : 'badge-red';
+            html += `<li><code>${dk.device}</code> — ${dk.model || 'Unknown'} — <span class="badge ${hClass}">${dk.health}</span>${dk.temp ? ' ' + dk.temp + '\u00b0C' : ''}</li>`;
+          });
+          html += '</ul>';
+        }
+        html += '</div>';
+        resultDiv.innerHTML = html;
+        setTimeout(() => location.reload(), 3000);
+      } else {
+        resultDiv.innerHTML = `<div class="alert alert-danger">\u274C ${d.error || 'Import failed'}</div>`;
+      }
+    }
+  })
+  .catch(e => {
+    if (resultDiv) {
+      resultDiv.style.display = 'block';
+      resultDiv.innerHTML = `<div class="alert alert-danger">\u274C Network error: ${e}</div>`;
+    }
+  })
+  .finally(() => {
+    if (btn) { btn.disabled = false; btn.innerHTML = '&#x1F4E5; ' + hostName; }
+  });
+}
+</script>
 {% endblock %}

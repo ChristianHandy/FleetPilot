@@ -84,9 +84,13 @@
           <button class="btn btn-sm btn-success" onclick="vmAction({{ ep.id }},'{{ vm.node }}',{{ vm.vmid }},'start','{{ vm.type }}')">&#x25B6;</button>
           {% endif %}
           {% if vm.status == "running" %}
-          <button class="btn btn-sm btn-warning" onclick="vmAction({{ ep.id }},'{{ vm.node }}',{{ vm.vmid }},'shutdown','{{ vm.type }}')">&#x23F9;</button>
-          <button class="btn btn-sm btn-danger"  onclick="vmAction({{ ep.id }},'{{ vm.node }}',{{ vm.vmid }},'stop','{{ vm.type }}')">&#x26A1;</button>
-          <button class="btn btn-sm btn-secondary" onclick="vmAction({{ ep.id }},'{{ vm.node }}',{{ vm.vmid }},'reboot','{{ vm.type }}')">&#x1F504;</button>
+          <button class="btn btn-sm btn-warning" title="Graceful Shutdown" onclick="vmAction({{ ep.id }},'{{ vm.node }}',{{ vm.vmid }},'shutdown','{{ vm.type }}')">&#x23F9; Stop</button>
+          <button class="btn btn-sm btn-danger"  title="Force Stop" onclick="vmAction({{ ep.id }},'{{ vm.node }}',{{ vm.vmid }},'stop','{{ vm.type }}')">&#x26A1; Kill</button>
+          <button class="btn btn-sm btn-secondary" title="Reboot" onclick="vmAction({{ ep.id }},'{{ vm.node }}',{{ vm.vmid }},'reboot','{{ vm.type }}')">&#x1F504; Reboot</button>
+          <button class="btn btn-sm btn-secondary" title="Suspend" onclick="vmAction({{ ep.id }},'{{ vm.node }}',{{ vm.vmid }},'suspend','{{ vm.type }}')">&#x23F8; Suspend</button>
+          {% endif %}
+          {% if vm.status == "paused" %}
+          <button class="btn btn-sm btn-success" title="Resume" onclick="vmAction({{ ep.id }},'{{ vm.node }}',{{ vm.vmid }},'resume','{{ vm.type }}')">&#x25B6; Resume</button>
           {% endif %}
         </div>
       </td>
@@ -155,29 +159,78 @@
 
 {% block scripts %}
 <script>
+const ACTION_LABELS = {
+  start: '&#x25B6; Starting…',
+  stop: '&#x26A1; Stopping…',
+  shutdown: '&#x23F9; Shutting down…',
+  reboot: '&#x1F504; Rebooting…',
+  suspend: '&#x23F8; Suspending…',
+  resume: '&#x25B6; Resuming…',
+};
+
 function vmAction(epId, node, vmid, action, rtype) {
-  if (!confirm(`${action.toUpperCase()} VM ${vmid}?`)) return;
+  const labels = {start:'Start',stop:'Force Stop',shutdown:'Graceful Shutdown',
+                  reboot:'Reboot',suspend:'Suspend',resume:'Resume'};
+  if (!confirm(`${labels[action] || action} VM ${vmid}?`)) return;
+
+  // Optimistic UI: show pending state
+  const statusCell = document.getElementById(`status-${vmid}`);
+  const row = document.getElementById(`vm-row-${vmid}`);
+  if (statusCell) statusCell.innerHTML = `<span class="badge badge-yellow">${ACTION_LABELS[action] || action}</span>`;
+  if (row) row.querySelectorAll('button').forEach(b => b.disabled = true);
+
   const fd = new FormData();
-  fd.append("node", node); fd.append("vmid", vmid);
-  fd.append("action", action); fd.append("rtype", rtype);
-  fetch(`/vm/${epId}/action`, { method: "POST", body: fd })
+  fd.append('node', node); fd.append('vmid', vmid);
+  fd.append('action', action); fd.append('rtype', rtype);
+
+  fetch(`/vm/${epId}/action`, { method: 'POST', body: fd })
     .then(r => r.json())
     .then(d => {
-      const msg = d.ok ? `✅ ${action} sent` : `❌ ${d.error || "Error"}`;
-      alert(msg);
-      if (d.ok) setTimeout(() => location.reload(), 2000);
+      if (d.ok) {
+        // Show toast notification
+        showToast(`\u2705 ${labels[action] || action} sent to VM ${vmid}`, 'success');
+        // Reload after 3s to get updated status
+        setTimeout(() => location.reload(), 3000);
+      } else {
+        showToast(`\u274C ${d.error || 'Action failed'}`, 'error');
+        if (row) row.querySelectorAll('button').forEach(b => b.disabled = false);
+        if (statusCell) statusCell.innerHTML = '<span class="badge badge-red">error</span>';
+      }
     })
-    .catch(e => alert("❌ " + e));
+    .catch(e => {
+      showToast('\u274C Network error: ' + e, 'error');
+      if (row) row.querySelectorAll('button').forEach(b => b.disabled = false);
+    });
+}
+
+function showToast(msg, type) {
+  let t = document.getElementById('vm-toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'vm-toast';
+    t.style.cssText = 'position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;padding:0.75rem 1.25rem;border-radius:8px;font-weight:600;max-width:380px;box-shadow:0 4px 16px rgba(0,0,0,0.2);transition:opacity 0.3s';
+    document.body.appendChild(t);
+  }
+  t.innerHTML = msg;
+  t.style.background = type === 'success' ? 'var(--success,#22c55e)' : 'var(--danger,#ef4444)';
+  t.style.color = '#fff';
+  t.style.opacity = '1';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.opacity = '0'; }, 4000);
 }
 
 function veeamStartJob(epId, jobId, btn) {
-  if (!confirm("Start backup job?")) return;
+  if (!confirm('Start backup job?')) return;
   btn.disabled = true;
-  fetch(`/vm/${epId}/veeam/job/${jobId}/start`, { method: "POST" })
+  btn.textContent = '\u23F3 Starting…';
+  fetch(`/vm/${epId}/veeam/job/${jobId}/start`, { method: 'POST' })
     .then(r => r.json())
-    .then(d => { alert(d.ok ? "✅ Job started" : "❌ " + (d.error || "Error")); })
-    .catch(e => alert("❌ " + e))
-    .finally(() => { btn.disabled = false; });
+    .then(d => {
+      showToast(d.ok ? '\u2705 Backup job started' : '\u274C ' + (d.error || 'Error'),
+                d.ok ? 'success' : 'error');
+    })
+    .catch(e => showToast('\u274C ' + e, 'error'))
+    .finally(() => { btn.disabled = false; btn.innerHTML = '&#x25B6; Start'; });
 }
 </script>
 {% endblock %}
