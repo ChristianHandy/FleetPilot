@@ -58,8 +58,16 @@ fi
 NGROK_CFG1="${HOME}/.config/ngrok/ngrok.yml"
 NGROK_CFG2="${HOME}/.ngrok2/ngrok.yml"
 HAS_TOKEN=false
-grep -q "authtoken" "$NGROK_CFG1" 2>/dev/null && HAS_TOKEN=true
-grep -q "authtoken" "$NGROK_CFG2" 2>/dev/null && HAS_TOKEN=true
+
+# Check that authtoken line exists AND has a non-empty value after the colon
+for CFG in "$NGROK_CFG1" "$NGROK_CFG2"; do
+    if [[ -f "$CFG" ]]; then
+        TOKEN_VAL=$(grep 'authtoken' "$CFG" 2>/dev/null | sed 's/.*authtoken[[:space:]]*:[[:space:]]*//' | tr -d '"\047 \t\r\n')
+        if [[ -n "$TOKEN_VAL" && "$TOKEN_VAL" != "null" && ${#TOKEN_VAL} -gt 10 ]]; then
+            HAS_TOKEN=true
+        fi
+    fi
+done
 
 if [[ "$HAS_TOKEN" == "false" ]]; then
     echo ""
