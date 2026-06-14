@@ -1349,6 +1349,155 @@ def api_dismiss_notification():
     version_manager.dismiss_notification()
     return jsonify({'ok': True})
 
+# ---- Server Self-Update Tool ----
+
+_server_update_log = []   # in-memory log for the running update
+_server_update_lock = threading.Lock()
+_server_update_running = False
+
+def _run_server_update_bg(sudo_password: str):
+    """Background thread: apt update + apt upgrade on the FleetPilot host."""
+    global _server_update_running, _server_update_log
+    import subprocess, shlex, datetime
+
+    def log(msg, level='info'):
+        ts = datetime.datetime.now().strftime('%H:%M:%S')
+        _server_update_log.append({'ts': ts, 'msg': msg, 'level': level})
+
+    _server_update_running = True
+    _server_update_log = []
+    log('Starting server package update…')
+
+    env = os.environ.copy()
+    env['DEBIAN_FRONTEND'] = 'noninteractive'
+    env['SUDO_ASKPASS'] = '/bin/false'
+
+    def run_cmd(cmd_list, label):
+        log(f'▶ {label}')
+        try:
+            if sudo_password:
+                # pipe password into sudo -S
+                proc = subprocess.Popen(
+                    ['sudo', '-S'] + cmd_list,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    env=env
+                )
+                stdout, _ = proc.communicate(input=(sudo_password + '\n').encode(), timeout=300)
+            else:
+                proc = subprocess.Popen(
+                    cmd_list,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    env=env
+                )
+                stdout, _ = proc.communicate(timeout=300)
+            for line in stdout.decode(errors='replace').splitlines():
+                line = line.strip()
+                if line and '[sudo]' not in line and 'password for' not in line:
+                    log(line)
+            if proc.returncode == 0:
+                log(f'✔ {label} completed successfully.', 'success')
+            else:
+                log(f'✘ {label} exited with code {proc.returncode}', 'error')
+            return proc.returncode == 0
+        except subprocess.TimeoutExpired:
+            log(f'✘ {label} timed out after 5 minutes', 'error')
+            return False
+        except Exception as e:
+            log(f'✘ {label} failed: {e}', 'error')
+            return False
+
+    # Step 1: apt update
+    ok = run_cmd(['apt-get', 'update', '-qq'], 'apt-get update')
+    if not ok:
+        log('apt-get update failed — aborting.', 'error')
+        _server_update_running = False
+        return
+
+    # Step 2: list upgradable packages
+    try:
+        proc = subprocess.run(
+            ['apt-get', '--simulate', 'upgrade', '-y'],
+            capture_output=True, timeout=60, env=env
+        )
+        upgradable = [l for l in proc.stdout.decode(errors='replace').splitlines()
+                      if l.startswith('Inst ')]
+        if upgradable:
+            log(f'Found {len(upgradable)} package(s) to upgrade:')
+            for pkg in upgradable[:20]:
+                log('  ' + pkg.replace('Inst ', '').split(' ')[0])
+            if len(upgradable) > 20:
+                log(f'  … and {len(upgradable)-20} more')
+        else:
+            log('All packages are already up to date.', 'success')
+            _server_update_running = False
+            return
+    except Exception as e:
+        log(f'Could not list upgradable packages: {e}', 'warn')
+
+    # Step 3: apt upgrade
+    ok = run_cmd(
+        ['apt-get', 'upgrade', '-y', '-o', 'Dpkg::Options::=--force-confold'],
+        'apt-get upgrade'
+    )
+
+    # Step 4: apt autoremove
+    run_cmd(['apt-get', 'autoremove', '-y'], 'apt-get autoremove')
+
+    if ok:
+        log('🎉 Server update completed successfully!', 'success')
+    else:
+        log('Server update finished with errors. Check the log above.', 'error')
+
+    _server_update_running = False
+
+
+@app.route('/server_update', methods=['GET', 'POST'])
+@login_required
+def server_update():
+    """Server self-update page — runs apt update + apt upgrade on the FleetPilot host."""
+    global _server_update_running, _server_update_log
+    if session.get('user_id') and not current_user_has_role('admin'):
+        flash('You need admin role to run server updates.', 'error')
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        action = request.form.get('action', 'start')
+        if action == 'start':
+            if _server_update_running:
+                return jsonify({'error': 'Update already running'}), 409
+            sudo_pw = request.form.get('sudo_password', '')
+            with _server_update_lock:
+                t = threading.Thread(
+                    target=_run_server_update_bg,
+                    args=(sudo_pw,),
+                    daemon=True
+                )
+                t.start()
+            return jsonify({'started': True})
+        elif action == 'clear':
+            if not _server_update_running:
+                _server_update_log = []
+            return jsonify({'ok': True})
+
+    return render_template('server_update.html',
+                           running=_server_update_running,
+                           log=_server_update_log)
+
+
+@app.route('/api/server_update_log')
+@login_required
+def api_server_update_log():
+    """JSON polling endpoint for live server update log."""
+    return jsonify({
+        'running': _server_update_running,
+        'log': _server_update_log,
+        'count': len(_server_update_log)
+    })
+
+
 # ---- UI Preference Routes ----
 
 @app.route("/set_theme", methods=["POST", "GET"])

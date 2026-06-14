@@ -51,6 +51,12 @@
       </a>
 
       <span class="sidebar-section-label">{{ _('Settings') }}</span>
+      {% if is_admin is defined and is_admin %}
+      <a class="sidebar-link {% if request.path.startswith('/server_update') %}active{% endif %}" href="/server_update">
+        <span class="sidebar-icon">&#x1F504;</span> Server Update
+        <span class="badge badge-amber" style="margin-left:auto;font-size:0.65rem;padding:0.1rem 0.4rem;">Admin</span>
+      </a>
+      {% endif %}
       <a class="sidebar-link {% if request.path.startswith('/update_settings') %}active{% endif %}" href="/update_settings">
         <span class="sidebar-icon">&#x2699;&#xFE0F;</span> {{ _('Update Settings') }}
       </a>
