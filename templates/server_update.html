@@ -2,10 +2,10 @@
 
 {% block title %}Server Update — FleetPilot{% endblock %}
 {% block page_icon %}🔄{% endblock %}
-{% block page_title %}Server Update{% endblock %}
+{% block page_title %}{{ _('Server Update') }}{% endblock %}
 
 {% block topbar_actions %}
-<a class="btn btn-secondary btn-sm" href="/index">&#x2190; Dashboard</a>
+<a class="btn btn-secondary btn-sm" href="/index">&#x2190; {{ _('Dashboard') }}</a>
 {% endblock %}
 
 {% block content %}
@@ -13,16 +13,16 @@
 <!-- Info Card -->
 <div class="card" style="margin-bottom:1.25rem;">
   <div class="card-header">
-    <h3>🖥️ FleetPilot Host — Package Update</h3>
+    <h3>🖥️ {{ _('FleetPilot Host — Package Update') }}</h3>
     <span class="badge badge-amber">{{ _('Admin Only') }}</span>
   </div>
-  <p>This tool runs <code>apt-get update &amp;&amp; apt-get upgrade</code> directly on the server that hosts FleetPilot. It requires sudo privileges on the host system. The update runs in the background and streams live output below.</p>
+  <p>{{ _('This tool runs apt-get update and apt-get upgrade directly on the server that hosts FleetPilot. It requires sudo privileges on the host system. The update runs in the background and streams live output below.') }}</p>
   <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:0.75rem;">
     <div class="stat-mini"><span class="stat-mini-label">{{ _('Host') }}</span><span class="stat-mini-value" id="hostInfo">{{ request.host.split(':')[0] }}</span></div>
     <div class="stat-mini"><span class="stat-mini-label">{{ _('OS') }}</span><span class="stat-mini-value" id="osInfo">{{ _('Detecting…') }}</span></div>
     <div class="stat-mini"><span class="stat-mini-label">{{ _('Pending Updates') }}</span><span class="stat-mini-value" id="pendingCount">—</span></div>
     <div class="stat-mini"><span class="stat-mini-label">{{ _('Status') }}</span><span class="stat-mini-value" id="statusBadge">
-      {% if running %}<span class="badge badge-amber">Running</span>{% else %}<span class="badge badge-blue">Idle</span>{% endif %}
+      {% if running %}<span class="badge badge-amber">{{ _('Running') }}</span>{% else %}<span class="badge badge-blue">{{ _('Idle') }}</span>{% endif %}
     </span></div>
   </div>
 </div>
@@ -30,36 +30,36 @@
 <!-- Controls -->
 <div class="card" style="margin-bottom:1.25rem;" id="controlCard">
   <div class="card-header">
-    <h3>⚙️ Update Controls</h3>
+    <h3>⚙️ {{ _('Update Controls') }}</h3>
   </div>
 
   <div id="startForm" style="{% if running %}display:none;{% endif %}">
     <div class="form-grid-2" style="margin-bottom:1rem;">
       <div class="form-group">
-        <label class="form-label">Sudo Password <span style="color:var(--text-muted);font-weight:400;">{{ _('(required for apt)') }}</span></label>
+        <label class="form-label">{{ _('Sudo Password') }} <span style="color:var(--text-muted);font-weight:400;">{{ _('(required for apt)') }}</span></label>
         <input type="password" id="sudoPassword" placeholder="{{ _('Enter sudo password for this server') }}"
                autocomplete="current-password">
-        <div class="form-hint">The password is sent over your encrypted session and never stored.</div>
+        <div class="form-hint">{{ _('The password is sent over your encrypted session and never stored.') }}</div>
       </div>
       <div class="form-group">
         <label class="form-label">{{ _('Update Scope') }}</label>
         <select id="updateScope">
-          <option value="upgrade">Security + Regular Updates (apt upgrade)</option>
-          <option value="dist-upgrade">Full Upgrade incl. new deps (apt dist-upgrade)</option>
-          <option value="security">Security Updates Only</option>
+          <option value="upgrade">{{ _('Security + Regular Updates (apt upgrade)') }}</option>
+          <option value="dist-upgrade">{{ _('Full Upgrade incl. new deps (apt dist-upgrade)') }}</option>
+          <option value="security">{{ _('Security Updates Only') }}</option>
         </select>
-        <div class="form-hint">Choose what packages to update.</div>
+        <div class="form-hint">{{ _('Choose what packages to update.') }}</div>
       </div>
     </div>
     <div class="btn-group">
       <button class="btn btn-primary" id="startBtn" onclick="startUpdate()">
-        ▶ Start Update
+        ▶ {{ _('Start Update') }}
       </button>
       <button class="btn btn-secondary" onclick="checkUpdates()">
-        🔍 Check for Updates Only
+        🔍 {{ _('Check for Updates Only') }}
       </button>
       <button class="btn btn-ghost" onclick="clearLog()">
-        🗑 Clear Log
+        🗑 {{ _('Clear Log') }}
       </button>
     </div>
   </div>
@@ -75,11 +75,11 @@
 <!-- Live Log -->
 <div class="card">
   <div class="card-header">
-    <h3>📋 Live Output</h3>
+    <h3>📋 {{ _('Live Output') }}</h3>
     <div style="display:flex;gap:0.5rem;align-items:center;">
-      <span id="logCount" class="badge badge-blue">0 lines</span>
+      <span id="logCount" class="badge badge-blue">0 {{ _('lines') }}</span>
       <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.8rem;cursor:pointer;">
-        <input type="checkbox" id="autoScroll" checked> Auto-scroll
+        <input type="checkbox" id="autoScroll" checked> {{ _('Auto-scroll') }}
       </label>
     </div>
   </div>
@@ -104,7 +104,7 @@
         </div>
       {% endfor %}
     {% else %}
-      <div style="color:var(--text-muted);font-style:italic;">No output yet. Start an update to see live progress here.</div>
+      <div style="color:var(--text-muted);font-style:italic;">{{ _('No output yet. Start an update to see live progress here.') }}</div>
     {% endif %}
   </div>
 </div>
@@ -145,12 +145,12 @@ function startUpdate() {
   const pw = document.getElementById('sudoPassword').value;
   const scope = document.getElementById('updateScope').value;
   if (!pw) {
-    alert('Please enter the sudo password for this server.');
+    alert('{{ _("Please enter the sudo password for this server.") }}');
     document.getElementById('sudoPassword').focus();
     return;
   }
   document.getElementById('startBtn').disabled = true;
-  document.getElementById('startBtn').textContent = '⏳ Starting…';
+  document.getElementById('startBtn').textContent = '⏳ {{ _("Starting…") }}';
 
   const fd = new FormData();
   fd.append('action', 'start');
@@ -164,25 +164,25 @@ function startUpdate() {
         isRunning = true;
         document.getElementById('startForm').style.display = 'none';
         document.getElementById('runningControls').style.display = 'flex';
-        document.getElementById('statusBadge').innerHTML = '<span class="badge badge-amber">{{ _('Running') }}</span>';
+        document.getElementById('statusBadge').innerHTML = '<span class="badge badge-amber">{{ _("Running") }}</span>';
         startPolling();
       } else {
-        alert(data.error || 'Failed to start update.');
+        alert(data.error || '{{ _("Failed to start update.") }}');
         document.getElementById('startBtn').disabled = false;
-        document.getElementById('startBtn').textContent = '▶ Start Update';
+        document.getElementById('startBtn').textContent = '▶ {{ _("Start Update") }}';
       }
     })
     .catch(e => {
-      alert('Error: ' + e);
+      alert('{{ _("Error:") }} ' + e);
       document.getElementById('startBtn').disabled = false;
-      document.getElementById('startBtn').textContent = '▶ Start Update';
+      document.getElementById('startBtn').textContent = '▶ {{ _("Start Update") }}';
     });
 }
 
 function checkUpdates() {
   const pw = document.getElementById('sudoPassword').value;
   if (!pw) {
-    alert('Please enter the sudo password to check for updates.');
+    alert('{{ _("Please enter the sudo password to check for updates.") }}');
     document.getElementById('sudoPassword').focus();
     return;
   }
@@ -208,9 +208,9 @@ function clearLog() {
   fetch('/server_update', { method: 'POST', body: new URLSearchParams({action: 'clear'}) })
     .then(() => {
       document.getElementById('logContainer').innerHTML =
-        '<div style="color:var(--text-muted);font-style:italic;">Log cleared.</div>';
+        '<div style="color:var(--text-muted);font-style:italic;">{{ _("Log cleared.") }}</div>';
       lastLogCount = 0;
-      document.getElementById('logCount').textContent = '0 lines';
+      document.getElementById('logCount').textContent = '0 {{ _("lines") }}';
     });
 }
 
@@ -225,15 +225,14 @@ function pollLog() {
     .then(data => {
       updateUI(data);
       if (!data.running && isRunning) {
-        // Update just finished
         isRunning = false;
         clearInterval(pollInterval);
         pollInterval = null;
         document.getElementById('startForm').style.display = 'block';
         document.getElementById('runningControls').style.display = 'none';
         document.getElementById('startBtn').disabled = false;
-        document.getElementById('startBtn').textContent = '▶ Start Update';
-        document.getElementById('statusBadge').innerHTML = '<span class="badge badge-green">{{ _('Done') }}</span>';
+        document.getElementById('startBtn').textContent = '▶ {{ _("Start Update") }}';
+        document.getElementById('statusBadge').innerHTML = '<span class="badge badge-green">{{ _("Done") }}</span>';
       }
     })
     .catch(() => {});
@@ -251,7 +250,7 @@ function updateUI(data) {
       container.appendChild(div);
     });
     lastLogCount = data.log.length;
-    document.getElementById('logCount').textContent = lastLogCount + ' lines';
+    document.getElementById('logCount').textContent = lastLogCount + ' {{ _("lines") }}';
     if (document.getElementById('autoScroll').checked) {
       container.scrollTop = container.scrollHeight;
     }
@@ -262,7 +261,6 @@ function escapeHtml(str) {
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-// Start polling if update is already running on page load
 if (isRunning) {
   startPolling();
 }
