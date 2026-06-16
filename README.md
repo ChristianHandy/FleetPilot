@@ -1,804 +1,224 @@
+<div align="center">
+
+<img src="docs/screenshots/dashboard.png" alt="FleetPilot Dashboard" width="100%">
+
 # FleetPilot
 
-**FleetPilot** is a modern, self-hosted web dashboard for managing a fleet of Linux and Windows machines — featuring remote system updates, disk tools, multi-user RBAC, email notifications, multiboot OS profiles, and a responsive light/dark UI.
+**The self-hosted fleet management dashboard for homelabs and small IT teams.**
 
-> **Note:** This project merges functionality from two repositories:
-> - [fleetpilot](https://github.com/ChristianHandy/fleetpilot) - Remote system update management
-> - [Disk_Tools](https://github.com/ChristianHandy/Disk_Tools) - Disk formatting and SMART monitoring
->
-> Both tools are now accessible from a unified interface after logging in.
+Manage Linux & Windows servers, VMs, storage systems, and disks — all from one responsive dark-mode web UI.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](https://python.org)
+[![Flask](https://img.shields.io/badge/Flask-3.x-green)](https://flask.palletsprojects.com)
+[![Self-Hosted](https://img.shields.io/badge/Self--Hosted-✓-brightgreen)](https://github.com/ChristianHandy/FleetPilot)
+
+[Features](#features) · [Screenshots](#screenshots) · [Quick Start](#quick-start) · [User Guides](#user-guides) · [Security](#security)
+
+</div>
+
+---
+
+## What is FleetPilot?
+
+FleetPilot is a modern, self-hosted web dashboard that gives you a single pane of glass over your entire infrastructure. Whether you run a homelab with a few Raspberry Pis or manage dozens of servers, FleetPilot keeps everything under control — without any cloud dependency or subscription fee.
+
+It combines remote update management, disk health monitoring, VM controller integration (Proxmox), storage controller integration (TrueNAS), and CheckMK monitoring into one unified interface with multi-user RBAC and a fully customizable dashboard.
+
+---
 
 ## Features
 
-### User Management & Security
-- **Multi-user authentication** with secure password hashing
-- **Role-based access control (RBAC)** with three built-in roles:
-  - **Admin**: Full system access including user management
-  - **Operator**: Can perform system operations (updates, disk management)
-  - **Viewer**: Read-only access to system information
-- User profile management
-- Backward compatibility with environment variable authentication
-- Secure session management
+| Category | Capabilities |
+|---|---|
+| **Dashboard** | Fully customizable widget layout (drag & drop, per-user persistence) |
+| **Host Management** | Linux & Windows servers, tags, environments, DHCP/MAC tracking |
+| **Remote Updates** | SSH-based updates for Ubuntu, Debian, Fedora, Arch, Windows (winget) |
+| **VM Controllers** | Proxmox integration with retry/backoff, VM status overview |
+| **Storage Controllers** | TrueNAS and custom storage system management |
+| **Disk & SMART** | Format (ext4/XFS/FAT32), SMART tests, block validation, history |
+| **CheckMK** | Monitoring integration with token authentication |
+| **User Management** | Multi-user RBAC (Admin / Operator / Viewer), profile management |
+| **Plugins** | Extensible addon system with remote plugin repository |
+| **Scheduling** | Automatic updates (daily/weekly/monthly) with email notifications |
+| **i18n** | Interface available in EN, DE, FR, ES, NL |
 
-### System Update Manager
-- Trigger updates remotely on multiple Linux and Windows computers via SSH
-- **Cross-platform support** - Linux (Ubuntu, Debian, Fedora, CentOS, Arch) and Windows
-- **Windows Update support** - Automatic Windows system updates via PowerShell
-- **Windows software updates** - Software package updates via winget
-- **IP Change Detection** - Automatic detection and updating of host IP addresses using ARP and MAC addresses (perfect for DHCP environments)
-- **Automatic update scheduling** with configurable frequency (daily, weekly, monthly)
-- **Email notifications** - Scheduled reports and error alerts via SMTP
-- **Repository-only updates** - Update packages while preserving host configuration files
-- **Full system updates** - Complete updates including configuration files
-- Mobile-friendly UI
-- Update history tracking with update type information
-- Online/offline host detection
-- Update status notifications
-- SSH key management
+---
 
-### Disk Management Tools
-- Format disks (ext4, XFS, FAT32)
-- SMART health monitoring (short/long tests)
-- Block validation and error detection
-- Disk history and operations tracking
-- Remote disk management
-- Automatic disk detection and processing
-- **Plugin/addon system** for extensibility with remote plugin installation
-- CSV export/import of SMART data
+## Screenshots
 
-### Plugin System
-- **Plugin Manager** - Web interface to manage plugins
-- **Remote Plugin Repository** - Install plugins directly from the web
-- **Easy Installation** - One-click plugin installation (admin only)
-- **Plugin Uninstallation** - Remove plugins when no longer needed
-- Extensible architecture for custom disk tools and features
+<table>
+<tr>
+<td width="50%">
 
-## Installation
+**Customizable Dashboard**
+<img src="docs/screenshots/dashboard.png" alt="Dashboard" width="100%">
 
-### Linux Installation
-1. Clone repository: `git clone https://github.com/ChristianHandy/fleetpilot.git`
-2. Enter project: `cd fleetpilot`
-3. Create virtual env: `python3 -m venv venv`
-4. Activate: `source venv/bin/activate`
-5. Install requirements: `pip install -r requirements.txt`
-6. **Configure security settings:**
-   ```bash
-   # Copy the example environment file
-   cp .env.example .env
-   
-   # Edit .env and set secure values:
-   # - Generate a secure SECRET_KEY: python -c "import secrets; print(secrets.token_hex(32))"
-   # - Set DASHBOARD_USERNAME and DASHBOARD_PASSWORD to secure credentials
-   nano .env
-   ```
-7. Run: `python app.py` (requires sudo for disk management features)
+</td>
+<td width="50%">
 
-### Windows Installation
-1. Clone repository: `git clone https://github.com/ChristianHandy/fleetpilot.git`
-2. Enter project: `cd fleetpilot`
-3. Create virtual env: `python -m venv venv`
-4. Activate: `venv\Scripts\activate`
-5. Install requirements: `pip install -r requirements.txt`
-6. **Configure security settings:**
-   ```powershell
-   # Copy the example environment file
-   copy .env.example .env
-   
-   # Edit .env and set secure values
-   # Use PowerShell to generate a secure SECRET_KEY:
-   # python -c "import secrets; print(secrets.token_hex(32))"
-   notepad .env
-   ```
-7. Run: `python app.py` (requires Administrator privileges for Windows updates)
+**Host Management**
+<img src="docs/screenshots/hosts.png" alt="Hosts" width="100%">
 
-**Note:** For Windows Update support, ensure PowerShell execution policy allows running scripts:
-```powershell
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**VM Controllers (Proxmox)**
+<img src="docs/screenshots/vm.png" alt="VM Controllers" width="100%">
+
+</td>
+<td width="50%">
+
+**SMART Disk Health**
+<img src="docs/screenshots/smart.png" alt="SMART" width="100%">
+
+</td>
+</tr>
+</table>
+
+---
 
 ## Quick Start
 
-1. **Configure credentials (REQUIRED for security):**
-   ```bash
-   # Set environment variables with secure credentials
-   export SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
-   export DASHBOARD_USERNAME=your_username
-   export DASHBOARD_PASSWORD=your_secure_password
-   ```
+### Requirements
 
-2. Start the application:
-   ```bash
-   # For system updates only (no sudo needed)
-   python3 app.py
-   
-   # For full features including disk management (requires sudo)
-   sudo -E python3 app.py  # -E preserves environment variables
-   ```
+- Python 3.8+
+- Linux (recommended) or Windows
+- `smartmontools`, `parted`, `e2fsprogs` for disk features (optional)
 
-3. Open your browser to `http://localhost:5000`
+### Installation
 
-4. Login with your configured credentials
-   - **Important:** Never use default credentials in production!
+```bash
+# 1. Clone the repository
+git clone https://github.com/ChristianHandy/FleetPilot.git
+cd FleetPilot
 
-5. From the main menu, choose:
-   - **System Update Manager** (`/dashboard`) - Manage remote Linux and Windows systems
-   - **Disk Management Tools** (`/disks`) - Format and test disks (Linux only, requires sudo)
-   - **User Management** (`/users`) - Manage users and roles (admin only)
-   - **My Profile** (`/users/profile`) - Update your own profile
+# 2. Create and activate a virtual environment
+python3 -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
 
-## Usage
+# 3. Install dependencies
+pip install -r requirements.txt
 
-The dashboard provides multiple tools accessible from the main menu:
+# 4. Configure environment
+cp .env.example .env
+# Edit .env: set SECRET_KEY, DASHBOARD_USERNAME, DASHBOARD_PASSWORD
 
-### System Update Manager (`/dashboard`)
-Monitor and update remote Linux systems via SSH. See "Managing hosts" section below for details.
-
-### Disk Management Tools (`/disks`)
-Format, test, and monitor disk drives. Requires root/sudo privileges for disk operations.
-
-### User Management (`/users`)
-Administrators can manage user accounts and assign roles. See "User Management" section below for details.
-
-## User Management
-
-The dashboard includes a comprehensive user management system with role-based access control.
-
-### Initial Setup
-
-On first run, the application automatically creates an admin user from your environment variables:
-- Username: Value of `DASHBOARD_USERNAME` (default: `admin`)
-- Password: Value of `DASHBOARD_PASSWORD` (default: `password`)
-- Role: Automatically assigned `admin` role
-
-**Important:** Change the default credentials immediately!
-
-### User Roles
-
-The system includes three built-in roles with different permission levels:
-
-1. **Admin** - Full system access
-   - Manage users and roles
-   - All operator permissions
-   - Access user management interface
-
-2. **Operator** - Can perform system operations
-   - Trigger system updates
-   - Manage hosts
-   - Format disks and run SMART tests
-   - Manage disk remotes
-   - Import/export data
-   - Cannot manage users
-
-3. **Viewer** - Read-only access
-   - View all system information
-   - View disk information and SMART data
-   - View host configurations
-   - Cannot modify anything
-
-### Managing Users (Admin Only)
-
-**Accessing User Management:**
-- Navigate to `/users` or click "User Management" from the main menu
-- Only administrators can access this section
-
-**Creating a New User:**
-1. Click "Add New User"
-2. Enter username, password, and email (optional)
-3. Select one or more roles
-4. Click "Create User"
-
-**Editing a User:**
-1. From the user list, click "Edit" next to the user
-2. Modify username, email, password (optional), or active status
-3. Change role assignments by checking/unchecking roles
-4. Click "Update User"
-
-**Deleting a User:**
-1. From the user list, click "Delete" next to the user
-2. Confirm the deletion
-3. Note: You cannot delete your own account
-
-### User Profile
-
-All users can manage their own profile:
-1. Click "My Profile" from the main menu or navigate to `/users/profile`
-2. Update your email or change your password
-3. View your assigned roles
-
-### Routes
-
-User Management Routes:
-- User list: `/users` (admin only)
-- Add user: `/users/add` (admin only)
-- Edit user: `/users/edit/<id>` (admin only)
-- Delete user: `/users/delete/<id>` (admin only, POST)
-- User profile: `/users/profile` (all users)
-
-### Authentication Flow
-
-The system supports two authentication methods for backward compatibility:
-
-1. **Database Authentication** (Recommended)
-   - User accounts stored in SQLite database
-   - Passwords hashed with werkzeug security
-   - Supports multiple users with different roles
-
-2. **Environment Variable Authentication** (Legacy)
-   - Single user from `DASHBOARD_USERNAME` and `DASHBOARD_PASSWORD`
-   - Maintained for backward compatibility
-   - Automatically migrated to database on first run
-
-### Database
-
-User information is stored in `users.db` (SQLite database) with the following tables:
-- `users` - User accounts with hashed passwords
-- `roles` - Available system roles
-- `user_roles` - Many-to-many relationship between users and roles
-
-The database is automatically created on first run and excluded from git (via `.gitignore`).
-
-## Plugin Management
-
-The dashboard includes a powerful plugin system that allows you to extend disk management functionality with custom plugins. You can create your own plugins to add new disk operations, custom reporting, or integrations with third-party tools.
-
-### Accessing the Plugin Manager
-
-1. Navigate to **Disk Management Tools** (`/disks`)
-2. Click the **🔌 Plugin Manager** button
-3. Or directly access `/disks/pluginmanager/`
-
-**Note:** Only administrators can install or uninstall plugins. All users can view installed plugins.
-
-### Addon Paths
-
-Addon pages are accessible at `/disks/addons/<plugin_name>/<device>`. For backward compatibility, the old path `/addons/<plugin_name>/<device>` will automatically redirect to the correct location.
-
-**Examples:**
-- Correct path: `/disks/addons/example_plugin/sda`
-- Legacy path (redirects): `/addons/example_plugin/sda`
-
-### Plugin Manager Features
-
-**Installed Plugins Section:**
-- View all currently installed plugins
-- See plugin status (OK or Error)
-- View error messages for failed plugins
-- Uninstall plugins (admin only)
-
-**Available Remote Plugins Section:**
-- Browse plugins from the remote repository
-- View plugin details (name, description, version, author)
-- Install plugins with one click (admin only)
-- Automatic detection of already-installed plugins
-
-### Installing a Plugin
-
-1. Navigate to the Plugin Manager (`/disks/pluginmanager/`)
-2. Scroll to the **Available Remote Plugins** section
-3. Find the plugin you want to install
-4. Click the **Install** button
-5. Wait for the installation to complete
-6. **Restart the application** to activate the plugin
-
-**Important:** Application restart is required for plugins to take effect!
-
-### Uninstalling a Plugin
-
-1. Navigate to the Plugin Manager
-2. Find the plugin in the **Installed Plugins** section
-3. Click the **Uninstall** button
-4. Confirm the action
-5. **Restart the application** to complete removal
-
-**Note:** You cannot uninstall the Plugin Manager itself.
-
-### Security
-
-The plugin system includes several security features:
-
-- **Admin-only access** - Only administrators can install or uninstall plugins
-- **Plugin validation** - Plugin IDs are validated (alphanumeric and underscores only)
-- **HTTPS-only downloads** - Remote plugins must be served over HTTPS
-- **Filename validation** - Prevents path traversal attacks
-- **Automatic restart required** - Plugins are not dynamically loaded, preventing runtime injection
-
-### Creating Your Own Plugins
-
-Plugins follow a simple Python structure. See `PLUGIN_REPOSITORY.md` for detailed documentation on:
-- Plugin file structure
-- Remote repository setup
-- Security best practices
-- Testing plugins locally
-
-**Example Plugin Structure:**
-```python
-addon_meta = {
-    "name": "My Plugin",
-    "html": '''
-    {% extends 'disks/base.html' %}
-    {% block title %}My Plugin{% endblock %}
-    {% block content %}
-      <h1>My Plugin Content</h1>
-    {% endblock %}
-    '''
-}
-
-def register(app, core):
-    """Called when the plugin is loaded"""
-    print("[my_plugin] successfully registered.")
+# 5. Run
+python3 app.py
+# For disk management features: sudo -E python3 app.py
 ```
 
-### Plugin Repository Configuration
+Open `http://localhost:5000` in your browser and log in.
 
-The default remote repository URL can be changed in `addons/plugin_manager.py`:
-```python
-REMOTE_PLUGIN_REPO = "https://your-repo-url/plugins.json"
+> **Production deployment:** Use Gunicorn behind Nginx/Traefik with TLS. See the [Security](#security) section.
+
+---
+
+## Customizable Dashboard
+
+The dashboard is fully customizable — every user can arrange their own layout:
+
+1. Click **"✏️ Customize"** in the top-right corner
+2. **Drag & drop** widgets into any order
+3. **Hide** widgets with the red ✕ button; restore them from the "Hidden Widgets" panel
+4. Click **"💾 Save Layout"** — persisted per user in the database
+5. **"↺ Reset"** restores the default layout
+
+Available widgets: Quick Stats, Fleet Overview, VM Controllers, Storage Controllers, SMART Health, Environment Breakdown, Tag Cloud, Recent Updates, Navigation Cards, Plugin Widgets.
+
+---
+
+## User Guides
+
+Official user guides with screenshots are available in 5 languages under [`docs/user-guides/`](docs/user-guides/):
+
+| Language | Download |
+|---|---|
+| English | [FleetPilot_User_Guide_EN.pdf](docs/user-guides/FleetPilot_User_Guide_EN.pdf) |
+| Deutsch | [FleetPilot_Handbuch_DE.pdf](docs/user-guides/FleetPilot_Handbuch_DE.pdf) |
+| Français | [FleetPilot_Guide_Utilisateur_FR.pdf](docs/user-guides/FleetPilot_Guide_Utilisateur_FR.pdf) |
+| Español | [FleetPilot_Manual_Usuario_ES.pdf](docs/user-guides/FleetPilot_Manual_Usuario_ES.pdf) |
+| Italiano | [FleetPilot_Manuale_Utente_IT.pdf](docs/user-guides/FleetPilot_Manuale_Utente_IT.pdf) |
+
+---
+
+## Architecture
+
+FleetPilot is a Python/Flask application with a SQLite backend. It requires no external database server or cloud service.
+
+```
+FleetPilot/
+├── app.py                  # Main Flask application & all routes
+├── vm_controller.py        # Proxmox/VM integration (with retry backoff)
+├── user_management.py      # RBAC, users, dashboard layout persistence
+├── storage_controller.py   # Storage system integration
+├── smart_manager.py        # SMART disk health monitoring
+├── checkmk_integration.py  # CheckMK monitoring integration
+├── disktool_core.py        # Disk formatting & validation
+├── templates/              # Jinja2 HTML templates
+├── static/                 # CSS, JS, assets
+├── addons/                 # Plugin system
+└── docs/
+    ├── user-guides/        # Multilingual PDF user guides
+    └── screenshots/        # UI screenshots
 ```
 
-For information on hosting your own plugin repository, see `PLUGIN_REPOSITORY.md`.
-
-
-## Managing hosts (via web UI)
-
-This project includes a small web UI to manage the list of hosts (PCs) the dashboard updates. You can add, edit, delete hosts and install an SSH public key on remote accounts using a password.
-
-Important: The UI stores hosts in `hosts.json` (in the repository root). Make a backup before editing.
-
-Routes
-- Dashboard: `/dashboard`
-- Manage hosts (list + add): `/hosts`
-- Edit host: `/hosts/edit/<name>`
-- Delete host (POST): `/hosts/delete/<name>`
-- Install SSH public key (password auth): `/hosts/install_key/<name>`
-- Detect MAC address: `/hosts/detect_mac/<name>`
-- Scan for IP changes: `/hosts/scan_ip_changes`
-- View ARP table: `/hosts/arp_table`
-- Update a host (starts update thread): `/update/<name>`
-- Update progress: `/progress/<name>`
-
-**Note:** Host management operations (add, edit, delete) require operator or admin role.
-
-### IP Change Detection (DHCP Support)
-
-The dashboard now includes automatic IP address change detection for hosts in DHCP environments. This feature uses ARP tables and MAC addresses to track devices even when their IP addresses change.
-
-**Key Features:**
-- **MAC Address Storage**: Store MAC addresses for each host
-- **Automatic MAC Detection**: Click "Detect MAC" to automatically discover a host's MAC address
-- **IP Change Scanning**: Scan the ARP table to detect when host IPs have changed
-- **Automatic Updates**: Host configurations are automatically updated when IP changes are detected
-- **ARP Table Viewer**: View the current system ARP table for troubleshooting
-
-**Quick Start:**
-1. Add a host with its current IP address
-2. Click the "🔍 Detect MAC" button to automatically discover its MAC address
-3. Periodically click "🔍 Scan for IP Changes" to check for and update changed IPs
-4. Changes are automatically applied and displayed in flash messages
-
-**Use Cases:**
-- Home labs with DHCP servers
-- Networks where devices receive dynamic IP addresses
-- Mixed environments with both static and dynamic IPs
-- Tracking mobile devices that move between networks
-
-For detailed documentation, see [IP_CHANGE_DETECTION.md](IP_CHANGE_DETECTION.md).
-
-**hosts.json format with MAC addresses:**
-```json
-{
-  "my-pc": { "host": "192.168.1.50", "user": "user", "mac": "00:11:22:33:44:55" },
-  "server-1": { "host": "server.example.local", "user": "admin" },
-  "dhcp-laptop": { "host": "192.168.1.100", "user": "user", "mac": "AA:BB:CC:DD:EE:FF" }
-}
-```
-
-### Managing the Local Server
-
-The dashboard can now manage the local server it's running on, without requiring SSH configuration:
-
-**Add localhost as a managed host:**
-1. Log in to the dashboard (`/`) with the configured username/password.
-2. Open `/hosts` (or click "Manage Hosts" on the dashboard).
-3. Fill in:
-   - Display name: A friendly name like "Local Server"
-   - Host: `localhost` (or `127.0.0.1`)
-   - User: Any value (ignored for localhost)
-4. Click Save. The local server will appear in the list marked with a "LOCAL" badge.
-
-**Benefits of using localhost:**
-- No SSH key setup required
-- Updates run directly on the local system using subprocess
-- Works immediately without additional configuration
-- Perfect for managing the dashboard server itself
-
-**Security Note:** Running updates on localhost still requires sudo privileges. Ensure the dashboard is run with appropriate permissions (see "Running & testing" section below).
-
-### Windows Support
-
-The dashboard now supports managing Windows systems for both system updates and software updates:
-
-**Windows System Updates:**
-- Uses PowerShell and PSWindowsUpdate module
-- Automatically installs PSWindowsUpdate if not present
-- Runs Windows Update to install system patches
-- Repository-only mode updates Windows system components only
-
-**Windows Software Updates:**
-- Uses Windows Package Manager (winget) when available
-- Updates all installed software packages
-- Full update mode includes both system and software updates
-- Automatic source and package agreement acceptance
-
-**Prerequisites for Windows:**
-- PowerShell 5.0 or later (included in Windows 10/11)
-- Administrator privileges for the dashboard user
-- For remote Windows hosts: SSH server configured (OpenSSH for Windows)
-- For software updates: winget installed (included in Windows 11, available for Windows 10)
-
-**Add a Windows host:**
-1. Log in to the dashboard and navigate to `/hosts`
-2. Fill in:
-   - Display name: A friendly name like "Windows Server"
-   - Host: `localhost` (for local Windows) or IP/hostname (for remote Windows)
-   - User: Windows administrator username (ignored for localhost)
-3. Click Save
-4. For remote Windows hosts: Set up SSH key authentication using the "Install SSH key" feature
-
-**Supported Platforms:**
-- Linux: Ubuntu, Debian, Fedora, CentOS, Arch Linux
-- Windows: Windows 10, Windows 11, Windows Server 2016+
-
-### Add a remote host (via web)
-
-1. Log in to the dashboard (`/`) with the configured username/password.
-2. Open `/hosts` (or click "Manage Hosts" on the dashboard).
-3. Fill in:
-   - Display name: a friendly name used by the dashboard (this becomes the key in `hosts.json`).
-   - Host: IP address or hostname (used for SSH).
-   - User: remote account username.
-4. Click Save. The host will appear in the list and on the dashboard.
-
-Edit a host
-- Click "Edit" next to the host in `/hosts`, modify fields, then Save. If you change the Display name, the old entry will be removed and a new one created.
-
-Delete a host
-- Click the Delete button next to the host in `/hosts`. Deletion is performed with a POST request.
-
-Install SSH public key on a remote host
-- Click "Install SSH key" next to the host on `/hosts`.
-- **Note:** SSH key installation is not needed for localhost hosts.
-- Enter the remote account password once and submit.
-  - The server will:
-    - Use your dashboard host's public key (`~/.ssh/id_rsa.pub`) if present, or
-    - Generate an SSH keypair on the dashboard host (`~/.ssh/id_rsa` + `id_rsa.pub`) and use the public key.
-    - Connect to the remote host over SSH with the provided password and append the public key to `~/.ssh/authorized_keys` (creating `~/.ssh` and setting permissions if necessary).
-- On success, you will be able to SSH to the remote host from the dashboard host without a password (for that user).
-
-hosts.json format
-- The file is a simple JSON object mapping display name to host details:
-```json
-{
-  "my-pc": { "host": "192.168.1.50", "user": "user" },
-  "server-1": { "host": "server.example.local", "user": "admin" },
-  "local-server": { "host": "localhost", "user": "ignored" },
-  "dhcp-device": { "host": "192.168.1.100", "user": "admin", "mac": "00:11:22:33:44:55" }
-}
-```
-- The optional `mac` field enables IP change detection for DHCP hosts
-- You can edit `hosts.json` by hand, but the web UI will overwrite the file when hosts are added/edited/deleted. Back it up before manual edits.
-
-Backup and restore hosts.json
-- Backup:
-  - cp hosts.json hosts.json.bak
-- Restore:
-  - mv hosts.json.bak hosts.json
-
-## Automatic Update Configuration
-
-The FleetPilot now includes comprehensive automatic update controls accessible via the Update Settings page (`/update_settings`).
-
-### Accessing Update Settings
-1. Log in to the dashboard
-2. Navigate to the main menu (`/index`) or Update Dashboard (`/dashboard`)
-3. Click the "Update Settings" button
-4. Configure your automatic update preferences
-
-**Note:** Modifying update settings requires operator or admin role.
-
-### Configuration Options
-
-#### Enable/Disable Automatic Updates
-Toggle automatic updates on or off with a simple checkbox. When enabled, the system will automatically update all configured hosts at the specified frequency without manual intervention.
-
-#### Update Frequency
-Choose how often automatic updates should run:
-- **Daily** - Updates run every 24 hours (recommended for security-critical systems)
-- **Weekly** - Updates run every 7 days (balanced approach)
-- **Monthly** - Updates run every 30 days (suitable for stable production environments)
-
-#### Update Notifications
-Enable or disable update status notifications displayed on the dashboard.
-
-#### Dashboard Update Notifications
-Enable or disable notifications for new versions of the FleetPilot itself. When enabled:
-- The system checks for new dashboard versions every 24 hours
-- Notifications appear for both official releases and new commits
-- Users can update the dashboard directly from the UI while preserving configurations
-- Only administrators can perform dashboard updates
-
-### Update Types
-
-The dashboard now supports two types of updates:
-
-#### Repository-Only Updates
-Click the **"Repo Update"** button (purple) on the dashboard to update packages from repositories while keeping host configuration files unchanged. This is ideal for:
-- Production systems where configuration stability is critical
-- Systems with custom configurations that should be preserved
-- Regular package updates without configuration changes
-
-**Technical details:**
-- Debian/Ubuntu: Uses `--force-confold` to keep existing config files
-- Fedora: Uses `--setopt=tsflags=noscripts` to preserve configurations
-- Arch Linux: Uses `--needed` flag to avoid reinstalling packages
-
-#### Full System Updates
-Click the **"Full Update"** button (blue) on the dashboard to perform complete system updates including configuration files. This performs:
-- Package updates from repositories
-- Configuration file updates (may overwrite local changes)
-- Complete system upgrade
-
-### Routes
-- Update settings page: `/update_settings`
-- Repository-only update: `/update_repo/<host_name>`
-- Full system update: `/update/<host_name>`
-- Update progress: `/progress/<host_name>`
-
-### Configuration Storage
-Update settings are stored in `update_settings.json` with the following structure:
-```json
-{
-  "automatic_updates_enabled": false,
-  "update_frequency": "daily",
-  "last_auto_update": null,
-  "notification_enabled": true,
-  "dashboard_update_notifications": true
-}
-```
-
-### Dashboard Status Display
-The Update Dashboard displays the current automatic update status:
-- **Disabled**: Shows a neutral card indicating automatic updates are off
-- **Enabled**: Shows a green card with the configured frequency and last update time
-
-## Dashboard Self-Update Feature
-
-The FleetPilot includes a self-update feature that automatically notifies users when a new version of the dashboard itself is available.
-
-### Features
-
-- **Automatic Version Checking**: Checks for new dashboard versions every 24 hours
-- **Update Notifications**: Displays prominent notification banners when updates are available
-- **Support for Releases and Commits**: Detects both official GitHub releases and new commits
-- **Configuration Preservation**: Updates the dashboard while keeping all settings intact
-- **Admin-Only Updates**: Only administrators can perform dashboard updates for security
-
-### How It Works
-
-1. **Background Checking**: A background worker automatically checks the GitHub repository for new versions every 24 hours
-2. **Notification Display**: When an update is available, a blue notification banner appears on the main menu and dashboard pages
-3. **User Action**: Users can view the update details, check the GitHub release/commit, or update immediately
-4. **Safe Updates**: The update process preserves configuration files (hosts.json, users.db, update_settings.json, etc.)
-
-### Update Process
-
-1. Navigate to the main menu or dashboard
-2. If an update is available, you'll see a notification banner with:
-   - Update description (release name or commit message)
-   - Version identifier (tag or short SHA)
-   - Action buttons: "Update Now", "Check Again", "View on GitHub", "Dismiss"
-3. Click "Update Now" to proceed to the update page
-4. Review the important warnings and update options
-5. Choose to preserve or reset configuration files
-6. Click "Update Dashboard Now" to start the update
-7. Restart the application after the update completes
-
-### Routes
-
-- Check for updates: `/dashboard_version/check`
-- Update page: `/dashboard_version/update`
-- Dismiss notification: `/dashboard_version/dismiss`
-
-### Configuration
-
-Dashboard update notifications can be enabled/disabled in Update Settings:
-- Navigate to `/update_settings`
-- Toggle "Enable Dashboard Update Notifications"
-- This controls whether the system checks for and displays dashboard updates
-
-### Preserved Files
-
-When updating with "Preserve Configuration Files" option (recommended), these files are automatically backed up and restored:
-- `hosts.json` - Host configurations
-- `history.json` - Update history
-- `update_settings.json` - Update settings
-- `version_check.json` - Version check data
-- `users.db` - User database
-- `disks.db` - Disk management database
-- `.env` - Environment variables
-- `operations.db` - Operation history
-- `smart.db` - SMART data
-
-### GitHub Actions Integration
-
-The repository includes a GitHub Actions workflow (`.github/workflows/notify-version.yml`) that:
-- Triggers on pushes to main branch and published releases
-- Creates a notification summary in GitHub Actions
-- Provides update instructions for installed dashboards
-- Helps track when new versions are available
-
-### Manual Version Check
-
-To manually check for updates:
-1. Log in as an operator or administrator
-2. Navigate to the main menu (`/index`)
-3. If no notification is visible, go to `/dashboard_version/check`
-4. The system will immediately check for updates and display results
-
-### Security Notes
-
-- Only administrators can perform dashboard updates
-- The update process uses `git reset --hard` to ensure a clean update
-- Configuration files are backed up to `/tmp` before updates
-- The system validates the current branch and commit SHA
-- Updates are fetched from the official GitHub repository only
+---
 
 ## Security
 
-FleetPilot manages critical system operations including remote updates, disk formatting, and user management. Securing your deployment is essential.
+FleetPilot manages critical infrastructure. Before deploying:
 
-### Security Architecture
+- **Always use HTTPS/TLS** — deploy behind Nginx/Traefik/Caddy with a valid certificate
+- **Restrict network access** — management VLAN or VPN only, never expose to the public internet
+- **Set strong credentials** — generate a secure `SECRET_KEY` with `openssl rand -hex 32`
+- **Use Gunicorn** in production, not the Flask dev server
+- **Limit sudo scope** — grant `sudo` only for specific disk utilities (`smartctl`, `mkfs.*`, `wipefs`)
 
-FleetPilot implements several built-in security mechanisms to protect your fleet:
+See [SECURITY.md](SECURITY.md) for the full hardening guide.
 
-- **Authentication & RBAC:** Multi-user authentication backed by `werkzeug.security` password hashing. Three distinct roles (Admin, Operator, Viewer) strictly isolate destructive actions.
-- **Command Injection Prevention:** All user inputs (especially hostnames, MAC addresses, and plugin names) are strictly sanitized. Disk operations use parameterized arguments, and SSH key installation uses SFTP rather than shell execution.
-- **Secure Headers:** The application enforces `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `X-XSS-Protection`.
-- **Database Security:** SQLite queries use parameterized execution to prevent SQL injection.
+---
 
-### Deployment Hardening Guide
+## Managing Hosts
 
-Before deploying FleetPilot to a production environment, you **must** implement the following hardening steps:
+Hosts are stored in `hosts.json`. The web UI at `/hosts` lets you add, edit, and delete hosts without touching the file directly.
 
-#### 1. Enforce HTTPS/TLS
-**Never expose FleetPilot over unencrypted HTTP.**
-Without TLS, session cookies, SSH passwords, and authentication credentials are transmitted in plain text. You must deploy FleetPilot behind a secure reverse proxy (e.g., Nginx, Traefik, or Caddy) configured with valid SSL/TLS certificates.
-
-#### 2. Network Isolation
-FleetPilot is an administrative tool and should not be accessible from the public internet.
-- Restrict access to a management VLAN or require a VPN connection (e.g., Tailscale, WireGuard).
-- Use firewall rules (`ufw` or `iptables`) to restrict access to the application port (default: 5000) strictly to localhost, forcing all traffic through your reverse proxy.
-
-#### 3. Secure Environment Variables
-Do not rely on default credentials. You must explicitly define secure environment variables in a `.env` file. Ensure this file is strictly permissioned:
-```bash
-chmod 600 .env
+```json
+{
+  "my-server": { "host": "192.168.1.50", "user": "ubuntu", "mac": "00:11:22:33:44:55" },
+  "windows-pc": { "host": "192.168.1.60", "user": "Administrator" }
+}
 ```
 
-| Variable | Requirement | Description |
-|---|---|---|
-| `SECRET_KEY` | **Required** | Must be a cryptographically secure random string (e.g., generated via `openssl rand -hex 32`). |
-| `DASHBOARD_USERNAME` | **Required** | The initial admin username. Change this from the default. |
-| `DASHBOARD_PASSWORD` | **Required** | A strong, complex password for the initial admin account. |
-| `FLASK_DEBUG` | **Required** | Must be set to `false` in production to prevent source code leakage. |
+**DHCP support:** Store the MAC address and use "Scan for IP Changes" to automatically update host IPs when they change.
 
-#### 4. SSH Host Key Verification
-By default, the SSH client uses `AutoAddPolicy` for ease of initial setup. In a strict production environment, this is vulnerable to Man-in-the-Middle (MitM) attacks. It is highly recommended to pre-populate the `~/.ssh/known_hosts` file on the FleetPilot server and modify the codebase to use `WarningPolicy` or `RejectPolicy`.
+---
 
-#### 5. Privilege Management (sudo)
-Disk operations require `sudo` privileges. 
-- Run FleetPilot on a dedicated, isolated management node.
-- Do not run the application as the `root` user directly; instead, run it as a standard user and configure `/etc/sudoers` to allow passwordless execution only for the specific disk utilities required (e.g., `smartctl`, `mkfs.*`, `wipefs`), rather than granting blanket `sudo` access.
+## Plugin System
 
-#### 6. Production WSGI Server
-Do not use the built-in Flask development server in production. Deploy the application using a production-ready WSGI server such as Gunicorn or uWSGI:
-```bash
-gunicorn --bind 127.0.0.1:5000 --workers 4 app:app
-```
+Extend FleetPilot with custom disk tools and integrations via the addon system. Install plugins from the web UI at `/disks/pluginmanager/` or create your own — see [PLUGIN_REPOSITORY.md](PLUGIN_REPOSITORY.md).
 
-## Running & testing
-1. Ensure dependencies are installed:
-   - paramiko (see `requirements.txt`)
-2. Start the app:
-   - python3 app.py
-3. Open a browser to the server's address (e.g. `http://localhost:5000`).
-4. Log in and visit `/hosts` to manage hosts.
+---
 
-Troubleshooting
-- Template errors: ensure `templates/` contains all required template files
-- If `hosts.json` is malformed, the app will fall back to an empty hosts list. Check JSON syntax if hosts are missing.
-- If SSH key installation fails, examine the error message shown on the `/hosts/install_key/<name>` page and check connectivity and credentials.
+## Contributing
 
-## Disk Management Tools
+Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
 
-The Disk Tools section (`/disks`) provides comprehensive disk management capabilities.
+---
 
-### Prerequisites for Disk Tools
-- Linux system with Python 3.8+
-- Root/sudo privileges for disk operations
-- System utilities: `lsblk`, `smartctl`, `wipefs`, `mkfs.ext4`, `mkfs.xfs`, `mkfs.vfat`, `dd`, `badblocks`
+## License
 
-Install required tools:
-```bash
-sudo apt update
-sudo apt install smartmontools parted e2fsprogs xfsprogs dosfstools
-```
+[MIT](LICENSE) — free to use, modify, and self-host.
 
-### Disk Tools Features
+---
 
-**Disk Overview** (`/disks`)
-- Lists all connected disks with model, size, and serial information
-- Search/filter disks by device name or model
-- Real-time disk usage monitoring
+<div align="center">
 
-**SMART Testing** (`/disks/smart/start/<device>/<mode>`)
-- Run short or long SMART tests
-- View detailed SMART reports with temperature and health status
-- Track SMART history over time
-- Export/import SMART data in CSV format
+Made with care for the homelab community.
 
-**Disk Formatting** (`/disks/format/<device>`)
-- Format disks with ext4, XFS, or FAT32 filesystems
-- Background task execution with progress tracking
-- Safe wipefs operation before formatting
+⭐ If FleetPilot is useful to you, consider starring the repository — it helps others find it.
 
-**Block Validation** (`/disks/validate/<device>`)
-- Validates the first 256 blocks of a disk
-- Visual display of good/bad blocks
-- Identifies potential disk errors
-
-**Automatic Mode** (`/disks/toggle_auto`)
-- Automatically detect newly connected disks
-- Auto-format and run SMART tests on new disks
-- Configurable to skip system disks (e.g., mmcblk0, nvme*)
-
-**History & Monitoring** (`/disks/history`)
-- Complete log of all disk operations
-- SMART test history with health trends
-- Task management (view/stop running operations)
-
-**Dashboard** (`/disks/dashboard`)
-- Summary statistics: total disks, bad disks, running tasks
-- Device runtime tracking
-
-**Remote Disk Management** (`/disks/remotes`)
-- Manage remote disk systems
-- Add/remove remote connections
-
-**Plugin System**
-- Extensible addon architecture
-- Create custom disk management tools
-- See `addons/` directory for examples
-
-### Running with Disk Tools
-Since disk operations require root privileges, run the application with sudo:
-```bash
-# Export environment variables first
-export SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
-export DASHBOARD_USERNAME=your_username
-export DASHBOARD_PASSWORD=your_password
-
-# Run with sudo, preserving environment variables
-sudo -E python3 app.py
-```
-
-### Disk Tools Security Note
-The application requires root access for disk operations. This poses significant security risks:
-- **Only run on isolated, trusted systems** - Root access means any vulnerability can compromise the entire system
-- **Never expose to the internet** without multiple layers of security
-- Use HTTPS/TLS for all deployments (critical!)
-- Set secure credentials via environment variables (see Security section)
-- Consider using a reverse proxy with proper authentication
-- Limit access to trusted users only
-- Run in a VM or container for additional isolation
-- Regularly audit disk operations and review logs
-- See the **Security** section above for comprehensive security guidance
+</div>
