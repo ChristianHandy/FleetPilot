@@ -70,6 +70,14 @@
         <span class="sidebar-icon">&#x1F504;</span> Server Update
         <span class="badge badge-amber" style="margin-left:auto;font-size:0.65rem;padding:0.1rem 0.4rem;">{{ _('Admin') }}</span>
       </a>
+      <a class="sidebar-link {% if request.path.startswith('/fleetpilot_update') %}active{% endif %}" href="/fleetpilot_update">
+        <span class="sidebar-icon">&#x1F680;</span> FleetPilot Update
+        <span class="badge badge-blue" style="margin-left:auto;font-size:0.65rem;padding:0.1rem 0.4rem;">{{ _('Admin') }}</span>
+      </a>
+      <a class="sidebar-link {% if request.path.startswith('/monitor') %}active{% endif %}" href="/monitor">
+        <span class="sidebar-icon">&#x1F321;</span> System Monitor
+        <span class="badge badge-blue" style="margin-left:auto;font-size:0.65rem;padding:0.1rem 0.4rem;">{{ _('Admin') }}</span>
+      </a>
       {% endif %}
       <a class="sidebar-link {% if request.path.startswith('/update_settings') %}active{% endif %}" href="/update_settings">
         <span class="sidebar-icon">&#x2699;&#xFE0F;</span> {{ _('Update Settings') }}
@@ -138,7 +146,7 @@
       </div>
 
       <div class="topbar-actions">
-        {% block topbar_actions %}{% endblock %}
+        {% block nav_extra %}{% endblock %}
 
         <!-- Language Selector (GET-based, no CSRF needed) -->
         <select class="lang-select" title="{{ _('Language') }}"
