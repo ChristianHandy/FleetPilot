@@ -2828,7 +2828,8 @@ def monitor():
         'monitor.html',
         latest=latest,
         history=history,
-        log=log_data,
+        log=log_data.get('items', []),
+        log_meta=log_data,
     )
 
 

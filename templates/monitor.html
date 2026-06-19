@@ -182,9 +182,9 @@
     <table class="data-table">
       <thead><tr><th>Time</th><th>CPU %</th><th>RAM %</th><th>Max Temp</th><th>Swap %</th></tr></thead>
       <tbody id="log-tbody">
-        {% for row in log.items %}
+        {% for row in log %}
         {% set max_t = [] %}
-        {% for sensor, entries in row.temp.items() %}{% for e in entries %}{% if max_t.append(e.current) %}{% endif %}{% endfor %}{% endfor %}
+        {% if row.temp is mapping %}{% for sensor, entries in row.temp.items() %}{% if entries is iterable %}{% for e in entries %}{% if e is mapping and e.current is defined %}{% if max_t.append(e.current) %}{% endif %}{% endif %}{% endfor %}{% endif %}{% endfor %}{% endif %}
         <tr>
           <td><code>{{ row.ts | int | datetimeformat if datetimeformat is defined else row.ts }}</code></td>
           <td>
@@ -203,12 +203,8 @@
         {% endfor %}
       </tbody>
     </table>
-    {% if log.pages > 1 %}
-    <div style="padding:.75rem 1rem;display:flex;gap:.5rem;align-items:center;">
-      {% for p in range(1, log.pages + 1) %}
-      <a href="?page={{ p }}" class="btn btn-xs {% if p == log.page %}btn-primary{% else %}btn-ghost{% endif %}">{{ p }}</a>
-      {% endfor %}
-    </div>
+    {% if log | length == 0 %}
+    <div style="padding:1rem;color:var(--text-muted);text-align:center;">No log entries yet. Data is collected every 60 seconds.</div>
     {% endif %}
   </div>
 </div>
