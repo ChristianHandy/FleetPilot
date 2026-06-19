@@ -1,0 +1,327 @@
+{% extends "base.html" %}
+{% block title %}System Monitor — FleetPilot{% endblock %}
+
+{% block nav_extra %}
+<button class="btn btn-sm btn-primary" onclick="refreshNow()" title="Refresh now">
+  &#x21BB; Refresh
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">&#x1F321; System Monitor</h1>
+  <p class="page-subtitle">Live CPU, RAM, disk, network &amp; temperature — updated every 60 s</p>
+</div>
+
+<!-- ── Live Stat Cards ─────────────────────────────────────────────────── -->
+<div class="stat-grid" id="stat-grid">
+  {% if latest %}
+  {% set cpu = latest.cpu_pct %}
+  {% set ram = latest.ram_pct %}
+  <div class="stat-card {% if cpu > 90 %}stat-danger{% elif cpu > 70 %}stat-warn{% else %}stat-ok{% endif %}">
+    <div class="stat-icon">&#x1F4BB;</div>
+    <div class="stat-body">
+      <div class="stat-value">{{ cpu }}%</div>
+      <div class="stat-label">CPU Usage</div>
+      {% if latest.cpu_freq %}<div class="stat-sub">{{ latest.cpu_freq }} MHz</div>{% endif %}
+    </div>
+  </div>
+
+  <div class="stat-card {% if ram > 90 %}stat-danger{% elif ram > 75 %}stat-warn{% else %}stat-ok{% endif %}">
+    <div class="stat-icon">&#x1F4BE;</div>
+    <div class="stat-body">
+      <div class="stat-value">{{ ram }}%</div>
+      <div class="stat-label">RAM Usage</div>
+      <div class="stat-sub">{{ (latest.ram_used / 1073741824) | round(1) }} / {{ (latest.ram_total / 1073741824) | round(1) }} GB</div>
+    </div>
+  </div>
+
+  {% if latest.temp %}
+  {% set all_temps = [] %}
+  {% for sensor, entries in latest.temp.items() %}{% for e in entries %}{% if all_temps.append(e.current) %}{% endif %}{% endfor %}{% endfor %}
+  {% set max_temp = all_temps | max if all_temps else 0 %}
+  <div class="stat-card {% if max_temp > 85 %}stat-danger{% elif max_temp > 70 %}stat-warn{% else %}stat-ok{% endif %}">
+    <div class="stat-icon">&#x1F321;</div>
+    <div class="stat-body">
+      <div class="stat-value">{{ max_temp | round(1) }}°C</div>
+      <div class="stat-label">Max Temperature</div>
+      <div class="stat-sub">{{ latest.temp | length }} sensor(s)</div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% for disk in latest.disk %}
+  {% if disk.mountpoint in ('/', 'C:\\', '/mnt/user') %}
+  <div class="stat-card {% if disk.pct > 90 %}stat-danger{% elif disk.pct > 75 %}stat-warn{% else %}stat-ok{% endif %}">
+    <div class="stat-icon">&#x1F4BE;</div>
+    <div class="stat-body">
+      <div class="stat-value">{{ disk.pct }}%</div>
+      <div class="stat-label">Disk {{ disk.mountpoint }}</div>
+      <div class="stat-sub">{{ (disk.used / 1073741824) | round(1) }} / {{ (disk.total / 1073741824) | round(1) }} GB</div>
+    </div>
+  </div>
+  {% endif %}
+  {% endfor %}
+
+  {% else %}
+  <div class="stat-card stat-ok">
+    <div class="stat-body">
+      <div class="stat-value">—</div>
+      <div class="stat-label">No data yet — first sample in ~60 s</div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- ── CPU + RAM Chart ─────────────────────────────────────────────────── -->
+<div class="card" style="margin-top:1.5rem;">
+  <div class="card-header">
+    <span class="card-title">&#x1F4C8; CPU &amp; RAM — Last 24 hours</span>
+    <div style="display:flex;gap:.5rem;">
+      <button class="btn btn-xs btn-ghost" onclick="setRange(1)">1h</button>
+      <button class="btn btn-xs btn-ghost" onclick="setRange(6)">6h</button>
+      <button class="btn btn-xs btn-ghost active" onclick="setRange(24)">24h</button>
+      <button class="btn btn-xs btn-ghost" onclick="setRange(72)">3d</button>
+      <button class="btn btn-xs btn-ghost" onclick="setRange(168)">7d</button>
+    </div>
+  </div>
+  <div class="card-body" style="padding:1rem;">
+    <canvas id="cpuRamChart" style="width:100%;height:260px;"></canvas>
+  </div>
+</div>
+
+<!-- ── Temperature Chart ───────────────────────────────────────────────── -->
+{% if latest and latest.temp %}
+<div class="card" style="margin-top:1.5rem;">
+  <div class="card-header">
+    <span class="card-title">&#x1F321; Temperature Sensors — Last 24 hours</span>
+  </div>
+  <div class="card-body" style="padding:1rem;">
+    <canvas id="tempChart" style="width:100%;height:220px;"></canvas>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── Disk Usage Table ────────────────────────────────────────────────── -->
+{% if latest and latest.disk %}
+<div class="card" style="margin-top:1.5rem;">
+  <div class="card-header"><span class="card-title">&#x1F4BE; Disk Usage</span></div>
+  <div class="card-body" style="padding:0;">
+    <table class="data-table">
+      <thead><tr><th>Device</th><th>Mount</th><th>FS</th><th>Total</th><th>Used</th><th>Free</th><th>Usage</th></tr></thead>
+      <tbody>
+        {% for d in latest.disk %}
+        <tr>
+          <td><code>{{ d.device }}</code></td>
+          <td>{{ d.mountpoint }}</td>
+          <td>{{ d.fstype }}</td>
+          <td>{{ (d.total / 1073741824) | round(2) }} GB</td>
+          <td>{{ (d.used / 1073741824) | round(2) }} GB</td>
+          <td>{{ (d.free / 1073741824) | round(2) }} GB</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:.5rem;">
+              <div style="flex:1;background:var(--border-color);border-radius:4px;height:8px;">
+                <div style="width:{{ d.pct }}%;background:{% if d.pct > 90 %}var(--danger){% elif d.pct > 75 %}var(--warning){% else %}var(--success){% endif %};border-radius:4px;height:8px;"></div>
+              </div>
+              <span style="min-width:3rem;text-align:right;">{{ d.pct }}%</span>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── Temperature Sensor Details ─────────────────────────────────────── -->
+{% if latest and latest.temp %}
+<div class="card" style="margin-top:1.5rem;">
+  <div class="card-header"><span class="card-title">&#x1F321; Temperature Sensors</span></div>
+  <div class="card-body" style="padding:0;">
+    <table class="data-table">
+      <thead><tr><th>Sensor</th><th>Label</th><th>Current</th><th>High</th><th>Critical</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for sensor, entries in latest.temp.items() %}
+        {% for e in entries %}
+        <tr>
+          <td>{{ sensor }}</td>
+          <td>{{ e.label or sensor }}</td>
+          <td>
+            <span style="color:{% if e.current > (e.critical or 100) %}var(--danger){% elif e.current > (e.high or 80) %}var(--warning){% else %}var(--success){% endif %};">
+              {{ e.current | round(1) }}°C
+            </span>
+          </td>
+          <td>{{ e.high | round(1) if e.high else '—' }}°C</td>
+          <td>{{ e.critical | round(1) if e.critical else '—' }}°C</td>
+          <td>
+            {% if e.current > (e.critical or 100) %}
+            <span class="badge badge-danger">CRITICAL</span>
+            {% elif e.current > (e.high or 80) %}
+            <span class="badge badge-amber">HOT</span>
+            {% else %}
+            <span class="badge badge-green">OK</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── History Log ─────────────────────────────────────────────────────── -->
+<div class="card" style="margin-top:1.5rem;">
+  <div class="card-header">
+    <span class="card-title">&#x1F4CB; Sample Log</span>
+    <span class="badge badge-blue">{{ log.total }} entries</span>
+  </div>
+  <div class="card-body" style="padding:0;">
+    <table class="data-table">
+      <thead><tr><th>Time</th><th>CPU %</th><th>RAM %</th><th>Max Temp</th><th>Swap %</th></tr></thead>
+      <tbody id="log-tbody">
+        {% for row in log.items %}
+        {% set max_t = [] %}
+        {% for sensor, entries in row.temp.items() %}{% for e in entries %}{% if max_t.append(e.current) %}{% endif %}{% endfor %}{% endfor %}
+        <tr>
+          <td><code>{{ row.ts | int | datetimeformat if datetimeformat is defined else row.ts }}</code></td>
+          <td>
+            <span style="color:{% if row.cpu_pct > 90 %}var(--danger){% elif row.cpu_pct > 70 %}var(--warning){% else %}inherit{% endif %};">
+              {{ row.cpu_pct }}%
+            </span>
+          </td>
+          <td>
+            <span style="color:{% if row.ram_pct > 90 %}var(--danger){% elif row.ram_pct > 75 %}var(--warning){% else %}inherit{% endif %};">
+              {{ row.ram_pct }}%
+            </span>
+          </td>
+          <td>{{ (max_t | max) | round(1) if max_t else '—' }}°C</td>
+          <td>{{ ((row.swap_used / row.swap_total * 100) | round(1)) if row.swap_total else '—' }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if log.pages > 1 %}
+    <div style="padding:.75rem 1rem;display:flex;gap:.5rem;align-items:center;">
+      {% for p in range(1, log.pages + 1) %}
+      <a href="?page={{ p }}" class="btn btn-xs {% if p == log.page %}btn-primary{% else %}btn-ghost{% endif %}">{{ p }}</a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ── Chart.js ────────────────────────────────────────────────────────── -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+let cpuRamChart = null;
+let tempChart = null;
+let currentHours = 24;
+
+function fmtTime(ts) {
+  const d = new Date(ts * 1000);
+  return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+}
+
+async function loadCharts(hours) {
+  const resp = await fetch('/api/monitor/history?hours=' + hours + '&limit=1440');
+  const data = await resp.json();
+  if (!data.length) return;
+
+  const labels = data.map(r => fmtTime(r.ts));
+  const cpuData = data.map(r => r.cpu_pct);
+  const ramData = data.map(r => r.ram_pct);
+
+  const gridColor = 'rgba(255,255,255,0.07)';
+  const textColor = 'rgba(255,255,255,0.6)';
+
+  // CPU + RAM chart
+  if (cpuRamChart) cpuRamChart.destroy();
+  const ctx1 = document.getElementById('cpuRamChart').getContext('2d');
+  cpuRamChart = new Chart(ctx1, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'CPU %', data: cpuData, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', tension: 0.3, pointRadius: 0, fill: true },
+        { label: 'RAM %', data: ramData, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', tension: 0.3, pointRadius: 0, fill: true },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: { ticks: { color: textColor, maxTicksLimit: 12 }, grid: { color: gridColor } },
+        y: { min: 0, max: 100, ticks: { color: textColor, callback: v => v + '%' }, grid: { color: gridColor } }
+      },
+      plugins: { legend: { labels: { color: textColor } } }
+    }
+  });
+
+  // Temperature chart
+  const tempCtx = document.getElementById('tempChart');
+  if (!tempCtx) return;
+
+  // Collect all sensor labels from first sample that has temps
+  const sensorMap = {};
+  data.forEach(r => {
+    if (r.temp) {
+      Object.entries(r.temp).forEach(([sensor, entries]) => {
+        entries.forEach(e => {
+          const key = e.label || sensor;
+          if (!sensorMap[key]) sensorMap[key] = [];
+          sensorMap[key].push(e.current);
+        });
+      });
+    }
+  });
+
+  const colors = ['#f59e0b','#ef4444','#8b5cf6','#06b6d4','#84cc16','#f97316'];
+  const tempDatasets = Object.entries(sensorMap).map(([label, vals], i) => ({
+    label,
+    data: vals,
+    borderColor: colors[i % colors.length],
+    backgroundColor: 'transparent',
+    tension: 0.3,
+    pointRadius: 0,
+  }));
+
+  if (tempChart) tempChart.destroy();
+  tempChart = new Chart(tempCtx.getContext('2d'), {
+    type: 'line',
+    data: { labels, datasets: tempDatasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: { ticks: { color: textColor, maxTicksLimit: 12 }, grid: { color: gridColor } },
+        y: { ticks: { color: textColor, callback: v => v + '°C' }, grid: { color: gridColor } }
+      },
+      plugins: { legend: { labels: { color: textColor } } }
+    }
+  });
+}
+
+function setRange(h) {
+  currentHours = h;
+  document.querySelectorAll('.card-header .btn-ghost').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  loadCharts(h);
+}
+
+async function refreshNow() {
+  const resp = await fetch('/api/monitor/latest');
+  const d = await resp.json();
+  if (d && d.cpu_pct !== undefined) {
+    // Reload page to update stat cards
+    location.reload();
+  }
+}
+
+// Auto-refresh every 60 seconds
+setInterval(() => location.reload(), 60000);
+
+// Initial chart load
+loadCharts(24);
+</script>
+{% endblock %}

@@ -18,6 +18,7 @@ import arp_tracker
 import vm_controller
 import storage_controller
 import smart_manager
+import system_monitor
 
 # Load environment variables from .env file if python-dotenv is available
 try:
@@ -215,6 +216,8 @@ with app.app_context():
     storage_controller.init_db()
     smart_manager.init_db()
     smart_manager.start_polling()
+    system_monitor.init_db(DATA_DIR)
+    system_monitor.start_polling()
 
 # Template function for HTML extensions
 @app.context_processor
@@ -1855,7 +1858,10 @@ def _run_fp_update_bg(channel, do_restart):
     except Exception:
         pass
 
-    # Step 2: git pull
+    # Step 2: discard any local modifications to tracked files so git pull always wins
+    # (user data is safe in data/ which is .gitignored)
+    run(['git', 'checkout', '--', '.'], 'git checkout -- .')
+    # Step 3: git pull
     ok = run(['git', 'pull', 'origin', channel], 'git pull')
     if not ok:
         _fp_log('git pull failed — aborting update.', 'error')
@@ -2805,3 +2811,48 @@ if __name__ == "__main__":
     # Security: Disable debug mode in production
     debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
     app.run(host="0.0.0.0", port=5000, debug=debug_mode)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# System Monitor Routes
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/monitor')
+@login_required
+def monitor():
+    """System resource & temperature monitor dashboard."""
+    latest = system_monitor.get_latest()
+    history = system_monitor.get_history(hours=24, limit=1440)
+    log_data = system_monitor.get_log(page=1, per_page=50)
+    return render_template(
+        'monitor.html',
+        latest=latest,
+        history=history,
+        log=log_data,
+    )
+
+
+@app.route('/api/monitor/latest')
+@login_required
+def api_monitor_latest():
+    """Return the most recent system metrics as JSON."""
+    data = system_monitor.get_latest()
+    return jsonify(data or {})
+
+
+@app.route('/api/monitor/history')
+@login_required
+def api_monitor_history():
+    """Return metric history for the last N hours."""
+    hours = min(int(request.args.get('hours', 24)), 168)  # max 7 days
+    limit = min(int(request.args.get('limit', 1440)), 10080)
+    return jsonify(system_monitor.get_history(hours=hours, limit=limit))
+
+
+@app.route('/api/monitor/log')
+@login_required
+def api_monitor_log():
+    """Return paginated log entries."""
+    page = max(1, int(request.args.get('page', 1)))
+    per_page = min(int(request.args.get('per_page', 100)), 500)
+    return jsonify(system_monitor.get_log(page=page, per_page=per_page))
