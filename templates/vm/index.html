@@ -75,6 +75,10 @@
           <button class="btn btn-sm btn-secondary" onclick="testConn({{ ep.id }}, this)">&#x1F50C; Test</button>
           {% if ep.platform == "proxmox" %}
           <a href="/vm/{{ ep.id }}/disks" class="btn btn-sm btn-secondary">&#x1F4BE; Disks</a>
+          {% if is_operator or is_admin %}
+          <a href="/vm/{{ ep.id }}/update" class="btn btn-sm btn-success"
+             onclick="return confirm('Run apt update + upgrade on {{ ep.name }} ({{ ep.host }})?')">&#x2B06; Update</a>
+          {% endif %}
           {% endif %}
           {% if is_admin %}
           <form method="POST" action="/vm/delete/{{ ep.id }}" style="display:inline"

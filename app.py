@@ -234,15 +234,16 @@ def inject_user_context():
     user_id = session.get("user_id")
     user_roles = []
     is_admin = False
-    
+    is_operator = False
     if user_id:
         user_roles = user_management.get_user_role_names(user_id)
         is_admin = 'admin' in user_roles
-    
+        is_operator = 'operator' in user_roles or is_admin
     return dict(
         current_user_id=user_id,
         current_user_roles=user_roles,
         is_admin=is_admin,
+        is_operator=is_operator,
         localhost_identifiers=LOCALHOST_IDENTIFIERS
     )
 
@@ -2250,6 +2251,35 @@ def vm_delete(ep_id):
 def vm_test(ep_id):
     result = vm_controller.test_connection(ep_id)
     return json.dumps(result), 200, {"Content-Type": "application/json"}
+
+
+@app.route("/vm/<int:ep_id>/update")
+@login_required
+def vm_update(ep_id):
+    """Trigger apt update + upgrade on a Proxmox endpoint via SSH using stored credentials."""
+    if not current_user_has_role('operator', 'admin'):
+        flash('You need operator or admin role to perform system updates.', 'error')
+        return redirect('/vm')
+    ep = vm_controller.get_endpoint(ep_id)
+    if not ep:
+        flash('Endpoint not found.', 'error')
+        return redirect('/vm')
+    if ep.get('platform') != 'proxmox':
+        flash('System updates are only supported for Proxmox endpoints.', 'error')
+        return redirect('/vm')
+    host = ep['host']
+    user = ep['username']
+    name = ep['name']
+    password = ep.get('password_plain', '') or None
+    log_key = f"vm_{ep_id}"
+    logs[log_key] = []
+    threading.Thread(
+        target=run_update,
+        args=(host, user, name, logs[log_key]),
+        kwargs={'password': password},
+        daemon=True
+    ).start()
+    return redirect(f"/progress/{log_key}")
 
 
 @app.route("/vm/<int:ep_id>")

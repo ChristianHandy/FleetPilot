@@ -27,13 +27,14 @@ WINDOWS_WINGET_UPDATE = (
 # Remote Windows detection command
 WINDOWS_DETECTION_COMMAND = 'powershell.exe -Command "Write-Output \'windows\'" 2>&1 || echo \'\''
 
-def get_update_command(distro, repo_only=False):
+def get_update_command(distro, repo_only=False, run_as_root=False):
     """
     Get the update command for a given Linux distribution or Windows.
     
     Args:
         distro: Linux distribution name ('ubuntu', 'debian', 'fedora', 'centos', 'arch') or 'windows'
         repo_only: If True, only update packages without modifying config files
+        run_as_root: If True, omit 'sudo' prefix (already running as root, e.g. Proxmox root SSH login)
     
     Returns:
         tuple: (command_string, description)
@@ -41,36 +42,37 @@ def get_update_command(distro, repo_only=False):
     Raises:
         ValueError: If distribution is not supported
     """
+    sudo = '' if run_as_root else 'sudo '
     if distro in ['ubuntu', 'debian']:
         if repo_only:
-            cmd = "sudo DEBIAN_FRONTEND=noninteractive apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -o Dpkg::Options::='--force-confold'"
+            cmd = f"{sudo}DEBIAN_FRONTEND=noninteractive apt-get update && {sudo}DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -o Dpkg::Options::='--force-confold'"
             desc = "repository-only update (preserving config files)"
         else:
-            cmd = "sudo DEBIAN_FRONTEND=noninteractive apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y && sudo DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y"
+            cmd = f"{sudo}DEBIAN_FRONTEND=noninteractive apt-get update && {sudo}DEBIAN_FRONTEND=noninteractive apt-get upgrade -y && {sudo}DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y"
             desc = "full system update"
     
     elif distro == 'fedora':
         if repo_only:
-            cmd = "sudo dnf upgrade -y --setopt=tsflags=noscripts"
+            cmd = f"{sudo}dnf upgrade -y --setopt=tsflags=noscripts"
             desc = "repository-only update (preserving config files)"
         else:
-            cmd = "sudo dnf upgrade -y"
+            cmd = f"{sudo}dnf upgrade -y"
             desc = "full system update"
     
     elif distro == 'centos':
         if repo_only:
-            cmd = "sudo yum update -y --setopt=tsflags=noscripts"
+            cmd = f"{sudo}yum update -y --setopt=tsflags=noscripts"
             desc = "repository-only update (preserving config files)"
         else:
-            cmd = "sudo yum update -y"
+            cmd = f"{sudo}yum update -y"
             desc = "full system update"
     
     elif distro == 'arch':
         if repo_only:
-            cmd = "sudo pacman -Syu --noconfirm --needed"
+            cmd = f"{sudo}pacman -Syu --noconfirm --needed"
             desc = "repository-only update"
         else:
-            cmd = "sudo pacman -Syu --noconfirm"
+            cmd = f"{sudo}pacman -Syu --noconfirm"
             desc = "full system update"
     
     elif distro == 'windows':
@@ -221,7 +223,7 @@ def run_local_update(name, log_list, repo_only, log_func):
             error_message = "\n".join(error_details)
             email_notifier.send_error_notification(name, error_message)
 
-def run_update(host, user, name, log_list, repo_only=False):
+def run_update(host, user, name, log_list, repo_only=False, password=None):
     """
     Run system update on a remote host via SSH or locally via subprocess.
     
@@ -231,6 +233,7 @@ def run_update(host, user, name, log_list, repo_only=False):
         name: Display name for the host (used in logs)
         log_list: List to append log messages to
         repo_only: If True, only update packages from repositories without modifying config files
+        password: Optional SSH password. If None, SSH key authentication is used.
     """
     def log(msg):
         """Helper function to log messages"""
@@ -258,9 +261,14 @@ def run_update(host, user, name, log_list, repo_only=False):
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         
-        # Connect to the remote host using SSH key authentication
-        # The SSH key should be configured beforehand (see "Install SSH key" feature)
-        ssh.connect(host, username=user, timeout=30)
+        # Connect to the remote host using SSH key or password authentication
+        if password:
+            log(f"Connecting with password authentication...")
+            ssh.connect(host, username=user, password=password, timeout=30,
+                        look_for_keys=False, allow_agent=False)
+        else:
+            # SSH key authentication (key must be configured beforehand)
+            ssh.connect(host, username=user, timeout=30)
         log(f"Connected to {name}")
         
         # Detect the operating system and distribution
@@ -289,9 +297,14 @@ def run_update(host, user, name, log_list, repo_only=False):
                 return
         
         # Get the update command for this distribution
+        # If connecting as root (e.g. Proxmox), skip sudo prefix
+        run_as_root = (user == 'root')
         try:
-            update_cmd, description = get_update_command(distro, repo_only)
-            log(f"Running {description}...")
+            update_cmd, description = get_update_command(distro, repo_only, run_as_root=run_as_root)
+            if run_as_root:
+                log(f"Running {description} (as root, no sudo)...")
+            else:
+                log(f"Running {description}...")
         except ValueError as e:
             error_msg = f"✗ {str(e)}"
             log(error_msg)
