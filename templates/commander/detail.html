@@ -1,0 +1,320 @@
+{% extends "base.html" %}
+{% block title %}{{ dev.name }} — Commander Pro — FleetPilot{% endblock %}
+{% block nav_extra %}
+<button class="btn btn-sm btn-primary" onclick="refreshStatus()" id="refreshBtn">&#x21BB; Refresh</button>
+<a href="/commander/{{ dev.id }}/edit" class="btn btn-sm btn-secondary">&#x2699; Edit</a>
+{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">&#x1F4A8; {{ dev.name }}</h1>
+  <p class="page-subtitle">
+    <code>{{ dev.username }}@{{ dev.host }}:{{ dev.port }}</code>
+    &nbsp;·&nbsp; Match: <code>{{ dev.match_str }}</code>
+    {% if dev.use_direct %}&nbsp;·&nbsp; <span class="badge badge-amber">--direct-access</span>{% endif %}
+    {% if not dev.enabled %}&nbsp;·&nbsp; <span class="badge badge-red">Disabled</span>{% endif %}
+  </p>
+</div>
+
+<!-- Connection test bar -->
+<div id="testBar" style="display:none;padding:.6rem 1rem;border-radius:6px;margin-bottom:1rem;font-size:.9rem;"></div>
+<div style="display:flex;gap:.5rem;margin-bottom:1.5rem;flex-wrap:wrap;">
+  <button class="btn btn-sm btn-secondary" onclick="testConn()">&#x1F50C; Test Connection</button>
+  <a href="/commander/{{ dev.id }}/refresh" class="btn btn-sm btn-primary">&#x21BB; Force Poll Now</a>
+</div>
+
+<!-- Live stat cards -->
+<div class="stat-grid" id="statGrid">
+  {% if latest %}
+    {% set status = latest.status %}
+    {% if status.ok %}
+      {% for t in status.temperatures %}
+      <div class="stat-card {% if t.value > 80 %}stat-danger{% elif t.value > 65 %}stat-warn{% else %}stat-ok{% endif %}">
+        <div class="stat-icon">&#x1F321;</div>
+        <div class="stat-body">
+          <div class="stat-value">{{ t.value }}°C</div>
+          <div class="stat-label">{{ t.label }}</div>
+        </div>
+      </div>
+      {% endfor %}
+      {% for f in status.fans %}
+      <div class="stat-card {% if f.rpm == 0 %}stat-warn{% else %}stat-ok{% endif %}">
+        <div class="stat-icon">&#x1F300;</div>
+        <div class="stat-body">
+          <div class="stat-value">{{ f.rpm }} <small style="font-size:.7em;">rpm</small></div>
+          <div class="stat-label">{{ f.label }}</div>
+        </div>
+      </div>
+      {% endfor %}
+      {% for v in status.voltages %}
+      <div class="stat-card stat-ok">
+        <div class="stat-icon">&#x26A1;</div>
+        <div class="stat-body">
+          <div class="stat-value">{{ v.value }}V</div>
+          <div class="stat-label">{{ v.label }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="stat-card stat-danger">
+        <div class="stat-icon">&#x26A0;</div>
+        <div class="stat-body">
+          <div class="stat-value">Offline</div>
+          <div class="stat-label">{{ status.error | default('Connection failed') }}</div>
+        </div>
+      </div>
+    {% endif %}
+  {% else %}
+    <div class="stat-card stat-warn">
+      <div class="stat-body">
+        <div class="stat-value">—</div>
+        <div class="stat-label">No data yet — polling every 30 s</div>
+      </div>
+    </div>
+  {% endif %}
+</div>
+
+<!-- Fan Control Panel -->
+<div class="card" style="margin-top:1.5rem;">
+  <div class="card-header">
+    <span class="card-title">&#x1F300; Fan Control</span>
+    <small style="color:var(--text-muted);">Changes are applied immediately via SSH + liquidctl</small>
+  </div>
+  <div style="padding:1.5rem;">
+    <div id="fanResult" style="display:none;margin-bottom:1rem;padding:.6rem 1rem;border-radius:6px;font-size:.9rem;"></div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem;">
+      {% set fan_channels = ['fan1','fan2','fan3','fan4','fan5','fan6','sync'] %}
+      {% for ch in fan_channels %}
+      <div class="card" style="padding:1rem;border:1px solid var(--border);">
+        <div style="font-weight:600;margin-bottom:.75rem;text-transform:uppercase;font-size:.85rem;color:var(--text-muted);">
+          {{ ch }}
+        </div>
+        <!-- Fixed duty -->
+        <div style="margin-bottom:.75rem;">
+          <label style="font-size:.85rem;display:block;margin-bottom:.3rem;">Fixed Speed (%)</label>
+          <div style="display:flex;gap:.5rem;align-items:center;">
+            <input type="range" id="duty_{{ ch }}" min="0" max="100" value="50"
+                   style="flex:1;" oninput="document.getElementById('dutyVal_{{ ch }}').textContent=this.value+'%'">
+            <span id="dutyVal_{{ ch }}" style="min-width:3rem;text-align:right;font-size:.85rem;">50%</span>
+            <button class="btn btn-xs btn-primary"
+                    onclick="setFanFixed('{{ dev.id }}','{{ ch }}',document.getElementById('duty_{{ ch }}').value)">
+              Set
+            </button>
+          </div>
+        </div>
+        <!-- Temperature profile -->
+        <div>
+          <label style="font-size:.85rem;display:block;margin-bottom:.3rem;">
+            Temp Profile <small style="color:var(--text-muted);">(temp°C,rpm pairs — semicolon separated)</small>
+          </label>
+          <div style="display:flex;gap:.5rem;">
+            <input type="text" id="profile_{{ ch }}" class="form-control"
+                   placeholder="25,600;40,900;55,1400;65,2000"
+                   style="font-size:.8rem;flex:1;">
+            <button class="btn btn-xs btn-secondary"
+                    onclick="setFanProfile('{{ dev.id }}','{{ ch }}',document.getElementById('profile_{{ ch }}').value)">
+              Apply
+            </button>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- Temperature history chart -->
+{% if history %}
+<div class="card" style="margin-top:1.5rem;">
+  <div class="card-header">
+    <span class="card-title">&#x1F4C8; Temperature History — Last 24 h</span>
+  </div>
+  <div style="padding:1rem;">
+    <canvas id="tempChart" height="80"></canvas>
+  </div>
+</div>
+
+<!-- Fan RPM history chart -->
+<div class="card" style="margin-top:1rem;">
+  <div class="card-header">
+    <span class="card-title">&#x1F300; Fan Speed History — Last 24 h</span>
+  </div>
+  <div style="padding:1rem;">
+    <canvas id="fanChart" height="80"></canvas>
+  </div>
+</div>
+{% endif %}
+
+<!-- Raw JSON (collapsible) -->
+{% if latest %}
+<div class="card" style="margin-top:1rem;">
+  <div class="card-header" style="cursor:pointer;" onclick="toggleRaw()">
+    <span class="card-title">&#x1F527; Raw liquidctl Output</span>
+    <span id="rawToggle" style="color:var(--text-muted);font-size:.85rem;">▼ Show</span>
+  </div>
+  <div id="rawPanel" style="display:none;padding:1rem;">
+    <pre style="background:var(--bg-secondary);padding:1rem;border-radius:6px;overflow-x:auto;font-size:.8rem;max-height:400px;overflow-y:auto;">{{ latest.status.raw | tojson(indent=2) }}</pre>
+  </div>
+</div>
+{% endif %}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+// ── Connection test ──────────────────────────────────────────────────────────
+function testConn() {
+  const bar = document.getElementById('testBar');
+  bar.style.display = 'block';
+  bar.style.background = 'var(--bg-secondary)';
+  bar.textContent = 'Testing connection…';
+  fetch('/commander/{{ dev.id }}/test')
+    .then(r => r.json())
+    .then(d => {
+      bar.style.background = d.ok ? 'var(--success-bg, #d4edda)' : 'var(--danger-bg, #f8d7da)';
+      bar.style.color = d.ok ? 'var(--success, #155724)' : 'var(--danger, #721c24)';
+      bar.textContent = (d.ok ? '✔ ' : '✘ ') + d.message;
+    })
+    .catch(e => { bar.textContent = 'Error: ' + e; });
+}
+
+// ── Fan control ──────────────────────────────────────────────────────────────
+function setFanFixed(devId, channel, duty) {
+  const fd = new FormData();
+  fd.append('channel', channel);
+  fd.append('mode', 'fixed');
+  fd.append('duty', duty);
+  sendFanCmd(devId, fd);
+}
+
+function setFanProfile(devId, channel, profile) {
+  if (!profile.trim()) { alert('Enter a profile first.'); return; }
+  const fd = new FormData();
+  fd.append('channel', channel);
+  fd.append('mode', 'profile');
+  fd.append('profile', profile);
+  sendFanCmd(devId, fd);
+}
+
+function sendFanCmd(devId, fd) {
+  const el = document.getElementById('fanResult');
+  el.style.display = 'block';
+  el.style.background = 'var(--bg-secondary)';
+  el.textContent = 'Sending command…';
+  fetch('/commander/' + devId + '/set_fan', { method: 'POST', body: fd })
+    .then(r => r.json())
+    .then(d => {
+      el.style.background = d.ok ? 'var(--success-bg, #d4edda)' : 'var(--danger-bg, #f8d7da)';
+      el.style.color = d.ok ? 'var(--success, #155724)' : 'var(--danger, #721c24)';
+      el.textContent = (d.ok ? '✔ ' : '✘ ') + d.message;
+    })
+    .catch(e => { el.textContent = 'Error: ' + e; });
+}
+
+// ── Live refresh ─────────────────────────────────────────────────────────────
+function refreshStatus() {
+  const btn = document.getElementById('refreshBtn');
+  btn.textContent = '⏳ Refreshing…';
+  btn.disabled = true;
+  fetch('/api/commander/{{ dev.id }}/status')
+    .then(r => r.json())
+    .then(d => {
+      btn.textContent = '↻ Refresh';
+      btn.disabled = false;
+      updateStatCards(d.status || {});
+    })
+    .catch(() => { btn.textContent = '↻ Refresh'; btn.disabled = false; });
+}
+
+function updateStatCards(status) {
+  // Full page reload is simplest for now
+  location.reload();
+}
+
+// ── Raw toggle ───────────────────────────────────────────────────────────────
+function toggleRaw() {
+  const p = document.getElementById('rawPanel');
+  const t = document.getElementById('rawToggle');
+  if (p.style.display === 'none') { p.style.display = 'block'; t.textContent = '▲ Hide'; }
+  else { p.style.display = 'none'; t.textContent = '▼ Show'; }
+}
+
+{% if history %}
+// ── Charts ───────────────────────────────────────────────────────────────────
+const historyData = {{ history | tojson }};
+const labels = historyData.map(h => {
+  const d = new Date(h.ts * 1000);
+  return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+});
+
+// Collect all temperature sensor labels
+const tempLabels = new Set();
+const fanLabels  = new Set();
+historyData.forEach(h => {
+  const s = h.status || {};
+  (s.temperatures || []).forEach(t => tempLabels.add(t.label));
+  (s.fans || []).forEach(f => fanLabels.add(f.label));
+});
+
+const COLORS = ['#3b82f6','#ef4444','#f59e0b','#10b981','#8b5cf6','#ec4899'];
+
+// Temperature chart
+const tempCtx = document.getElementById('tempChart');
+if (tempCtx) {
+  const tempDatasets = [...tempLabels].map((lbl, i) => ({
+    label: lbl,
+    data: historyData.map(h => {
+      const s = h.status || {};
+      const t = (s.temperatures || []).find(x => x.label === lbl);
+      return t ? t.value : null;
+    }),
+    borderColor: COLORS[i % COLORS.length],
+    backgroundColor: 'transparent',
+    tension: 0.3,
+    pointRadius: 0,
+    spanGaps: true,
+  }));
+  new Chart(tempCtx, {
+    type: 'line',
+    data: { labels, datasets: tempDatasets },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'top' } },
+      scales: {
+        y: { title: { display: true, text: '°C' } },
+        x: { ticks: { maxTicksLimit: 12 } }
+      }
+    }
+  });
+}
+
+// Fan RPM chart
+const fanCtx = document.getElementById('fanChart');
+if (fanCtx) {
+  const fanDatasets = [...fanLabels].map((lbl, i) => ({
+    label: lbl,
+    data: historyData.map(h => {
+      const s = h.status || {};
+      const f = (s.fans || []).find(x => x.label === lbl);
+      return f ? f.rpm : null;
+    }),
+    borderColor: COLORS[i % COLORS.length],
+    backgroundColor: 'transparent',
+    tension: 0.3,
+    pointRadius: 0,
+    spanGaps: true,
+  }));
+  new Chart(fanCtx, {
+    type: 'line',
+    data: { labels, datasets: fanDatasets },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'top' } },
+      scales: {
+        y: { title: { display: true, text: 'RPM' } },
+        x: { ticks: { maxTicksLimit: 12 } }
+      }
+    }
+  });
+}
+{% endif %}
+</script>
+{% endblock %}

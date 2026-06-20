@@ -19,7 +19,7 @@ import vm_controller
 import storage_controller
 import smart_manager
 import system_monitor
-
+import corsair_commander
 # Load environment variables from .env file if python-dotenv is available
 try:
     from dotenv import load_dotenv
@@ -218,6 +218,8 @@ with app.app_context():
     smart_manager.start_polling()
     system_monitor.init_db(DATA_DIR)
     system_monitor.start_polling()
+    corsair_commander.init_db(DATA_DIR)
+    corsair_commander.start_polling()
 
 # Template function for HTML extensions
 @app.context_processor
@@ -2887,3 +2889,199 @@ def api_monitor_log():
     page = max(1, int(request.args.get('page', 1)))
     per_page = min(int(request.args.get('per_page', 100)), 500)
     return jsonify(system_monitor.get_log(page=page, per_page=per_page))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Corsair Commander Pro Routes
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/commander')
+@login_required
+def commander_index():
+    """Corsair Commander Pro overview page."""
+    devices = corsair_commander.list_devices()
+    all_latest = corsair_commander.get_all_latest()
+    return render_template('commander/index.html',
+                           devices=devices,
+                           all_latest=all_latest)
+
+
+@app.route('/commander/add', methods=['GET', 'POST'])
+@login_required
+def commander_add():
+    """Add a new Commander Pro device."""
+    if request.method == 'POST':
+        name       = sanitize_input(request.form.get('name', ''), max_len=64)
+        host       = sanitize_input(request.form.get('host', ''), max_len=253)
+        port       = int(request.form.get('port', 22) or 22)
+        username   = sanitize_input(request.form.get('username', 'root'), max_len=64)
+        password   = request.form.get('password', '')
+        ssh_key    = request.form.get('ssh_key', '').strip()
+        match_str  = sanitize_input(request.form.get('match_str', 'Commander Pro'), max_len=128)
+        use_direct = bool(request.form.get('use_direct'))
+        notes      = sanitize_input(request.form.get('notes', ''), max_len=512)
+
+        if not name or not host:
+            flash('Name and host are required.', 'error')
+            return render_template('commander/add.html')
+
+        try:
+            dev_id = corsair_commander.add_device(
+                name=name, host=host, port=port, username=username,
+                password=password, ssh_key=ssh_key, match_str=match_str,
+                use_direct=use_direct, notes=notes
+            )
+            flash(f'Device "{name}" added successfully.', 'success')
+            return redirect(url_for('commander_detail', dev_id=dev_id))
+        except Exception as exc:
+            flash(f'Error adding device: {exc}', 'error')
+
+    return render_template('commander/add.html')
+
+
+@app.route('/commander/<int:dev_id>')
+@login_required
+def commander_detail(dev_id):
+    """Commander Pro device detail page with live status and history."""
+    dev = corsair_commander.get_device(dev_id)
+    if not dev:
+        flash('Device not found.', 'error')
+        return redirect(url_for('commander_index'))
+    latest = corsair_commander.get_latest(dev_id)
+    history = corsair_commander.get_history(dev_id, hours=24, limit=1440)
+    return render_template('commander/detail.html',
+                           dev=dev,
+                           latest=latest,
+                           history=history)
+
+
+@app.route('/commander/<int:dev_id>/edit', methods=['GET', 'POST'])
+@login_required
+def commander_edit(dev_id):
+    """Edit Commander Pro device settings."""
+    dev = corsair_commander.get_device(dev_id)
+    if not dev:
+        flash('Device not found.', 'error')
+        return redirect(url_for('commander_index'))
+
+    if request.method == 'POST':
+        fields = {
+            'name':       sanitize_input(request.form.get('name', ''), max_len=64),
+            'host':       sanitize_input(request.form.get('host', ''), max_len=253),
+            'port':       int(request.form.get('port', 22) or 22),
+            'username':   sanitize_input(request.form.get('username', 'root'), max_len=64),
+            'match_str':  sanitize_input(request.form.get('match_str', 'Commander Pro'), max_len=128),
+            'use_direct': 1 if request.form.get('use_direct') else 0,
+            'notes':      sanitize_input(request.form.get('notes', ''), max_len=512),
+            'enabled':    1 if request.form.get('enabled') else 0,
+        }
+        pw = request.form.get('password', '')
+        if pw:
+            fields['password'] = pw
+        ssh_key = request.form.get('ssh_key', '').strip()
+        if ssh_key:
+            fields['ssh_key'] = ssh_key
+
+        corsair_commander.update_device(dev_id, **fields)
+        flash('Device updated.', 'success')
+        return redirect(url_for('commander_detail', dev_id=dev_id))
+
+    return render_template('commander/edit.html', dev=dev)
+
+
+@app.route('/commander/<int:dev_id>/delete', methods=['POST'])
+@login_required
+def commander_delete(dev_id):
+    """Delete a Commander Pro device."""
+    corsair_commander.delete_device(dev_id)
+    flash('Device deleted.', 'success')
+    return redirect(url_for('commander_index'))
+
+
+@app.route('/commander/<int:dev_id>/refresh')
+@login_required
+def commander_refresh(dev_id):
+    """Trigger an immediate status poll and redirect to detail page."""
+    dev = corsair_commander.get_device(dev_id)
+    if not dev:
+        return jsonify({'ok': False, 'error': 'Device not found'}), 404
+    status = corsair_commander.fetch_status(dev)
+    if status.get('ok'):
+        from corsair_commander import _save_sample
+        _save_sample(dev_id, status)
+    return redirect(url_for('commander_detail', dev_id=dev_id))
+
+
+@app.route('/commander/<int:dev_id>/test')
+@login_required
+def commander_test(dev_id):
+    """Test SSH + liquidctl connectivity."""
+    result = corsair_commander.test_connection(dev_id)
+    return jsonify(result)
+
+
+@app.route('/commander/<int:dev_id>/set_fan', methods=['POST'])
+@login_required
+def commander_set_fan(dev_id):
+    """Set fan speed on a Commander Pro device."""
+    dev = corsair_commander.get_device(dev_id)
+    if not dev:
+        return jsonify({'ok': False, 'error': 'Device not found'}), 404
+
+    channel = request.form.get('channel', 'fan1')
+    mode    = request.form.get('mode', 'fixed')   # 'fixed' or 'profile'
+
+    if mode == 'fixed':
+        try:
+            speed = int(request.form.get('duty', 50))
+        except (TypeError, ValueError):
+            return jsonify({'ok': False, 'error': 'Invalid duty value'}), 400
+    else:
+        # Profile: pairs of temp,rpm from form
+        try:
+            pairs_raw = request.form.get('profile', '')
+            pairs = []
+            for pair in pairs_raw.split(';'):
+                pair = pair.strip()
+                if pair:
+                    t, r = pair.split(',')
+                    pairs.append((int(t.strip()), int(r.strip())))
+            speed = pairs
+        except Exception as exc:
+            return jsonify({'ok': False, 'error': f'Invalid profile: {exc}'}), 400
+
+    result = corsair_commander.set_fan_speed(dev, channel, speed)
+    return jsonify(result)
+
+
+# ── Corsair Commander Pro JSON API ────────────────────────────────────────────
+
+@app.route('/api/commander/devices')
+@login_required
+def api_commander_devices():
+    """List all Commander Pro devices."""
+    return jsonify(corsair_commander.list_devices())
+
+
+@app.route('/api/commander/<int:dev_id>/status')
+@login_required
+def api_commander_status(dev_id):
+    """Return the latest cached status for a device."""
+    latest = corsair_commander.get_latest(dev_id)
+    return jsonify(latest or {})
+
+
+@app.route('/api/commander/<int:dev_id>/history')
+@login_required
+def api_commander_history(dev_id):
+    """Return status history for the last N hours."""
+    hours = min(int(request.args.get('hours', 24)), 168)
+    limit = min(int(request.args.get('limit', 1440)), 10080)
+    return jsonify(corsair_commander.get_history(dev_id, hours=hours, limit=limit))
+
+
+@app.route('/api/commander/all')
+@login_required
+def api_commander_all():
+    """Return latest status for all enabled devices."""
+    return jsonify(corsair_commander.get_all_latest())

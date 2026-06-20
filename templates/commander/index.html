@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Commander Pro — FleetPilot{% endblock %}
+{% block nav_extra %}
+<a href="/commander/add" class="btn btn-sm btn-primary">+ Add Device</a>
+{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">&#x1F4A8; Corsair Commander Pro</h1>
+  <p class="page-subtitle">Remote fan &amp; temperature management via SSH + liquidctl</p>
+</div>
+
+{% if not devices %}
+<div class="card" style="text-align:center;padding:3rem;">
+  <div style="font-size:3rem;margin-bottom:1rem;">&#x1F4A8;</div>
+  <h2 style="margin-bottom:.5rem;">No Commander Pro devices configured</h2>
+  <p style="color:var(--text-muted);margin-bottom:1.5rem;">
+    Add a remote PC that has a Corsair Commander Pro connected via USB.<br>
+    FleetPilot will connect via SSH and use <code>liquidctl</code> to read temperatures,
+    fan speeds and control fans.
+  </p>
+  <a href="/commander/add" class="btn btn-primary">+ Add Device</a>
+</div>
+{% else %}
+
+<!-- Overview cards -->
+<div class="stat-grid" style="margin-bottom:1.5rem;">
+  {% for entry in all_latest %}
+  {% set dev = entry.device %}
+  {% set latest = entry.latest %}
+  {% set status = latest.status if latest else {} %}
+  {% set ok = status.get('ok', false) if latest else false %}
+  <div class="stat-card {% if not latest %}stat-warn{% elif ok %}stat-ok{% else %}stat-danger{% endif %}"
+       style="cursor:pointer;" onclick="location.href='/commander/{{ dev.id }}'">
+    <div class="stat-icon">&#x1F4A8;</div>
+    <div class="stat-body">
+      <div class="stat-value" style="font-size:1rem;font-weight:700;">{{ dev.name }}</div>
+      <div class="stat-label">{{ dev.host }}</div>
+      {% if latest and ok %}
+        {% set temps = status.get('temperatures', []) %}
+        {% set fans  = status.get('fans', []) %}
+        <div class="stat-sub">
+          {% if temps %}{{ temps[0].value }}°C{% endif %}
+          {% if fans %} · {{ fans | length }} fan(s){% endif %}
+        </div>
+      {% elif latest %}
+        <div class="stat-sub" style="color:var(--danger);">{{ status.get('error','Offline')[:40] }}</div>
+      {% else %}
+        <div class="stat-sub" style="color:var(--text-muted);">No data yet</div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Device table -->
+<div class="card">
+  <div class="card-header">
+    <span class="card-title">Configured Devices</span>
+  </div>
+  <div class="table-wrapper">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Host</th>
+          <th>User</th>
+          <th>Match</th>
+          <th>Status</th>
+          <th>Temps</th>
+          <th>Fans</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in all_latest %}
+        {% set dev = entry.device %}
+        {% set latest = entry.latest %}
+        {% set status = latest.status if latest else {} %}
+        {% set ok = status.get('ok', false) if latest else false %}
+        <tr>
+          <td><a href="/commander/{{ dev.id }}">{{ dev.name }}</a></td>
+          <td><code>{{ dev.host }}:{{ dev.port }}</code></td>
+          <td><code>{{ dev.username }}</code></td>
+          <td><code>{{ dev.match_str }}</code></td>
+          <td>
+            {% if not latest %}
+              <span class="badge badge-amber">No data</span>
+            {% elif ok %}
+              <span class="badge badge-green">Online</span>
+            {% else %}
+              <span class="badge badge-red" title="{{ status.get('error','') }}">Offline</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if latest and ok %}
+              {% for t in status.get('temperatures', []) %}
+                <span title="{{ t.label }}">{{ t.value }}°C</span>{% if not loop.last %}, {% endif %}
+              {% endfor %}
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if latest and ok %}
+              {% for f in status.get('fans', []) %}
+                <span title="{{ f.label }}">{{ f.rpm }} rpm</span>{% if not loop.last %}, {% endif %}
+              {% endfor %}
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            <a href="/commander/{{ dev.id }}" class="btn btn-xs btn-secondary">View</a>
+            <a href="/commander/{{ dev.id }}/refresh" class="btn btn-xs btn-primary">&#x21BB;</a>
+            <a href="/commander/{{ dev.id }}/edit" class="btn btn-xs btn-secondary">Edit</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endif %}
+
+<!-- Setup instructions -->
+<div class="card" style="margin-top:1.5rem;">
+  <div class="card-header"><span class="card-title">&#x2139; Remote Host Requirements</span></div>
+  <div style="padding:1rem 1.5rem;line-height:1.8;">
+    <p>The remote PC must have <strong>liquidctl</strong> installed and accessible:</p>
+    <pre style="background:var(--bg-secondary);padding:1rem;border-radius:6px;overflow-x:auto;"><code># Debian/Ubuntu
+sudo apt install liquidctl
+
+# Or via pip
+pip3 install liquidctl
+
+# Allow non-root access (recommended)
+# Create udev rule: /etc/udev/rules.d/71-liquidctl.rules
+# SUBSYSTEMS=="usb", ATTRS{idVendor}=="1b1c", TAG+="uaccess"
+# sudo udevadm control --reload-rules && sudo udevadm trigger
+
+# Or run as root (simpler, set username=root in FleetPilot)</code></pre>
+    <p style="margin-top:.75rem;">FleetPilot connects via SSH and runs <code>liquidctl --match '&lt;match_str&gt;' initialize</code> then <code>status --json</code> every 30 seconds.</p>
+  </div>
+</div>
+{% endblock %}
