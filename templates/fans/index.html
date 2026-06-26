@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+{% block title %}Fan Controllers{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-wind me-2"></i>Fan Controllers</h4>
+    <a href="/fans/add" class="btn btn-success btn-sm">
+      <i class="bi bi-plus-circle me-1"></i>Add Device
+    </a>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="alert alert-{{ cat }} alert-dismissible fade show" role="alert">
+        {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+  {% endwith %}
+
+  {% if not devices %}
+    <div class="alert alert-info">
+      No fan controller devices configured yet.
+      <a href="/fans/add" class="alert-link">Add your first device</a> to get started.
+    </div>
+  {% else %}
+
+  <!-- Summary cards -->
+  <div class="row g-3 mb-4">
+    {% set total = devices|length %}
+    {% set online = devices|selectattr('enabled')|list|length %}
+    <div class="col-6 col-md-3">
+      <div class="card text-center h-100">
+        <div class="card-body py-2">
+          <div class="fs-2 fw-bold text-primary">{{ total }}</div>
+          <div class="small text-muted">Total Devices</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card text-center h-100">
+        <div class="card-body py-2">
+          <div class="fs-2 fw-bold text-success">{{ online }}</div>
+          <div class="small text-muted">Enabled</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card text-center h-100">
+        <div class="card-body py-2">
+          {% set total_fans = namespace(n=0) %}
+          {% for d in devices %}
+            {% set lat = latest_map.get(d.id) %}
+            {% if lat and lat.fans %}
+              {% set total_fans.n = total_fans.n + lat.fans|length %}
+            {% endif %}
+          {% endfor %}
+          <div class="fs-2 fw-bold text-info">{{ total_fans.n }}</div>
+          <div class="small text-muted">Fan Channels</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card text-center h-100">
+        <div class="card-body py-2">
+          {% set total_temps = namespace(n=0) %}
+          {% for d in devices %}
+            {% set lat = latest_map.get(d.id) %}
+            {% if lat and lat.temperatures %}
+              {% set total_temps.n = total_temps.n + lat.temperatures|length %}
+            {% endif %}
+          {% endfor %}
+          <div class="fs-2 fw-bold text-warning">{{ total_temps.n }}</div>
+          <div class="small text-muted">Temp Sensors</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Device table -->
+  <div class="card">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle">
+          <thead class="table-dark">
+            <tr>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Host</th>
+              <th>Fans</th>
+              <th>Temperatures</th>
+              <th>Last Poll</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for d in devices %}
+            {% set lat = latest_map.get(d.id) %}
+            {% set type_info = controller_types.get(d.controller_type, {}) %}
+            <tr>
+              <td>
+                <a href="/fans/{{ d.id }}" class="fw-semibold text-decoration-none">
+                  {{ type_info.get('icon','⚙') }} {{ d.name }}
+                </a>
+              </td>
+              <td>
+                <span class="badge bg-secondary">{{ type_info.get('label', d.controller_type) }}</span>
+              </td>
+              <td class="font-monospace small">{{ d.host }}:{{ d.port }}</td>
+              <td>
+                {% if lat and lat.fans %}
+                  {% for fan in lat.fans[:3] %}
+                    <span class="badge bg-info text-dark me-1">
+                      {{ fan.label.split('/')[-1].strip() }}
+                      {% if fan.rpm is defined %} {{ fan.rpm }} RPM{% endif %}
+                      {% if fan.percent is defined %} {{ fan.percent|int }}%{% endif %}
+                    </span>
+                  {% endfor %}
+                  {% if lat.fans|length > 3 %}
+                    <span class="text-muted small">+{{ lat.fans|length - 3 }} more</span>
+                  {% endif %}
+                {% else %}
+                  <span class="text-muted small">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if lat and lat.temperatures %}
+                  {% for t in lat.temperatures[:2] %}
+                    <span class="badge {% if t.value > 80 %}bg-danger{% elif t.value > 65 %}bg-warning text-dark{% else %}bg-success{% endif %} me-1">
+                      {{ t.label.split('/')[-1].strip() }}: {{ t.value }}°C
+                    </span>
+                  {% endfor %}
+                  {% if lat.temperatures|length > 2 %}
+                    <span class="text-muted small">+{{ lat.temperatures|length - 2 }} more</span>
+                  {% endif %}
+                {% else %}
+                  <span class="text-muted small">—</span>
+                {% endif %}
+              </td>
+              <td class="small text-muted">
+                {% if lat and lat.ts %}
+                  <span title="{{ lat.ts }}">{{ lat.ts | int | datetimeformat if datetimeformat is defined else lat.ts }}</span>
+                {% else %}—{% endif %}
+              </td>
+              <td>
+                {% if not d.enabled %}
+                  <span class="badge bg-secondary">Disabled</span>
+                {% elif lat %}
+                  {% if lat.ok %}
+                    <span class="badge bg-success">Online</span>
+                  {% else %}
+                    <span class="badge bg-danger" title="{{ lat.error }}">Error</span>
+                  {% endif %}
+                {% else %}
+                  <span class="badge bg-secondary">Pending</span>
+                {% endif %}
+              </td>
+              <td class="text-end">
+                <a href="/fans/{{ d.id }}" class="btn btn-sm btn-outline-primary me-1" title="Details">
+                  <i class="bi bi-eye"></i>
+                </a>
+                <a href="/fans/{{ d.id }}/edit" class="btn btn-sm btn-outline-secondary me-1" title="Edit">
+                  <i class="bi bi-pencil"></i>
+                </a>
+                <button class="btn btn-sm btn-outline-info" title="Force Poll"
+                        onclick="forcePoll({{ d.id }}, this)">
+                  <i class="bi bi-arrow-clockwise"></i>
+                </button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Controller type info cards -->
+  <div class="mt-4">
+    <h6 class="text-muted mb-3">Supported Controller Types</h6>
+    <div class="row g-2">
+      {% for key, info in controller_types.items() %}
+      <div class="col-12 col-md-6 col-xl-4">
+        <div class="card h-100 border-secondary">
+          <div class="card-body py-2 px-3">
+            <div class="fw-semibold">{{ info.icon }} {{ info.label }}</div>
+            <div class="small text-muted">{{ info.description }}</div>
+            {% if info.packages_apt %}
+              <div class="mt-1">
+                {% for pkg in info.packages_apt %}
+                  <code class="small">{{ pkg }}</code>
+                {% endfor %}
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+</div>
+
+<script>
+function forcePoll(devId, btn) {
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+  fetch('/fans/' + devId + '/refresh')
+    .then(r => r.json())
+    .then(d => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i>';
+      if (d.ok) {
+        location.reload();
+      } else {
+        alert('Poll failed: ' + (d.error || 'Unknown error'));
+      }
+    })
+    .catch(e => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i>';
+      alert('Error: ' + e);
+    });
+}
+</script>
+{% endblock %}

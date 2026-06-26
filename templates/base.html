@@ -66,6 +66,9 @@
       <a class="sidebar-link {% if request.path.startswith('/commander') %}active{% endif %}" href="/commander">
         <span class="sidebar-icon">&#x1F4A8;</span> Commander Pro
       </a>
+      <a class="sidebar-link {% if request.path.startswith('/fans') %}active{% endif %}" href="/fans">
+        <span class="sidebar-icon">&#x1F32C;</span> Fan Controllers
+      </a>
 
       <span class="sidebar-section-label">{{ _('Settings') }}</span>
       {% if is_admin is defined and is_admin %}

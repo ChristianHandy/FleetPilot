@@ -1,0 +1,532 @@
+{% extends "base.html" %}
+{% block title %}{{ dev.name }} — Fan Controller{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+
+  <!-- Header -->
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div class="d-flex align-items-center gap-2">
+      <a href="/fans" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i></a>
+      {% set type_info = controller_types.get(dev.controller_type, {}) %}
+      <h4 class="mb-0">{{ type_info.get('icon','⚙') }} {{ dev.name }}</h4>
+      <span class="badge bg-secondary">{{ type_info.get('label', dev.controller_type) }}</span>
+      {% if dev.enabled %}
+        <span class="badge bg-success" id="statusBadge">
+          {% if latest and latest.ok %}Online{% else %}Polling...{% endif %}
+        </span>
+      {% else %}
+        <span class="badge bg-secondary">Disabled</span>
+      {% endif %}
+    </div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-sm btn-outline-info" id="testBtn" onclick="testConn()">
+        <i class="bi bi-plug me-1"></i>Test Connection
+      </button>
+      <button class="btn btn-sm btn-outline-primary" id="refreshBtn" onclick="forcePoll()">
+        <i class="bi bi-arrow-clockwise me-1"></i>Force Poll
+      </button>
+      <a href="/fans/{{ dev.id }}/edit" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-pencil me-1"></i>Edit
+      </a>
+    </div>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="alert alert-{{ cat }} alert-dismissible fade show">
+        {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+  {% endwith %}
+
+  <!-- Connection info -->
+  <div class="row g-2 mb-3">
+    <div class="col-auto">
+      <span class="text-muted small"><i class="bi bi-hdd-network me-1"></i>{{ dev.host }}:{{ dev.port }}</span>
+    </div>
+    <div class="col-auto">
+      <span class="text-muted small"><i class="bi bi-person me-1"></i>{{ dev.username }}</span>
+    </div>
+    {% if dev.notes %}
+    <div class="col-auto">
+      <span class="text-muted small"><i class="bi bi-chat-text me-1"></i>{{ dev.notes }}</span>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Install packages banner -->
+  <div class="alert alert-warning d-flex align-items-center gap-3 mb-3" id="installBanner"
+       {% if latest and latest.ok %}style="display:none!important"{% endif %}>
+    <i class="bi bi-box-arrow-in-down fs-4"></i>
+    <div>
+      <strong>Required packages may not be installed</strong> on the remote host.
+      {% set pkgs = controller_types.get(dev.controller_type, {}).get('packages_apt', []) %}
+      {% if pkgs %}
+        Needed: <code>{{ pkgs | join(', ') }}</code>
+      {% endif %}
+    </div>
+    <form method="POST" action="/fans/{{ dev.id }}/install" class="ms-auto">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
+      <button type="submit" class="btn btn-warning btn-sm">
+        <i class="bi bi-download me-1"></i>Install Packages
+      </button>
+    </form>
+  </div>
+
+  <!-- Live stat cards -->
+  <div class="row g-3 mb-3" id="statCards">
+    {% if latest %}
+      {% if latest.temperatures %}
+        {% for t in latest.temperatures %}
+        <div class="col-6 col-md-4 col-xl-3">
+          <div class="card h-100">
+            <div class="card-body py-2 text-center">
+              <div class="small text-muted mb-1">🌡 {{ t.label.split('/')[-1].strip() }}</div>
+              <div class="fs-4 fw-bold {% if t.value > 80 %}text-danger{% elif t.value > 65 %}text-warning{% else %}text-success{% endif %}">
+                {{ t.value }}°C
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      {% endif %}
+
+      {% if latest.fans %}
+        {% for fan in latest.fans %}
+        <div class="col-6 col-md-4 col-xl-3">
+          <div class="card h-100">
+            <div class="card-body py-2 text-center">
+              <div class="small text-muted mb-1">💨 {{ fan.label.split('/')[-1].strip() }}</div>
+              {% if fan.rpm is defined and fan.rpm > 0 %}
+                <div class="fs-4 fw-bold text-info">{{ fan.rpm }} <span class="small">RPM</span></div>
+              {% endif %}
+              {% if fan.percent is defined %}
+                <div class="fs-5 fw-bold text-primary">{{ fan.percent | int }}%</div>
+              {% endif %}
+              {% if fan.target_percent is defined %}
+                <div class="small text-muted">Target: {{ fan.target_percent | int }}%</div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      {% endif %}
+
+      {% if latest.voltages %}
+        {% for v in latest.voltages %}
+        <div class="col-6 col-md-4 col-xl-3">
+          <div class="card h-100">
+            <div class="card-body py-2 text-center">
+              <div class="small text-muted mb-1">⚡ {{ v.label.split('/')[-1].strip() }}</div>
+              <div class="fs-4 fw-bold text-secondary">{{ v.value }}V</div>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      {% endif %}
+
+      {% if not latest.temperatures and not latest.fans and not latest.voltages %}
+        <div class="col-12">
+          <div class="alert alert-secondary">
+            No data yet. Click <strong>Force Poll</strong> to fetch live data, or check that the required packages are installed.
+            {% if latest.error %}
+              <br><code class="small">{{ latest.error }}</code>
+            {% endif %}
+          </div>
+        </div>
+      {% endif %}
+    {% else %}
+      <div class="col-12">
+        <div class="alert alert-secondary">No data yet. Click <strong>Force Poll</strong> to fetch live data.</div>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- PWM nodes (lm_sensors / pwm_sysfs) -->
+  {% if latest and latest.pwm_nodes %}
+  <div class="card mb-3">
+    <div class="card-header fw-semibold">PWM Fan Channels</div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm mb-0 align-middle">
+          <thead class="table-dark">
+            <tr><th>Channel</th><th>Current</th><th>Mode</th><th>Set Speed</th></tr>
+          </thead>
+          <tbody>
+            {% for pwm in latest.pwm_nodes %}
+            <tr>
+              <td class="font-monospace small">{{ pwm.path or pwm.label }}</td>
+              <td>
+                <div class="d-flex align-items-center gap-2">
+                  <div class="progress flex-grow-1" style="height:8px;min-width:80px">
+                    <div class="progress-bar bg-info" style="width:{{ pwm.percent }}%"></div>
+                  </div>
+                  <span class="small">{{ pwm.percent }}%</span>
+                </div>
+              </td>
+              <td>
+                {% if pwm.enable_mode == '1' %}
+                  <span class="badge bg-warning text-dark">Manual</span>
+                {% elif pwm.enable_mode == '2' %}
+                  <span class="badge bg-success">Auto</span>
+                {% else %}
+                  <span class="badge bg-secondary">{{ pwm.enable_mode }}</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="d-flex align-items-center gap-2">
+                  <input type="range" class="form-range" style="width:120px"
+                         min="0" max="100" value="{{ pwm.percent }}"
+                         id="pwm_range_{{ loop.index }}"
+                         oninput="document.getElementById('pwm_val_{{ loop.index }}').textContent=this.value+'%'">
+                  <span id="pwm_val_{{ loop.index }}" class="small" style="min-width:35px">{{ pwm.percent }}%</span>
+                  <button class="btn btn-sm btn-primary"
+                          onclick="setFan('{{ pwm.path or pwm.label }}', document.getElementById('pwm_range_{{ loop.index }}').value, 'fixed')">
+                    Set
+                  </button>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Fan control panel -->
+  <div class="card mb-3">
+    <div class="card-header fw-semibold d-flex justify-content-between">
+      <span><i class="bi bi-sliders me-1"></i>Fan Speed Control</span>
+      <span class="badge bg-secondary">{{ controller_types.get(dev.controller_type, {}).get('label', dev.controller_type) }}</span>
+    </div>
+    <div class="card-body">
+      {% if dev.controller_type == 'nbfc' %}
+        <!-- nbfc: per-fan index -->
+        <div class="row g-3 align-items-end">
+          <div class="col-md-3">
+            <label class="form-label">Fan Index</label>
+            <input type="number" id="fc_channel" class="form-control" value="0" min="0" max="10">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Speed (%)</label>
+            <div class="d-flex align-items-center gap-2">
+              <input type="range" class="form-range" id="fc_speed" min="0" max="100" value="50"
+                     oninput="document.getElementById('fc_speed_val').textContent=this.value+'%'">
+              <span id="fc_speed_val" style="min-width:40px">50%</span>
+            </div>
+          </div>
+          <div class="col-md-2">
+            <button class="btn btn-primary w-100" onclick="setFanFromUI()">Set Speed</button>
+          </div>
+          <div class="col-md-3">
+            <button class="btn btn-outline-secondary w-100"
+                    onclick="setFan(document.getElementById('fc_channel').value, -1, 'auto')">
+              Auto Mode
+            </button>
+          </div>
+        </div>
+
+      {% elif dev.controller_type == 'ipmi' %}
+        <!-- IPMI: global fan speed -->
+        <div class="row g-3 align-items-end">
+          <div class="col-md-3">
+            <label class="form-label">Fan Zone</label>
+            <select id="fc_channel" class="form-select">
+              <option value="all">All Fans</option>
+              <option value="0x00">Zone 0 (CPU)</option>
+              <option value="0x01">Zone 1 (Peripheral)</option>
+            </select>
+          </div>
+          <div class="col-md-5">
+            <label class="form-label">Speed (%)</label>
+            <div class="d-flex align-items-center gap-2">
+              <input type="range" class="form-range" id="fc_speed" min="0" max="100" value="50"
+                     oninput="document.getElementById('fc_speed_val').textContent=this.value+'%'">
+              <span id="fc_speed_val" style="min-width:40px">50%</span>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <button class="btn btn-primary w-100" onclick="setFanFromUI()">Set Fan Speed</button>
+          </div>
+        </div>
+        <div class="mt-2 small text-muted">
+          ⚠ Fan control disables automatic thermal management. Ensure adequate cooling.
+        </div>
+
+      {% elif dev.controller_type == 'liquidctl' %}
+        <!-- liquidctl: channel + fixed or profile -->
+        <ul class="nav nav-tabs mb-3" id="fcTabs">
+          <li class="nav-item">
+            <button class="nav-link active" onclick="switchTab('fixed', this)">Fixed Speed</button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link" onclick="switchTab('profile', this)">Temperature Profile</button>
+          </li>
+        </ul>
+        <div id="tab_fixed">
+          <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+              <label class="form-label">Channel</label>
+              <input type="text" id="fc_channel" class="form-control" value="fan" placeholder="fan, pump, led...">
+            </div>
+            <div class="col-md-5">
+              <label class="form-label">Speed (%)</label>
+              <div class="d-flex align-items-center gap-2">
+                <input type="range" class="form-range" id="fc_speed" min="0" max="100" value="50"
+                       oninput="document.getElementById('fc_speed_val').textContent=this.value+'%'">
+                <span id="fc_speed_val" style="min-width:40px">50%</span>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <button class="btn btn-primary w-100" onclick="setFanFromUI()">Set Speed</button>
+            </div>
+          </div>
+        </div>
+        <div id="tab_profile" style="display:none">
+          <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+              <label class="form-label">Channel</label>
+              <input type="text" id="fc_channel_p" class="form-control" value="fan">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Profile (temp°C,rpm pairs)</label>
+              <input type="text" id="fc_profile" class="form-control"
+                     value="25,600;40,900;55,1400;70,2000"
+                     placeholder="25,600;40,900;55,1400">
+              <div class="form-text">Format: temp,rpm;temp,rpm;...</div>
+            </div>
+            <div class="col-md-3">
+              <button class="btn btn-primary w-100" onclick="setFanProfile()">Apply Profile</button>
+            </div>
+          </div>
+        </div>
+
+      {% else %}
+        <!-- lm_sensors / pwm_sysfs: generic -->
+        <div class="row g-3 align-items-end">
+          <div class="col-md-4">
+            <label class="form-label">PWM Channel</label>
+            <input type="text" id="fc_channel" class="form-control" value="pwm1"
+                   placeholder="pwm1 or /sys/class/hwmon/hwmon0/pwm1">
+            <div class="form-text">Use <code>pwm1</code>, <code>pwm2</code>, etc.</div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Speed (%)</label>
+            <div class="d-flex align-items-center gap-2">
+              <input type="range" class="form-range" id="fc_speed" min="0" max="100" value="50"
+                     oninput="document.getElementById('fc_speed_val').textContent=this.value+'%'">
+              <span id="fc_speed_val" style="min-width:40px">50%</span>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <button class="btn btn-primary w-100" onclick="setFanFromUI()">Set Speed</button>
+          </div>
+        </div>
+      {% endif %}
+
+      <!-- Result output -->
+      <div id="fanResult" class="mt-3" style="display:none">
+        <pre class="bg-dark text-light p-2 rounded small" id="fanResultText" style="max-height:150px;overflow-y:auto"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Temperature history chart -->
+  {% if history %}
+  <div class="card mb-3">
+    <div class="card-header fw-semibold">Temperature History (24h)</div>
+    <div class="card-body">
+      <canvas id="tempChart" height="80"></canvas>
+    </div>
+  </div>
+  <div class="card mb-3">
+    <div class="card-header fw-semibold">Fan Speed History (24h)</div>
+    <div class="card-body">
+      <canvas id="fanChart" height="80"></canvas>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Raw data -->
+  {% if latest and latest.raw %}
+  <div class="card mb-3">
+    <div class="card-header fw-semibold d-flex justify-content-between">
+      <span>Raw Output</span>
+      <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#rawCollapse">
+        Toggle
+      </button>
+    </div>
+    <div class="collapse" id="rawCollapse">
+      <div class="card-body">
+        <pre class="small mb-0" style="max-height:300px;overflow-y:auto">{{ latest.raw }}</pre>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+const DEV_ID = {{ dev.id }};
+
+// ── Fan control ───────────────────────────────────────────────────────────────
+function setFan(channel, speed, mode) {
+  const body = new URLSearchParams({channel, speed, mode});
+  const res = document.getElementById('fanResult');
+  const txt = document.getElementById('fanResultText');
+  res.style.display = 'block';
+  txt.textContent = 'Sending command...';
+  fetch('/fans/' + DEV_ID + '/set_fan', {method: 'POST', body})
+    .then(r => r.json())
+    .then(d => {
+      txt.textContent = (d.ok ? '✔ ' : '✘ ') + (d.message || JSON.stringify(d));
+    })
+    .catch(e => { txt.textContent = 'Error: ' + e; });
+}
+
+function setFanFromUI() {
+  const ch = document.getElementById('fc_channel')?.value || '0';
+  const sp = document.getElementById('fc_speed')?.value || '50';
+  setFan(ch, sp, 'fixed');
+}
+
+function setFanProfile() {
+  const ch = document.getElementById('fc_channel_p')?.value || 'fan';
+  const profile = document.getElementById('fc_profile')?.value || '';
+  const body = new URLSearchParams({channel: ch, mode: 'profile', profile});
+  const res = document.getElementById('fanResult');
+  const txt = document.getElementById('fanResultText');
+  res.style.display = 'block';
+  txt.textContent = 'Applying profile...';
+  fetch('/fans/' + DEV_ID + '/set_fan', {method: 'POST', body})
+    .then(r => r.json())
+    .then(d => { txt.textContent = (d.ok ? '✔ ' : '✘ ') + (d.message || JSON.stringify(d)); })
+    .catch(e => { txt.textContent = 'Error: ' + e; });
+}
+
+function switchTab(tab, btn) {
+  document.getElementById('tab_fixed').style.display = tab === 'fixed' ? '' : 'none';
+  document.getElementById('tab_profile').style.display = tab === 'profile' ? '' : 'none';
+  document.querySelectorAll('#fcTabs .nav-link').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// ── Connection test ───────────────────────────────────────────────────────────
+function testConn() {
+  const btn = document.getElementById('testBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Testing...';
+  fetch('/fans/' + DEV_ID + '/test')
+    .then(r => r.json())
+    .then(d => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-plug me-1"></i>Test Connection';
+      alert((d.ok ? '✔ ' : '✘ ') + d.message);
+    })
+    .catch(e => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-plug me-1"></i>Test Connection';
+      alert('Error: ' + e);
+    });
+}
+
+// ── Force poll ────────────────────────────────────────────────────────────────
+function forcePoll() {
+  const btn = document.getElementById('refreshBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Polling...';
+  fetch('/fans/' + DEV_ID + '/refresh')
+    .then(r => r.json())
+    .then(d => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Force Poll';
+      if (d.ok) location.reload();
+      else alert('Poll failed: ' + (d.error || JSON.stringify(d)));
+    })
+    .catch(e => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Force Poll';
+      alert('Error: ' + e);
+    });
+}
+
+// ── Charts ────────────────────────────────────────────────────────────────────
+{% if history %}
+(function() {
+  const history = {{ history | tojson }};
+  if (!history.length) return;
+
+  const labels = history.map(h => {
+    const d = new Date(h.ts * 1000);
+    return d.getHours() + ':' + String(d.getMinutes()).padStart(2,'0');
+  });
+
+  // Collect all temperature sensor names
+  const tempNames = new Set();
+  const fanNames = new Set();
+  history.forEach(h => {
+    (h.temperatures || []).forEach(t => tempNames.add(t.label));
+    (h.fans || []).forEach(f => fanNames.add(f.label));
+  });
+
+  const COLORS = ['#0dcaf0','#198754','#ffc107','#dc3545','#6f42c1','#fd7e14','#20c997'];
+
+  // Temperature chart
+  const tempCtx = document.getElementById('tempChart');
+  if (tempCtx && tempNames.size) {
+    const datasets = [...tempNames].map((name, i) => ({
+      label: name.split('/').pop().trim(),
+      data: history.map(h => {
+        const t = (h.temperatures || []).find(x => x.label === name);
+        return t ? t.value : null;
+      }),
+      borderColor: COLORS[i % COLORS.length],
+      backgroundColor: 'transparent',
+      tension: 0.3,
+      pointRadius: 0,
+      spanGaps: true,
+    }));
+    new Chart(tempCtx, {
+      type: 'line',
+      data: {labels, datasets},
+      options: {
+        responsive: true,
+        plugins: {legend: {position: 'top'}},
+        scales: {y: {title: {display: true, text: '°C'}}}
+      }
+    });
+  }
+
+  // Fan chart
+  const fanCtx = document.getElementById('fanChart');
+  if (fanCtx && fanNames.size) {
+    const datasets = [...fanNames].map((name, i) => ({
+      label: name.split('/').pop().trim(),
+      data: history.map(h => {
+        const f = (h.fans || []).find(x => x.label === name);
+        if (!f) return null;
+        return f.rpm !== undefined ? f.rpm : (f.percent !== undefined ? f.percent : null);
+      }),
+      borderColor: COLORS[i % COLORS.length],
+      backgroundColor: 'transparent',
+      tension: 0.3,
+      pointRadius: 0,
+      spanGaps: true,
+    }));
+    new Chart(fanCtx, {
+      type: 'line',
+      data: {labels, datasets},
+      options: {
+        responsive: true,
+        plugins: {legend: {position: 'top'}},
+        scales: {y: {title: {display: true, text: 'RPM / %'}}}
+      }
+    });
+  }
+})();
+{% endif %}
+</script>
+{% endblock %}

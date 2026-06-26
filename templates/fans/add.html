@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}Add Fan Controller{% endblock %}
+{% block content %}
+<div class="container py-4" style="max-width:720px">
+
+  <div class="d-flex align-items-center mb-3">
+    <a href="/fans" class="btn btn-sm btn-outline-secondary me-2"><i class="bi bi-arrow-left"></i></a>
+    <h4 class="mb-0"><i class="bi bi-wind me-2"></i>Add Fan Controller</h4>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="alert alert-{{ cat }}">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <form method="POST" action="/fans/add" id="addForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
+
+    <!-- Basic info -->
+    <div class="card mb-3">
+      <div class="card-header fw-semibold">Device Information</div>
+      <div class="card-body">
+        <div class="mb-3">
+          <label class="form-label">Display Name <span class="text-danger">*</span></label>
+          <input type="text" name="name" class="form-control" placeholder="e.g. gaming-pc-fans" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Controller Type <span class="text-danger">*</span></label>
+          <select name="controller_type" id="ctypeSelect" class="form-select" onchange="updateTypeUI()">
+            {% for key, info in controller_types.items() %}
+            <option value="{{ key }}">{{ info.icon }} {{ info.label }}</option>
+            {% endfor %}
+          </select>
+          <div id="typeDesc" class="form-text mt-1"></div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Notes</label>
+          <input type="text" name="notes" class="form-control" placeholder="Optional description">
+        </div>
+      </div>
+    </div>
+
+    <!-- SSH connection -->
+    <div class="card mb-3">
+      <div class="card-header fw-semibold">SSH Connection</div>
+      <div class="card-body">
+        <div class="row g-2 mb-3">
+          <div class="col-9">
+            <label class="form-label">Host / IP <span class="text-danger">*</span></label>
+            <input type="text" name="host" class="form-control" placeholder="192.168.1.100" required>
+          </div>
+          <div class="col-3">
+            <label class="form-label">SSH Port</label>
+            <input type="number" name="port" class="form-control" value="22" min="1" max="65535">
+          </div>
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <label class="form-label">Username</label>
+            <input type="text" name="username" class="form-control" value="root">
+          </div>
+          <div class="col-6">
+            <label class="form-label">Password</label>
+            <input type="password" name="password" class="form-control" placeholder="SSH password">
+          </div>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">SSH Key Path (optional)</label>
+          <input type="text" name="ssh_key" class="form-control" placeholder="/root/.ssh/id_rsa">
+          <div class="form-text">Leave blank to use password authentication.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Type-specific options -->
+    <div class="card mb-3" id="extraCard">
+      <div class="card-header fw-semibold">Controller Options</div>
+      <div class="card-body" id="extraFields">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-success">
+        <i class="bi bi-plus-circle me-1"></i>Add Device
+      </button>
+      <a href="/fans" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+
+<script>
+const TYPES = {{ controller_types | tojson }};
+
+function updateTypeUI() {
+  const sel = document.getElementById('ctypeSelect');
+  const key = sel.value;
+  const info = TYPES[key] || {};
+  document.getElementById('typeDesc').textContent = info.description || '';
+
+  const ef = document.getElementById('extraFields');
+  ef.innerHTML = '';
+
+  if (key === 'liquidctl') {
+    ef.innerHTML = `
+      <div class="mb-3">
+        <label class="form-label">Device Match String</label>
+        <input type="text" name="match_str" class="form-control" placeholder="e.g. Smart Device, Kraken, Quadro">
+        <div class="form-text">Passed to <code>liquidctl --match</code>. Leave blank to use the first detected device.</div>
+      </div>
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="use_direct" value="1" id="useDirectChk">
+        <label class="form-check-label" for="useDirectChk">
+          Use <code>--direct-access</code> (needed if kernel driver is loaded)
+        </label>
+      </div>`;
+  } else if (key === 'ipmi') {
+    ef.innerHTML = `
+      <div class="mb-3">
+        <label class="form-label">IPMI Host</label>
+        <input type="text" name="ipmi_host" class="form-control" value="localhost"
+               placeholder="localhost or BMC IP (e.g. 192.168.1.200)">
+        <div class="form-text">Use <code>localhost</code> for local IPMI via /dev/ipmi0, or enter the BMC/iDRAC/iLO IP for remote IPMI.</div>
+      </div>
+      <div class="row g-2 mb-2">
+        <div class="col-6">
+          <label class="form-label">IPMI Username</label>
+          <input type="text" name="ipmi_user" class="form-control" value="ADMIN">
+        </div>
+        <div class="col-6">
+          <label class="form-label">IPMI Password</label>
+          <input type="password" name="ipmi_pass" class="form-control" placeholder="ADMIN">
+        </div>
+      </div>
+      <div class="mb-2">
+        <label class="form-label">Server Vendor</label>
+        <select name="vendor" class="form-select">
+          <option value="generic">Generic</option>
+          <option value="dell">Dell (iDRAC)</option>
+          <option value="hp">HP (iLO)</option>
+          <option value="supermicro">Supermicro</option>
+        </select>
+        <div class="form-text">Vendor-specific IPMI fan control commands will be used.</div>
+      </div>`;
+  } else if (key === 'nbfc') {
+    ef.innerHTML = `
+      <div class="alert alert-info mb-0">
+        <strong>nbfc-linux</strong> must be installed and configured on the target laptop.<br>
+        <a href="https://github.com/nbfc-linux/nbfc-linux" target="_blank" rel="noopener">
+          Installation guide →
+        </a><br>
+        Use the <strong>Install Packages</strong> button on the device detail page to attempt automatic installation.
+      </div>`;
+  } else if (key === 'pwm_sysfs') {
+    ef.innerHTML = `
+      <div class="alert alert-secondary mb-0">
+        <strong>Direct PWM sysfs control</strong> — no extra tool needed.<br>
+        Fan channels are auto-detected from <code>/sys/class/hwmon/hwmon*/pwm*</code>.<br>
+        Root access is required to write PWM values.
+      </div>`;
+  } else {
+    // lm_sensors
+    ef.innerHTML = `
+      <div class="alert alert-secondary mb-0">
+        <strong>lm-sensors</strong> reads temperatures and fan RPMs.<br>
+        <strong>fancontrol / pwmconfig</strong> is used for PWM fan speed control.<br>
+        Use the <strong>Install Packages</strong> button on the device detail page to install automatically.
+      </div>`;
+  }
+}
+
+// Init on page load
+updateTypeUI();
+</script>
+{% endblock %}

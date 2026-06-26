@@ -3099,3 +3099,254 @@ def api_commander_history(dev_id):
 def api_commander_all():
     """Return latest status for all enabled devices."""
     return jsonify(corsair_commander.get_all_latest())
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Fan Controller — universal fan management (lm-sensors, IPMI, nbfc, liquidctl)
+# ═══════════════════════════════════════════════════════════════════════════════
+import fan_controller as _fc
+
+# Initialise DB and start polling (called once at startup via app context)
+with app.app_context():
+    try:
+        _fc.init_db(DATA_DIR)
+        _fc.start_polling()
+    except Exception as _fc_init_err:
+        import logging as _logging
+        _logging.getLogger(__name__).warning("fan_controller init failed: %s", _fc_init_err)
+
+
+@app.route('/fans')
+@login_required
+def fc_index():
+    """Fan Controller overview page."""
+    devices = _fc.list_devices()
+    latest_map = {d['id']: _fc.get_latest(d['id']) for d in devices}
+    return render_template('fans/index.html',
+                           devices=devices,
+                           latest_map=latest_map,
+                           controller_types=_fc.CONTROLLER_TYPES)
+
+
+@app.route('/fans/add', methods=['GET', 'POST'])
+@login_required
+def fc_add():
+    """Add a new fan controller device."""
+    from flask_wtf.csrf import generate_csrf
+    csrf_token_value = generate_csrf()
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        ctype = request.form.get('controller_type', 'lm_sensors')
+        host = request.form.get('host', '').strip()
+        port = int(request.form.get('port', 22) or 22)
+        username = request.form.get('username', 'root').strip()
+        password = request.form.get('password', '').strip()
+        ssh_key = request.form.get('ssh_key', '').strip()
+        notes = request.form.get('notes', '').strip()
+
+        extra = {}
+        for key in ['match_str', 'ipmi_host', 'ipmi_user', 'ipmi_pass', 'vendor', 'zone']:
+            val = request.form.get(key, '').strip()
+            if val:
+                extra[key] = val
+        if request.form.get('use_direct') == '1':
+            extra['use_direct'] = True
+
+        if not name or not host:
+            flash('Name and host are required.', 'danger')
+            return render_template('fans/add.html',
+                                   controller_types=_fc.CONTROLLER_TYPES,
+                                   csrf_token_value=csrf_token_value)
+
+        dev_id = _fc.add_device(name, ctype, host, port, username, password, ssh_key, extra, notes)
+        flash(f'Device "{name}" added successfully.', 'success')
+        return redirect(url_for('fc_detail', dev_id=dev_id))
+
+    return render_template('fans/add.html',
+                           controller_types=_fc.CONTROLLER_TYPES,
+                           csrf_token_value=csrf_token_value)
+
+
+@app.route('/fans/<int:dev_id>')
+@login_required
+def fc_detail(dev_id):
+    """Fan Controller detail page with live data and controls."""
+    dev = _fc.get_device(dev_id)
+    if not dev:
+        flash('Device not found.', 'danger')
+        return redirect(url_for('fc_index'))
+    from flask_wtf.csrf import generate_csrf
+    latest = _fc.get_latest(dev_id)
+    history = _fc.get_history(dev_id, hours=24)
+    csrf_token_value = generate_csrf()
+    return render_template('fans/detail.html',
+                           dev=dev,
+                           latest=latest,
+                           history=history,
+                           controller_types=_fc.CONTROLLER_TYPES,
+                           csrf_token_value=csrf_token_value)
+
+
+@app.route('/fans/<int:dev_id>/edit', methods=['GET', 'POST'])
+@login_required
+def fc_edit(dev_id):
+    """Edit fan controller device settings."""
+    dev = _fc.get_device(dev_id)
+    if not dev:
+        flash('Device not found.', 'danger')
+        return redirect(url_for('fc_index'))
+    from flask_wtf.csrf import generate_csrf
+    csrf_token_value = generate_csrf()
+    if request.method == 'POST':
+        fields = {}
+        for f in ['name', 'controller_type', 'host', 'port', 'username',
+                  'password', 'ssh_key', 'notes', 'enabled']:
+            val = request.form.get(f)
+            if val is not None:
+                fields[f] = val
+        if 'port' in fields:
+            fields['port'] = int(fields['port'] or 22)
+        if 'enabled' in fields:
+            fields['enabled'] = 1 if fields['enabled'] == '1' else 0
+
+        extra = {}
+        for key in ['match_str', 'ipmi_host', 'ipmi_user', 'ipmi_pass', 'vendor', 'zone']:
+            val = request.form.get(key, '').strip()
+            if val:
+                extra[key] = val
+        if request.form.get('use_direct') == '1':
+            extra['use_direct'] = True
+        fields['extra_config'] = extra
+
+        _fc.update_device(dev_id, **fields)
+        flash('Device updated.', 'success')
+        return redirect(url_for('fc_detail', dev_id=dev_id))
+
+    return render_template('fans/edit.html',
+                           dev=dev,
+                           controller_types=_fc.CONTROLLER_TYPES,
+                           csrf_token_value=csrf_token_value)
+
+
+@app.route('/fans/<int:dev_id>/delete', methods=['POST'])
+@login_required
+def fc_delete(dev_id):
+    """Delete a fan controller device."""
+    dev = _fc.get_device(dev_id)
+    if dev:
+        _fc.delete_device(dev_id)
+        flash(f'Device "{dev["name"]}" deleted.', 'success')
+    return redirect(url_for('fc_index'))
+
+
+@app.route('/fans/<int:dev_id>/refresh')
+@login_required
+@_csrf.exempt
+def fc_refresh(dev_id):
+    """Force an immediate status poll."""
+    dev = _fc.get_device(dev_id)
+    if not dev:
+        return jsonify({'ok': False, 'error': 'Device not found'}), 404
+    status = _fc.fetch_status(dev)
+    _fc._store_sample(dev_id, status)
+    return jsonify(status)
+
+
+@app.route('/fans/<int:dev_id>/test')
+@login_required
+@_csrf.exempt
+def fc_test(dev_id):
+    """Test SSH connectivity and tool availability."""
+    result = _fc.test_connection(dev_id)
+    return jsonify(result)
+
+
+@app.route('/fans/<int:dev_id>/set_fan', methods=['POST'])
+@login_required
+@_csrf.exempt
+def fc_set_fan(dev_id):
+    """Set fan speed on a device."""
+    dev = _fc.get_device(dev_id)
+    if not dev:
+        return jsonify({'ok': False, 'error': 'Device not found'}), 404
+
+    channel = request.form.get('channel', '0')
+    mode = request.form.get('mode', 'fixed')
+
+    if mode == 'fixed':
+        try:
+            speed = float(request.form.get('speed', 50))
+        except (TypeError, ValueError):
+            return jsonify({'ok': False, 'error': 'Invalid speed value'}), 400
+    elif mode == 'auto':
+        speed = -1
+    else:
+        try:
+            pairs_raw = request.form.get('profile', '')
+            speed = []
+            for pair in pairs_raw.split(';'):
+                pair = pair.strip()
+                if pair:
+                    t, r = pair.split(',')
+                    speed.append((int(t.strip()), int(r.strip())))
+        except Exception as exc:
+            return jsonify({'ok': False, 'error': f'Invalid profile: {exc}'}), 400
+
+    extra = {}
+    for k in ['zone']:
+        v = request.form.get(k)
+        if v:
+            extra[k] = v
+
+    result = _fc.set_fan_speed(dev, channel, speed, extra)
+    return jsonify(result)
+
+
+@app.route('/fans/<int:dev_id>/install', methods=['POST'])
+@login_required
+@_csrf.exempt
+def fc_install(dev_id):
+    """Install required packages on the remote host."""
+    dev = _fc.get_device(dev_id)
+    if not dev:
+        return jsonify({'ok': False, 'error': 'Device not found'}), 404
+
+    import time as _t
+    progress_key = f"fc_install_{dev_id}_{int(_t.time())}"
+    logs[progress_key] = []
+
+    def _run():
+        result = _fc.install_packages(dev_id, progress_key=progress_key)
+        logs[progress_key].append(
+            '✔ Installation complete.' if result['ok'] else f'✘ Failed: {result["message"][-300:]}'
+        )
+
+    threading.Thread(target=_run, daemon=True).start()
+    return redirect(f"/progress/{progress_key}")
+
+
+# ── Fan Controller JSON API ───────────────────────────────────────────────────
+
+@app.route('/api/fans/devices')
+@login_required
+def api_fc_devices():
+    return jsonify(_fc.list_devices())
+
+
+@app.route('/api/fans/<int:dev_id>/status')
+@login_required
+def api_fc_status(dev_id):
+    return jsonify(_fc.get_latest(dev_id) or {})
+
+
+@app.route('/api/fans/<int:dev_id>/history')
+@login_required
+def api_fc_history(dev_id):
+    hours = min(int(request.args.get('hours', 24)), 168)
+    return jsonify(_fc.get_history(dev_id, hours=hours))
+
+
+@app.route('/api/fans/types')
+@login_required
+def api_fc_types():
+    return jsonify(_fc.CONTROLLER_TYPES)

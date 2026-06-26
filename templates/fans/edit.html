@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ dev.name }}{% endblock %}
+{% block content %}
+<div class="container py-4" style="max-width:720px">
+
+  <div class="d-flex align-items-center mb-3">
+    <a href="/fans/{{ dev.id }}" class="btn btn-sm btn-outline-secondary me-2"><i class="bi bi-arrow-left"></i></a>
+    <h4 class="mb-0"><i class="bi bi-pencil me-2"></i>Edit — {{ dev.name }}</h4>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="alert alert-{{ cat }}">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <form method="POST" action="/fans/{{ dev.id }}/edit">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
+
+    <div class="card mb-3">
+      <div class="card-header fw-semibold">Device Information</div>
+      <div class="card-body">
+        <div class="mb-3">
+          <label class="form-label">Display Name</label>
+          <input type="text" name="name" class="form-control" value="{{ dev.name }}" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Controller Type</label>
+          <select name="controller_type" id="ctypeSelect" class="form-select" onchange="updateTypeUI()">
+            {% for key, info in controller_types.items() %}
+            <option value="{{ key }}" {% if dev.controller_type == key %}selected{% endif %}>
+              {{ info.icon }} {{ info.label }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Enabled</label>
+          <select name="enabled" class="form-select">
+            <option value="1" {% if dev.enabled %}selected{% endif %}>Yes</option>
+            <option value="0" {% if not dev.enabled %}selected{% endif %}>No</option>
+          </select>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Notes</label>
+          <input type="text" name="notes" class="form-control" value="{{ dev.notes or '' }}">
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header fw-semibold">SSH Connection</div>
+      <div class="card-body">
+        <div class="row g-2 mb-3">
+          <div class="col-9">
+            <label class="form-label">Host / IP</label>
+            <input type="text" name="host" class="form-control" value="{{ dev.host }}" required>
+          </div>
+          <div class="col-3">
+            <label class="form-label">SSH Port</label>
+            <input type="number" name="port" class="form-control" value="{{ dev.port or 22 }}">
+          </div>
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <label class="form-label">Username</label>
+            <input type="text" name="username" class="form-control" value="{{ dev.username or 'root' }}">
+          </div>
+          <div class="col-6">
+            <label class="form-label">Password</label>
+            <input type="password" name="password" class="form-control" placeholder="(unchanged if blank)">
+          </div>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">SSH Key Path</label>
+          <input type="text" name="ssh_key" class="form-control" value="{{ dev.ssh_key or '' }}">
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3" id="extraCard">
+      <div class="card-header fw-semibold">Controller Options</div>
+      <div class="card-body" id="extraFields"></div>
+    </div>
+
+    <div class="d-flex gap-2 mb-4">
+      <button type="submit" class="btn btn-primary">Save Changes</button>
+      <a href="/fans/{{ dev.id }}" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+  </form>
+
+  <!-- Delete -->
+  <div class="card border-danger">
+    <div class="card-body">
+      <h6 class="text-danger">Delete Device</h6>
+      <p class="small text-muted mb-2">This will permanently remove the device and all its history.</p>
+      <form method="POST" action="/fans/{{ dev.id }}/delete"
+            onsubmit="return confirm('Delete {{ dev.name }}?')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
+        <button type="submit" class="btn btn-danger btn-sm">
+          <i class="bi bi-trash me-1"></i>Delete Device
+        </button>
+      </form>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const TYPES = {{ controller_types | tojson }};
+const EXTRA = {{ dev.extra_config | tojson }};
+
+function updateTypeUI() {
+  const key = document.getElementById('ctypeSelect').value;
+  const ef = document.getElementById('extraFields');
+  ef.innerHTML = '';
+
+  if (key === 'liquidctl') {
+    ef.innerHTML = `
+      <div class="mb-3">
+        <label class="form-label">Device Match String</label>
+        <input type="text" name="match_str" class="form-control"
+               value="${EXTRA.match_str || ''}" placeholder="Smart Device, Kraken, Quadro ...">
+      </div>
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" name="use_direct" value="1"
+               id="useDirectChk" ${EXTRA.use_direct ? 'checked' : ''}>
+        <label class="form-check-label" for="useDirectChk">Use <code>--direct-access</code></label>
+      </div>`;
+  } else if (key === 'ipmi') {
+    ef.innerHTML = `
+      <div class="mb-3">
+        <label class="form-label">IPMI Host</label>
+        <input type="text" name="ipmi_host" class="form-control" value="${EXTRA.ipmi_host || 'localhost'}">
+      </div>
+      <div class="row g-2 mb-2">
+        <div class="col-6">
+          <label class="form-label">IPMI Username</label>
+          <input type="text" name="ipmi_user" class="form-control" value="${EXTRA.ipmi_user || 'ADMIN'}">
+        </div>
+        <div class="col-6">
+          <label class="form-label">IPMI Password</label>
+          <input type="password" name="ipmi_pass" class="form-control" placeholder="(unchanged)">
+        </div>
+      </div>
+      <div class="mb-2">
+        <label class="form-label">Vendor</label>
+        <select name="vendor" class="form-select">
+          <option value="generic" ${(EXTRA.vendor||'generic')==='generic'?'selected':''}>Generic</option>
+          <option value="dell" ${EXTRA.vendor==='dell'?'selected':''}>Dell (iDRAC)</option>
+          <option value="hp" ${EXTRA.vendor==='hp'?'selected':''}>HP (iLO)</option>
+          <option value="supermicro" ${EXTRA.vendor==='supermicro'?'selected':''}>Supermicro</option>
+        </select>
+      </div>`;
+  } else {
+    ef.innerHTML = '<div class="text-muted small">No additional options for this controller type.</div>';
+  }
+}
+
+updateTypeUI();
+</script>
+{% endblock %}
