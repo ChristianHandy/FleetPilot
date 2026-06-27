@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+{% block title %}{{ srv.name }} — Backup — FleetPilot{% endblock %}
+{% block content %}
+<div class="container-fluid py-4">
+
+  <!-- Header -->
+  <div class="d-flex justify-content-between align-items-start mb-4">
+    <div class="d-flex align-items-center gap-3">
+      <a href="{{ url_for('backup_index') }}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i>
+      </a>
+      <div>
+        <h2 class="mb-0">
+          <span class="me-2">{{ stype_info.get('icon', '💾') }}</span>{{ srv.name }}
+          {% if srv.last_status == 'ok' %}
+            <span class="badge bg-success ms-2">Online</span>
+          {% elif srv.last_status == 'error' %}
+            <span class="badge bg-danger ms-2">Error</span>
+          {% else %}
+            <span class="badge bg-secondary ms-2">Unknown</span>
+          {% endif %}
+        </h2>
+        <small class="text-muted">{{ stype_info.get('label', srv.server_type) }} — {{ srv.protocol }}://{{ srv.host }}:{{ srv.port }}</small>
+      </div>
+    </div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-secondary btn-sm" onclick="pollNow()" id="poll_btn">
+        <i class="bi bi-arrow-clockwise me-1"></i>Poll Now
+      </button>
+      <button class="btn btn-outline-info btn-sm" onclick="testConn()" id="test_btn">
+        <i class="bi bi-wifi me-1"></i>Test
+      </button>
+      <a href="{{ url_for('backup_edit', server_id=srv.id) }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-pencil me-1"></i>Edit
+      </a>
+    </div>
+  </div>
+
+  <!-- Status message area -->
+  <div id="status_msg" class="alert d-none mb-3"></div>
+
+  <!-- Summary cards -->
+  {% set jobs_ok = jobs | selectattr('status', 'equalto', 'ok') | list | length %}
+  {% set jobs_warn = jobs | selectattr('status', 'equalto', 'warning') | list | length %}
+  {% set jobs_err = jobs | selectattr('status', 'equalto', 'error') | list | length %}
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="card border-0 shadow-sm text-center py-3">
+        <div class="fs-2 fw-bold text-success">{{ jobs_ok }}</div>
+        <div class="text-muted small">Jobs OK</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card border-0 shadow-sm text-center py-3">
+        <div class="fs-2 fw-bold text-warning">{{ jobs_warn }}</div>
+        <div class="text-muted small">Warnings</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card border-0 shadow-sm text-center py-3">
+        <div class="fs-2 fw-bold text-danger">{{ jobs_err }}</div>
+        <div class="text-muted small">Errors</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card border-0 shadow-sm text-center py-3">
+        <div class="fs-2 fw-bold text-primary">{{ snapshots | length }}</div>
+        <div class="text-muted small">Snapshots</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <!-- Left column: Jobs + Snapshots -->
+    <div class="col-12 col-xl-7">
+
+      <!-- Jobs table -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+          <span class="fw-semibold"><i class="bi bi-list-check me-1"></i>Backup Jobs</span>
+          <small class="text-muted">{{ jobs | length }} total</small>
+        </div>
+        <div class="card-body p-0">
+          {% if jobs %}
+          <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>Status</th>
+                  <th>Name</th>
+                  <th>Type</th>
+                  <th>Last Run</th>
+                  <th>Size</th>
+                  <th>Duration</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for job in jobs %}
+                <tr>
+                  <td>
+                    {% if job.status == 'ok' %}
+                      <span class="badge bg-success">OK</span>
+                    {% elif job.status == 'warning' %}
+                      <span class="badge bg-warning text-dark">Warn</span>
+                    {% elif job.status == 'error' %}
+                      <span class="badge bg-danger">Error</span>
+                    {% else %}
+                      <span class="badge bg-secondary">{{ job.status }}</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-truncate" style="max-width:150px;" title="{{ job.job_name }}">
+                    {{ job.job_name or job.job_id or '—' }}
+                  </td>
+                  <td><small class="text-muted">{{ job.job_type or '—' }}</small></td>
+                  <td><small>{{ job.last_run[:16] if job.last_run else '—' }}</small></td>
+                  <td><small>{{ format_bytes(job.size_bytes) if job.size_bytes else '—' }}</small></td>
+                  <td><small>
+                    {% if job.duration_s %}
+                      {{ '%d:%02d'|format(job.duration_s // 60, job.duration_s % 60) }}m
+                    {% else %}—{% endif %}
+                  </small></td>
+                  <td>
+                    {% if srv.server_type in ('duplicati', 'pbs', 'bacula') and job.job_id %}
+                    <button class="btn btn-xs btn-outline-success py-0 px-1"
+                            onclick="triggerJob('{{ job.job_id }}')" title="Trigger backup">
+                      <i class="bi bi-play-fill"></i>
+                    </button>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% if job.error_msg %}
+                <tr class="table-danger">
+                  <td colspan="7" class="small text-danger ps-4">
+                    <i class="bi bi-exclamation-triangle me-1"></i>{{ job.error_msg[:200] }}
+                  </td>
+                </tr>
+                {% endif %}
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="text-center py-4 text-muted">
+            <i class="bi bi-clock fs-3 d-block mb-2"></i>
+            No job data yet. Click "Poll Now" to fetch data.
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Snapshots table -->
+      {% if snapshots %}
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+          <span class="fw-semibold"><i class="bi bi-camera me-1"></i>Recent Snapshots</span>
+          <small class="text-muted">{{ snapshots | length }} shown</small>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>ID</th>
+                  <th>Repository</th>
+                  <th>Host</th>
+                  <th>Timestamp</th>
+                  <th>Size</th>
+                  <th>Tags</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for snap in snapshots %}
+                <tr>
+                  <td><code class="small">{{ snap.snapshot_id[:12] if snap.snapshot_id else '—' }}</code></td>
+                  <td><small class="text-muted">{{ snap.repo or '—' }}</small></td>
+                  <td><small>{{ snap.hostname or '—' }}</small></td>
+                  <td><small>{{ snap.timestamp[:16] if snap.timestamp else '—' }}</small></td>
+                  <td><small>{{ format_bytes(snap.size_bytes) if snap.size_bytes else '—' }}</small></td>
+                  <td><small class="text-muted">{{ snap.tags or '' }}</small></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Right column: Chart + Server info -->
+    <div class="col-12 col-xl-5">
+
+      <!-- 24h history chart -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-transparent fw-semibold">
+          <i class="bi bi-graph-up me-1"></i>24h Job History
+        </div>
+        <div class="card-body">
+          <canvas id="historyChart" height="180"></canvas>
+        </div>
+      </div>
+
+      <!-- Server info -->
+      <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-transparent fw-semibold">
+          <i class="bi bi-info-circle me-1"></i>Server Info
+        </div>
+        <div class="card-body">
+          <table class="table table-sm mb-0">
+            <tr><td class="text-muted">Type</td><td>{{ stype_info.get('label', srv.server_type) }}</td></tr>
+            <tr><td class="text-muted">Host</td><td><code>{{ srv.host }}:{{ srv.port }}</code></td></tr>
+            <tr><td class="text-muted">Protocol</td><td>{{ srv.protocol | upper }}</td></tr>
+            <tr><td class="text-muted">Username</td><td>{{ srv.username or '—' }}</td></tr>
+            <tr><td class="text-muted">SSL Verify</td><td>{{ 'Yes' if srv.verify_ssl else 'No' }}</td></tr>
+            <tr><td class="text-muted">Last Poll</td><td>{{ srv.last_poll or 'Never' }}</td></tr>
+            <tr><td class="text-muted">Status</td>
+              <td>
+                {% if srv.last_status == 'ok' %}<span class="text-success">Online</span>
+                {% elif srv.last_status == 'error' %}<span class="text-danger">Error</span>
+                {% else %}<span class="text-muted">Unknown</span>{% endif %}
+              </td>
+            </tr>
+          </table>
+          {% if srv.notes %}
+          <div class="mt-2 p-2 bg-light rounded small text-muted">{{ srv.notes }}</div>
+          {% endif %}
+          {% if stype_info.get('docs_url') %}
+          <div class="mt-2">
+            <a href="{{ stype_info.docs_url }}" target="_blank" class="small text-muted">
+              <i class="bi bi-book me-1"></i>Documentation
+            </a>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+const serverId = {{ srv.id }};
+const historyData = {{ history | tojson }};
+
+// Build chart
+const labels = historyData.map(h => h.ts ? h.ts.slice(11,16) : '');
+const okData = historyData.map(h => h.jobs_ok || 0);
+const warnData = historyData.map(h => h.jobs_warn || 0);
+const errData = historyData.map(h => h.jobs_error || 0);
+
+const ctx = document.getElementById('historyChart').getContext('2d');
+new Chart(ctx, {
+  type: 'bar',
+  data: {
+    labels,
+    datasets: [
+      { label: 'OK', data: okData, backgroundColor: '#198754' },
+      { label: 'Warning', data: warnData, backgroundColor: '#ffc107' },
+      { label: 'Error', data: errData, backgroundColor: '#dc3545' },
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { position: 'bottom' } },
+    scales: {
+      x: { stacked: true, ticks: { maxTicksLimit: 12 } },
+      y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } }
+    }
+  }
+});
+
+function showMsg(msg, type) {
+  const el = document.getElementById('status_msg');
+  el.className = `alert alert-${type}`;
+  el.textContent = msg;
+  el.classList.remove('d-none');
+  setTimeout(() => el.classList.add('d-none'), 5000);
+}
+
+function pollNow() {
+  const btn = document.getElementById('poll_btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Polling...';
+  fetch(`/backup/${serverId}/refresh`)
+    .then(r => r.json())
+    .then(d => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Poll Now';
+      if (d.ok) {
+        showMsg('Poll successful! Reloading...', 'success');
+        setTimeout(() => location.reload(), 1000);
+      } else {
+        showMsg('Poll error: ' + (d.error || 'unknown'), 'danger');
+      }
+    })
+    .catch(e => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Poll Now';
+      showMsg('Request failed: ' + e, 'danger');
+    });
+}
+
+function testConn() {
+  const btn = document.getElementById('test_btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Testing...';
+  fetch(`/backup/${serverId}/test`)
+    .then(r => r.json())
+    .then(d => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-wifi me-1"></i>Test';
+      if (d.ok) {
+        showMsg('Connection OK: ' + (d.message || 'success'), 'success');
+      } else {
+        showMsg('Connection failed: ' + (d.error || d.message || 'unknown'), 'danger');
+      }
+    })
+    .catch(e => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-wifi me-1"></i>Test';
+      showMsg('Request failed: ' + e, 'danger');
+    });
+}
+
+function triggerJob(jobId) {
+  if (!confirm(`Trigger backup job "${jobId}"?`)) return;
+  fetch(`/backup/${serverId}/trigger`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ job_id: jobId })
+  })
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) {
+        showMsg('Backup triggered: ' + (d.message || 'started'), 'success');
+      } else {
+        showMsg('Trigger failed: ' + (d.error || d.message || 'unknown'), 'danger');
+      }
+    })
+    .catch(e => showMsg('Request failed: ' + e, 'danger'));
+}
+
+// Auto-refresh every 2 minutes
+setTimeout(() => location.reload(), 120000);
+</script>
+{% endblock %}

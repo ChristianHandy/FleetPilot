@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ srv.name }} — FleetPilot{% endblock %}
+{% block content %}
+<div class="container py-4" style="max-width:720px;">
+  <div class="d-flex align-items-center mb-4">
+    <a href="{{ url_for('backup_detail', server_id=srv.id) }}" class="btn btn-sm btn-outline-secondary me-3">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <h2 class="mb-0"><i class="bi bi-pencil me-2"></i>Edit {{ srv.name }}</h2>
+  </div>
+
+  <form method="POST" action="{{ url_for('backup_edit', server_id=srv.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token_value or csrf_token() }}">
+
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-transparent fw-semibold">Server Settings</div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label">Display Name</label>
+            <input type="text" name="name" class="form-control" value="{{ srv.name }}" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Server Type</label>
+            <select name="server_type" class="form-select">
+              {% for type_id, tinfo in server_types.items() %}
+              <option value="{{ type_id }}" {% if srv.server_type == type_id %}selected{% endif %}>
+                {{ tinfo.icon }} {{ tinfo.label }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Protocol</label>
+            <select name="protocol" class="form-select">
+              <option value="https" {% if srv.protocol == 'https' %}selected{% endif %}>HTTPS</option>
+              <option value="http" {% if srv.protocol == 'http' %}selected{% endif %}>HTTP</option>
+              <option value="ssh" {% if srv.protocol == 'ssh' %}selected{% endif %}>SSH</option>
+            </select>
+          </div>
+          <div class="col-md-8">
+            <label class="form-label">Host / IP</label>
+            <input type="text" name="host" class="form-control" value="{{ srv.host }}" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Port</label>
+            <input type="number" name="port" class="form-control" value="{{ srv.port }}">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Username</label>
+            <input type="text" name="username" class="form-control" value="{{ srv.username or '' }}">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Password (leave empty to keep)</label>
+            <input type="password" name="password" class="form-control" placeholder="••••••••">
+          </div>
+          <div class="col-12">
+            <label class="form-label">API Token (leave empty to keep)</label>
+            <input type="text" name="api_token" class="form-control font-monospace" placeholder="Leave empty to keep current token">
+          </div>
+          <div class="col-12">
+            <label class="form-label">SSH Private Key (leave empty to keep)</label>
+            <textarea name="ssh_key" class="form-control font-monospace" rows="3"
+                      placeholder="Leave empty to keep current key"></textarea>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Notes / Custom Command</label>
+            <textarea name="notes" class="form-control" rows="2">{{ srv.notes or '' }}</textarea>
+          </div>
+          <div class="col-12">
+            <div class="form-check">
+              <input type="checkbox" name="verify_ssl" class="form-check-input" id="verify_ssl"
+                     {% if srv.verify_ssl %}checked{% endif %}>
+              <label class="form-check-label" for="verify_ssl">Verify SSL certificate</label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-primary flex-grow-1">
+        <i class="bi bi-save me-1"></i> Save Changes
+      </button>
+      <a href="{{ url_for('backup_detail', server_id=srv.id) }}" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+  </form>
+
+  <!-- Danger zone -->
+  <div class="card border-danger mt-4">
+    <div class="card-header bg-danger text-white fw-semibold">Danger Zone</div>
+    <div class="card-body">
+      <p class="mb-3 text-muted small">Permanently delete this backup server and all its job history from FleetPilot. This does NOT affect the actual backup server.</p>
+      <form method="POST" action="{{ url_for('backup_delete', server_id=srv.id) }}"
+            onsubmit="return confirm('Delete {{ srv.name }}? This cannot be undone.')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token_value or csrf_token() }}">
+        <button type="submit" class="btn btn-danger">
+          <i class="bi bi-trash me-1"></i> Delete Server
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

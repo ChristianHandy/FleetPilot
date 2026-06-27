@@ -69,6 +69,9 @@
       <a class="sidebar-link {% if request.path.startswith('/fans') %}active{% endif %}" href="/fans">
         <span class="sidebar-icon">&#x1F32C;</span> Fan Controllers
       </a>
+      <a class="sidebar-link {% if request.path.startswith('/backup') %}active{% endif %}" href="/backup">
+        <span class="sidebar-icon">&#x1F6E1;</span> Backup Servers
+      </a>
 
       <span class="sidebar-section-label">{{ _('Settings') }}</span>
       {% if is_admin is defined and is_admin %}

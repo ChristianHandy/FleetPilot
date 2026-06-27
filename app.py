@@ -20,6 +20,7 @@ import storage_controller
 import smart_manager
 import system_monitor
 import corsair_commander
+import backup_controller as _bc
 # Load environment variables from .env file if python-dotenv is available
 try:
     from dotenv import load_dotenv
@@ -221,6 +222,8 @@ with app.app_context():
     system_monitor.start_polling()
     corsair_commander.init_db(DATA_DIR)
     corsair_commander.start_polling()
+    _bc.init_db(DATA_DIR)
+    _bc.start_all_polling()
 
 # Template function for HTML extensions
 @app.context_processor
@@ -3380,3 +3383,183 @@ def fc_detect():
         ssh_key=ssh_key,
     )
     return jsonify(result)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BACKUP CONTROLLER ROUTES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/backup")
+@login_required
+def backup_index():
+    servers = _bc.list_servers()
+    # Attach job summary to each server
+    for srv in servers:
+        jobs = _bc.get_jobs(srv["id"])
+        srv["jobs_ok"] = sum(1 for j in jobs if j["status"] == "ok")
+        srv["jobs_warn"] = sum(1 for j in jobs if j["status"] == "warning")
+        srv["jobs_error"] = sum(1 for j in jobs if j["status"] == "error")
+        srv["jobs_total"] = len(jobs)
+    return render_template("backup/index.html",
+                           servers=servers,
+                           server_types=_bc.SERVER_TYPES)
+
+
+@app.route("/backup/add", methods=["GET", "POST"])
+@login_required
+def backup_add():
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        server_type = request.form.get("server_type", "pbs")
+        host = request.form.get("host", "").strip()
+        port = int(request.form.get("port") or _bc.SERVER_TYPES.get(server_type, {}).get("default_port", 80))
+        protocol = request.form.get("protocol", "https")
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "").strip()
+        api_token = request.form.get("api_token", "").strip()
+        ssh_key = request.form.get("ssh_key", "").strip()
+        verify_ssl = bool(request.form.get("verify_ssl"))
+        notes = request.form.get("notes", "").strip()
+        if not name or not host:
+            flash("Name and host are required.", "danger")
+            return render_template("backup/add.html",
+                                   server_types=_bc.SERVER_TYPES,
+                                   csrf_token_value=_gen_csrf() if '_gen_csrf' in dir() else "")
+        try:
+            new_id = _bc.add_server(name, server_type, host, port, protocol,
+                                    username, password, api_token, ssh_key,
+                                    verify_ssl, notes)
+            _bc.start_polling(new_id)
+            flash(f"Backup server '{name}' added.", "success")
+            return redirect(url_for("backup_detail", server_id=new_id))
+        except Exception as e:
+            flash(str(e), "danger")
+    try:
+        from flask_wtf.csrf import generate_csrf as _gcsrf
+        csrf_val = _gcsrf()
+    except Exception:
+        csrf_val = ""
+    return render_template("backup/add.html",
+                           server_types=_bc.SERVER_TYPES,
+                           csrf_token_value=csrf_val)
+
+
+@app.route("/backup/<int:server_id>")
+@login_required
+def backup_detail(server_id):
+    srv = _bc.get_server(server_id)
+    if not srv:
+        flash("Backup server not found.", "danger")
+        return redirect(url_for("backup_index"))
+    jobs = _bc.get_jobs(server_id)
+    snapshots = _bc.get_snapshots(server_id, limit=30)
+    history = _bc.get_history(server_id, hours=24)
+    stype_info = _bc.SERVER_TYPES.get(srv["server_type"], {})
+    return render_template("backup/detail.html",
+                           srv=srv,
+                           jobs=jobs,
+                           snapshots=snapshots,
+                           history=history,
+                           stype_info=stype_info,
+                           server_types=_bc.SERVER_TYPES,
+                           format_bytes=_bc.format_bytes)
+
+
+@app.route("/backup/<int:server_id>/edit", methods=["GET", "POST"])
+@login_required
+def backup_edit(server_id):
+    srv = _bc.get_server(server_id)
+    if not srv:
+        flash("Backup server not found.", "danger")
+        return redirect(url_for("backup_index"))
+    if request.method == "POST":
+        updates = {
+            "name": request.form.get("name", "").strip(),
+            "server_type": request.form.get("server_type", srv["server_type"]),
+            "host": request.form.get("host", "").strip(),
+            "port": int(request.form.get("port") or srv["port"]),
+            "protocol": request.form.get("protocol", srv["protocol"]),
+            "username": request.form.get("username", "").strip(),
+            "notes": request.form.get("notes", "").strip(),
+            "verify_ssl": int(bool(request.form.get("verify_ssl"))),
+        }
+        pw = request.form.get("password", "").strip()
+        if pw:
+            updates["password"] = pw
+        tok = request.form.get("api_token", "").strip()
+        if tok:
+            updates["api_token"] = tok
+        key = request.form.get("ssh_key", "").strip()
+        if key:
+            updates["ssh_key"] = key
+        _bc.update_server(server_id, **updates)
+        flash("Backup server updated.", "success")
+        return redirect(url_for("backup_detail", server_id=server_id))
+    try:
+        from flask_wtf.csrf import generate_csrf as _gcsrf
+        csrf_val = _gcsrf()
+    except Exception:
+        csrf_val = ""
+    return render_template("backup/edit.html",
+                           srv=srv,
+                           server_types=_bc.SERVER_TYPES,
+                           csrf_token_value=csrf_val)
+
+
+@app.route("/backup/<int:server_id>/delete", methods=["POST"])
+@login_required
+def backup_delete(server_id):
+    _bc.stop_polling(server_id)
+    _bc.delete_server(server_id)
+    flash("Backup server deleted.", "success")
+    return redirect(url_for("backup_index"))
+
+
+@app.route("/backup/<int:server_id>/refresh")
+@login_required
+@_csrf.exempt
+def backup_refresh(server_id):
+    result = _bc.poll_server(server_id)
+    return jsonify(result)
+
+
+@app.route("/backup/<int:server_id>/test")
+@login_required
+@_csrf.exempt
+def backup_test(server_id):
+    result = _bc.test_connection(server_id)
+    return jsonify(result)
+
+
+@app.route("/backup/<int:server_id>/trigger", methods=["POST"])
+@login_required
+@_csrf.exempt
+def backup_trigger(server_id):
+    job_id = request.json.get("job_id", "") if request.is_json else request.form.get("job_id", "")
+    result = _bc.trigger_backup(server_id, job_id)
+    return jsonify(result)
+
+
+@app.route("/api/backup/servers")
+@login_required
+def api_backup_servers():
+    return jsonify(_bc.list_servers())
+
+
+@app.route("/api/backup/<int:server_id>/jobs")
+@login_required
+def api_backup_jobs(server_id):
+    return jsonify(_bc.get_jobs(server_id))
+
+
+@app.route("/api/backup/<int:server_id>/snapshots")
+@login_required
+def api_backup_snapshots(server_id):
+    return jsonify(_bc.get_snapshots(server_id))
+
+
+@app.route("/api/backup/<int:server_id>/history")
+@login_required
+def api_backup_history(server_id):
+    hours = int(request.args.get("hours", 24))
+    return jsonify(_bc.get_history(server_id, hours=hours))
