@@ -1868,6 +1868,23 @@ def _run_fp_update_bg(channel, do_restart):
     # Step 2: discard any local modifications to tracked files so git pull always wins
     # (user data is safe in data/ which is .gitignored)
     run(['git', 'checkout', '--', '.'], 'git checkout -- .')
+
+    # Step 2b: remove untracked files that would conflict with the incoming pull
+    # These are files that exist locally but are not yet tracked by git,
+    # yet are part of the incoming commit (e.g. manually deployed files).
+    try:
+        proc_dry = subprocess.run(
+            ['git', 'pull', '--ff-only', '--dry-run', 'origin', channel],
+            capture_output=True, text=True, timeout=30, cwd=app_dir
+        )
+        if 'would be overwritten' in proc_dry.stderr or 'untracked working tree' in proc_dry.stderr:
+            _fp_log('Untracked files conflict detected — stashing before pull…', 'warn')
+            subprocess.run(['git', 'add', '-A'], capture_output=True, cwd=app_dir)
+            subprocess.run(['git', 'stash'], capture_output=True, cwd=app_dir)
+            _fp_log('Stashed local untracked files.', 'info')
+    except Exception as e:
+        _fp_log(f'Pre-pull stash check error (non-fatal): {e}', 'warn')
+
     # Step 3: git pull
     ok = run(['git', 'pull', 'origin', channel], 'git pull')
     if not ok:
