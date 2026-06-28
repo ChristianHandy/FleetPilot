@@ -94,6 +94,15 @@
               <label class="form-check-label" for="verify_ssl">Verify SSL certificate</label>
             </div>
           </div>
+          <div class="col-12" id="use_sudo_row" style="display:none;">
+            <div class="form-check form-switch">
+              <input type="checkbox" name="use_sudo" class="form-check-input" id="use_sudo" value="1">
+              <label class="form-check-label" for="use_sudo">
+                <i class="bi bi-shield-lock me-1"></i>Use <code>sudo</code> for SSH commands
+                <span class="text-muted small ms-2">(leave off for root logins)</span>
+              </label>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -198,6 +207,10 @@ function selectType(typeId) {
 
   // SSH key row
   document.getElementById('ssh_key_row').style.display = cfg.show_ssh ? '' : 'none';
+
+  // sudo toggle: only show for SSH-based types
+  const useSudoRow = document.getElementById('use_sudo_row');
+  useSudoRow.style.display = cfg.show_ssh ? '' : 'none';
 
   // Notes
   const notesLabel = document.getElementById('notes_label');

@@ -134,10 +134,13 @@ def init_db(data_dir: str):
             password        TEXT NOT NULL DEFAULT '',
             ssh_key         TEXT NOT NULL DEFAULT '',
             extra_config    TEXT NOT NULL DEFAULT '{}',
+            use_sudo        INTEGER DEFAULT 0,
             enabled         INTEGER DEFAULT 1,
             notes           TEXT DEFAULT '',
             added_ts        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+        -- Migration: add use_sudo if missing
+        CREATE TABLE IF NOT EXISTS _fc_migrations(name TEXT PRIMARY KEY);
         CREATE TABLE IF NOT EXISTS fc_samples (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             device_id   INTEGER NOT NULL,
@@ -147,6 +150,13 @@ def init_db(data_dir: str):
         );
         CREATE INDEX IF NOT EXISTS idx_fc_samples_ts ON fc_samples(device_id, ts);
         """)
+    # Run migrations
+    with _get_db() as db:
+        try:
+            db.execute("ALTER TABLE fc_devices ADD COLUMN use_sudo INTEGER DEFAULT 0")
+            db.execute("INSERT OR IGNORE INTO _fc_migrations VALUES ('add_use_sudo')")
+        except Exception:
+            pass
     logger.info("fan_controller DB initialised at %s", _DB_FILE)
 
 
@@ -154,14 +164,14 @@ def init_db(data_dir: str):
 
 def add_device(name: str, controller_type: str, host: str, port: int = 22,
                username: str = "root", password: str = "", ssh_key: str = "",
-               extra_config: dict = None, notes: str = "") -> int:
+               extra_config: dict = None, use_sudo: bool = False, notes: str = "") -> int:
     extra = json.dumps(extra_config or {})
     with _get_db() as db:
         cur = db.execute(
             "INSERT INTO fc_devices(name,controller_type,host,port,username,"
-            "password,ssh_key,extra_config,notes) VALUES (?,?,?,?,?,?,?,?,?)",
+            "password,ssh_key,extra_config,use_sudo,notes) VALUES (?,?,?,?,?,?,?,?,?,?)",
             (name, controller_type, host, port, username,
-             _encrypt(password), ssh_key, extra, notes)
+             _encrypt(password), ssh_key, extra, 1 if use_sudo else 0, notes)
         )
         return cur.lastrowid
 
@@ -206,7 +216,7 @@ def get_device(dev_id: int) -> Optional[Dict]:
 
 def update_device(dev_id: int, **kwargs) -> bool:
     allowed = {"name", "controller_type", "host", "port", "username",
-               "password", "ssh_key", "extra_config", "enabled", "notes"}
+               "password", "ssh_key", "extra_config", "use_sudo", "enabled", "notes"}
     fields = {k: v for k, v in kwargs.items() if k in allowed}
     if "password" in fields:
         fields["password"] = _encrypt(fields["password"])
@@ -305,7 +315,8 @@ def install_packages(dev_id: int, progress_key: str = None) -> Dict:
         # Detect if running as root
         whoami_out, _, _ = _run_remote(ssh, "whoami", timeout=5)
         is_root = whoami_out.strip() == "root"
-        sudo_prefix = "" if is_root else "sudo "
+        use_sudo = bool(dev.get("use_sudo", 0))
+        sudo_prefix = "" if (is_root or not use_sudo) else "sudo "
 
         if apt_pkgs and is_debian:
             _log(f"Updating apt cache...")
@@ -866,7 +877,8 @@ def _set_fan_lm_sensors(dev: Dict, channel: str, speed, extra: dict) -> Dict:
         # Set PWM enable to manual (1)
         enable_path = pwm_path + "_enable"
         is_root = dev.get("username", "root") == "root"
-        sudo = "" if is_root else "sudo "
+        use_sudo = bool(dev.get("use_sudo", 0))
+        sudo = "" if (is_root or not use_sudo) else "sudo "
 
         out1, err1, c1 = _run_remote(
             ssh,
@@ -1024,7 +1036,8 @@ def _set_fan_pwm_sysfs(dev: Dict, channel: str, speed, extra: dict) -> Dict:
     try:
         ssh = _ssh_connect(dev)
         is_root = dev.get("username", "root") == "root"
-        sudo = "" if is_root else "sudo "
+        use_sudo = bool(dev.get("use_sudo", 0))
+        sudo = "" if (is_root or not use_sudo) else "sudo "
 
         # channel = full sysfs path or "hwmon0/pwm1"
         if channel.startswith("/"):

@@ -74,10 +74,12 @@ def init_db(data_dir: str):
             ssh_key     TEXT NOT NULL DEFAULT '',
             match_str   TEXT NOT NULL DEFAULT 'Commander Pro',
             use_direct  INTEGER DEFAULT 0,
+            use_sudo    INTEGER DEFAULT 0,
             enabled     INTEGER DEFAULT 1,
             notes       TEXT DEFAULT '',
             added_ts    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS _cc_migrations(name TEXT PRIMARY KEY);
         CREATE TABLE IF NOT EXISTS cc_samples (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             device_id   INTEGER NOT NULL,
@@ -87,6 +89,13 @@ def init_db(data_dir: str):
         );
         CREATE INDEX IF NOT EXISTS idx_cc_samples_ts ON cc_samples(device_id, ts);
         """)
+    # Run migrations
+    with _get_db() as db:
+        try:
+            db.execute("ALTER TABLE cc_devices ADD COLUMN use_sudo INTEGER DEFAULT 0")
+            db.execute("INSERT OR IGNORE INTO _cc_migrations VALUES ('add_use_sudo')")
+        except Exception:
+            pass
     logger.info("corsair_commander DB initialised at %s", _DB_FILE)
 
 
@@ -95,13 +104,13 @@ def init_db(data_dir: str):
 def add_device(name: str, host: str, port: int = 22, username: str = "root",
                password: str = "", ssh_key: str = "",
                match_str: str = "Commander Pro", use_direct: bool = False,
-               notes: str = "") -> int:
+               use_sudo: bool = False, notes: str = "") -> int:
     with _get_db() as db:
         cur = db.execute(
             "INSERT INTO cc_devices(name,host,port,username,password,ssh_key,"
-            "match_str,use_direct,notes) VALUES (?,?,?,?,?,?,?,?,?)",
+            "match_str,use_direct,use_sudo,notes) VALUES (?,?,?,?,?,?,?,?,?,?)",
             (name, host, port, username, _encrypt(password), ssh_key,
-             match_str, 1 if use_direct else 0, notes)
+             match_str, 1 if use_direct else 0, 1 if use_sudo else 0, notes)
         )
         return cur.lastrowid
 
@@ -136,7 +145,7 @@ def get_device(dev_id: int) -> Optional[Dict]:
 
 def update_device(dev_id: int, **kwargs) -> bool:
     allowed = {"name","host","port","username","password","ssh_key",
-               "match_str","use_direct","enabled","notes"}
+               "match_str","use_direct","use_sudo","enabled","notes"}
     fields = {k: v for k, v in kwargs.items() if k in allowed}
     if "password" in fields:
         fields["password"] = _encrypt(fields["password"])
@@ -196,7 +205,10 @@ def _liquidctl_cmd(dev: Dict, subcmd: str) -> str:
     """Build a liquidctl command string for the given device."""
     match = dev.get("match_str", "Commander Pro")
     direct = "--direct-access" if dev.get("use_direct") else ""
-    return f"liquidctl --match '{match}' {direct} {subcmd} --json 2>/dev/null".strip()
+    is_root = dev.get("username", "root") == "root"
+    use_sudo = bool(dev.get("use_sudo", 0))
+    sudo = "" if (is_root or not use_sudo) else "sudo "
+    return f"{sudo}liquidctl --match '{match}' {direct} {subcmd} --json 2>/dev/null".strip()
 
 
 def _parse_liquidctl_json(raw: str) -> List[Dict]:

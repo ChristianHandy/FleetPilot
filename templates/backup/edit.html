@@ -74,6 +74,16 @@
               <label class="form-check-label" for="verify_ssl">Verify SSL certificate</label>
             </div>
           </div>
+          <div class="col-12">
+            <div class="form-check form-switch">
+              <input type="checkbox" name="use_sudo" class="form-check-input" id="use_sudo" value="1"
+                     {% if srv.use_sudo %}checked{% endif %}>
+              <label class="form-check-label" for="use_sudo">
+                <i class="bi bi-shield-lock me-1"></i>Use <code>sudo</code> for SSH commands
+                <span class="text-muted small ms-2">(leave off for root logins)</span>
+              </label>
+            </div>
+          </div>
         </div>
       </div>
     </div>

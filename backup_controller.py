@@ -187,12 +187,14 @@ def init_db(data_dir: str) -> None:
                 api_token   TEXT,
                 ssh_key     TEXT,
                 verify_ssl  INTEGER NOT NULL DEFAULT 0,
+                use_sudo    INTEGER NOT NULL DEFAULT 0,
                 notes       TEXT,
                 enabled     INTEGER NOT NULL DEFAULT 1,
                 created_at  TEXT NOT NULL DEFAULT (datetime('now')),
                 last_poll   TEXT,
                 last_status TEXT DEFAULT 'unknown'
             );
+            CREATE TABLE IF NOT EXISTS _bc_migrations(name TEXT PRIMARY KEY);
 
             CREATE TABLE IF NOT EXISTS backup_jobs (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -238,6 +240,13 @@ def init_db(data_dir: str) -> None:
             );
         """)
         conn.commit()
+        # Migration: add use_sudo if missing
+        try:
+            conn.execute("ALTER TABLE backup_servers ADD COLUMN use_sudo INTEGER NOT NULL DEFAULT 0")
+            conn.execute("INSERT OR IGNORE INTO _bc_migrations VALUES ('add_use_sudo')")
+            conn.commit()
+        except Exception:
+            pass
         conn.close()
 
 
@@ -251,21 +260,21 @@ def _db() -> sqlite3.Connection:
 def add_server(name: str, server_type: str, host: str, port: int,
                protocol: str, username: str = "", password: str = "",
                api_token: str = "", ssh_key: str = "",
-               verify_ssl: bool = False, notes: str = "") -> int:
+               verify_ssl: bool = False, use_sudo: bool = False, notes: str = "") -> int:
     with _db_lock:
         conn = _db()
         c = conn.cursor()
         c.execute("""
             INSERT INTO backup_servers
               (name, server_type, host, port, protocol, username, password,
-               api_token, ssh_key, verify_ssl, notes)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+               api_token, ssh_key, verify_ssl, use_sudo, notes)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
         """, (name, server_type, host, port, protocol,
               username,
               _encrypt(password) if password else "",
               _encrypt(api_token) if api_token else "",
               _encrypt(ssh_key) if ssh_key else "",
-              int(verify_ssl), notes))
+              int(verify_ssl), int(use_sudo), notes))
         conn.commit()
         new_id = c.lastrowid
         conn.close()
@@ -274,7 +283,7 @@ def add_server(name: str, server_type: str, host: str, port: int,
 
 def update_server(server_id: int, **kwargs) -> None:
     allowed = {"name", "server_type", "host", "port", "protocol", "username",
-               "password", "api_token", "ssh_key", "verify_ssl", "notes", "enabled"}
+               "password", "api_token", "ssh_key", "verify_ssl", "use_sudo", "notes", "enabled"}
     updates = {k: v for k, v in kwargs.items() if k in allowed}
     if "password" in updates and updates["password"]:
         updates["password"] = _encrypt(updates["password"])
@@ -907,10 +916,13 @@ def _poll_urbackup(srv: Dict) -> Dict:
 
 def _poll_bacula(srv: Dict) -> Dict:
     # Run bconsole commands via SSH
+    is_root = srv.get("username", "root") == "root"
+    use_sudo = bool(srv.get("use_sudo", 0))
+    sudo = "" if (is_root or not use_sudo) else "sudo "
     cmd = (
-        "echo -e 'status director\\nquit' | bconsole 2>&1 | head -60 ; "
+        f"echo -e 'status director\\nquit' | {sudo}bconsole 2>&1 | head -60 ; "
         "echo '---JOBS---' ; "
-        "echo -e 'list jobs last=20\\nquit' | bconsole 2>&1 | head -80"
+        f"echo -e 'list jobs last=20\\nquit' | {sudo}bconsole 2>&1 | head -80"
     )
     rc, out, err = _ssh_run(
         srv["host"], srv["port"], srv.get("username", "root"),

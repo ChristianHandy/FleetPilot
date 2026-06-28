@@ -68,6 +68,17 @@
     </div>
 
     <div class="form-group">
+      <label class="form-label">
+        <input type="checkbox" name="use_sudo" value="1" style="margin-right:.4rem;" id="use_sudo_cb">
+        Use <code>sudo</code> for liquidctl commands
+      </label>
+      <small class="form-hint">
+        Enable for non-root users with sudo rights. Leave <strong>off</strong> when logging in as <code>root</code>
+        (Proxmox, most servers). Required when using a regular Linux user account.
+      </small>
+    </div>
+
+    <div class="form-group">
       <label class="form-label">Notes</label>
       <textarea name="notes" class="form-control" rows="2" placeholder="Optional notes about this device..."></textarea>
     </div>

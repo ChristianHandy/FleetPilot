@@ -75,6 +75,16 @@
           <label class="form-label">SSH Key Path</label>
           <input type="text" name="ssh_key" class="form-control" value="{{ dev.ssh_key or '' }}">
         </div>
+        <div class="mb-2 mt-2">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" name="use_sudo" id="use_sudo_toggle" value="1"
+                   {% if dev.use_sudo %}checked{% endif %}>
+            <label class="form-check-label" for="use_sudo_toggle">
+              <i class="bi bi-shield-lock me-1"></i>Use <code>sudo</code> for commands
+              <span class="text-muted small ms-1">(leave off for root logins)</span>
+            </label>
+          </div>
+        </div>
       </div>
     </div>
 
