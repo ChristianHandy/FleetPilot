@@ -182,6 +182,8 @@ function vmAction(epId, node, vmid, action, rtype) {
   const fd = new FormData();
   fd.append('node', node); fd.append('vmid', vmid);
   fd.append('action', action); fd.append('rtype', rtype);
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  if (csrfToken) fd.append('csrf_token', csrfToken);
 
   fetch(`/vm/${epId}/action`, { method: 'POST', body: fd })
     .then(r => r.json())
@@ -223,7 +225,10 @@ function veeamStartJob(epId, jobId, btn) {
   if (!confirm('Start backup job?')) return;
   btn.disabled = true;
   btn.textContent = '\u23F3 Starting…';
-  fetch(`/vm/${epId}/veeam/job/${jobId}/start`, { method: 'POST' })
+  const csrfT = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const veeamFd = new FormData();
+  if (csrfT) veeamFd.append('csrf_token', csrfT);
+  fetch(`/vm/${epId}/veeam/job/${jobId}/start`, { method: 'POST', body: veeamFd })
     .then(r => r.json())
     .then(d => {
       showToast(d.ok ? '\u2705 Backup job started' : '\u274C ' + (d.error || 'Error'),

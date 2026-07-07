@@ -332,6 +332,7 @@ def normalize_host(data):
         "os_profiles": [],
         "last_update": None,
         "last_seen": None,
+        "custom_image": None,  # URL to custom server image
     }
     defaults.update(data)
     # Ensure tags is always a list
@@ -1017,6 +1018,123 @@ def detect_mac(name):
         flash(f'Could not ping host {name} at {ip}. Make sure the host is online and reachable.')
     
     return redirect(url_for('manage_hosts'))
+
+
+@app.route("/hosts/detect_os/<name>")
+@login_required
+def detect_os(name):
+    """Auto-detect OS type for a host via SSH (reads /etc/os-release or uname)."""
+    if session.get("user_id") and not current_user_has_role('operator', 'admin'):
+        return json.dumps({"ok": False, "error": "Permission denied"}), 403, {"Content-Type": "application/json"}
+    hosts = load_hosts()
+    if name not in hosts:
+        return json.dumps({"ok": False, "error": "Host not found"}), 404, {"Content-Type": "application/json"}
+    h = hosts[name]
+    ip   = h.get("host", "")
+    user = h.get("user", "root")
+    port = int(h.get("port", 22))
+    ssh_key = h.get("ssh_key", "")
+    if is_localhost(ip):
+        # Detect locally
+        try:
+            import subprocess as _sp
+            r = _sp.run(["cat", "/etc/os-release"], capture_output=True, text=True, timeout=5)
+            os_info = _parse_os_release(r.stdout)
+        except Exception as e:
+            os_info = {"name": "Linux", "type": "linux", "version": ""}
+    else:
+        try:
+            ssh = paramiko.SSHClient()
+            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            connect_kwargs = {"hostname": ip, "username": user, "port": port, "timeout": 8}
+            if ssh_key:
+                connect_kwargs["key_filename"] = ssh_key
+            ssh.connect(**connect_kwargs)
+            # Try /etc/os-release first
+            _, stdout, _ = ssh.exec_command("cat /etc/os-release 2>/dev/null || uname -a", timeout=5)
+            output = stdout.read().decode("utf-8", errors="replace")
+            ssh.close()
+            os_info = _parse_os_release(output)
+        except Exception as e:
+            return json.dumps({"ok": False, "error": str(e)}), 500, {"Content-Type": "application/json"}
+    # Update host os_profiles
+    existing = h.get("os_profiles", [])
+    profile = {"name": os_info["name"], "type": os_info["type"], "version": os_info.get("version", ""), "default": True, "auto_detected": True}
+    # Replace auto-detected profile or add new one
+    new_profiles = [p for p in existing if not p.get("auto_detected")]
+    new_profiles.insert(0, profile)
+    h["os_profiles"] = new_profiles
+    hosts[name] = h
+    save_hosts(hosts)
+    return json.dumps({"ok": True, "os": os_info}), 200, {"Content-Type": "application/json"}
+
+
+def _parse_os_release(text: str) -> dict:
+    """Parse /etc/os-release or uname output into {name, type, version}."""
+    info = {}
+    for line in text.splitlines():
+        if "=" in line and not line.startswith("#"):
+            k, _, v = line.partition("=")
+            info[k.strip()] = v.strip().strip('"')
+    name = info.get("PRETTY_NAME") or info.get("NAME") or ""
+    version = info.get("VERSION") or info.get("VERSION_ID") or ""
+    # Detect OS type
+    name_lower = name.lower()
+    if any(x in name_lower for x in ("windows", "win")):
+        os_type = "windows"
+    elif any(x in name_lower for x in ("proxmox",)):
+        os_type = "proxmox"
+    elif any(x in name_lower for x in ("unraid",)):
+        os_type = "unraid"
+    elif any(x in name_lower for x in ("ubuntu", "debian", "fedora", "centos", "rhel", "arch", "alpine", "opensuse", "linux")):
+        os_type = "linux"
+    elif "darwin" in name_lower or "macos" in name_lower:
+        os_type = "macos"
+    else:
+        # Fallback: check uname output
+        if "linux" in text.lower():
+            os_type = "linux"
+        elif "darwin" in text.lower():
+            os_type = "macos"
+        else:
+            os_type = "linux"
+    if not name:
+        name = os_type.capitalize()
+    return {"name": name, "type": os_type, "version": version}
+
+
+@app.route("/hosts/upload_image/<name>", methods=["POST"])
+@login_required
+def upload_host_image(name):
+    """Upload a custom image for a host."""
+    if session.get("user_id") and not current_user_has_role('operator', 'admin'):
+        return json.dumps({"ok": False, "error": "Permission denied"}), 403, {"Content-Type": "application/json"}
+    hosts = load_hosts()
+    if name not in hosts:
+        return json.dumps({"ok": False, "error": "Host not found"}), 404, {"Content-Type": "application/json"}
+    if 'image' not in request.files:
+        return json.dumps({"ok": False, "error": "No file uploaded"}), 400, {"Content-Type": "application/json"}
+    f = request.files['image']
+    if not f.filename:
+        return json.dumps({"ok": False, "error": "Empty filename"}), 400, {"Content-Type": "application/json"}
+    # Validate file type
+    allowed_ext = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'}
+    import pathlib
+    ext = pathlib.Path(f.filename).suffix.lower()
+    if ext not in allowed_ext:
+        return json.dumps({"ok": False, "error": f"File type {ext} not allowed"}), 400, {"Content-Type": "application/json"}
+    # Save to static/host_images/
+    img_dir = os.path.join(_APP_DIR, "static", "host_images")
+    os.makedirs(img_dir, exist_ok=True)
+    safe_name = "".join(c for c in name if c.isalnum() or c in "_-")
+    filename = f"{safe_name}{ext}"
+    filepath = os.path.join(img_dir, filename)
+    f.save(filepath)
+    # Update host record
+    hosts[name]["custom_image"] = f"/static/host_images/{filename}"
+    save_hosts(hosts)
+    return json.dumps({"ok": True, "image_url": f"/static/host_images/{filename}"}), 200, {"Content-Type": "application/json"}
+
 
 @app.route("/hosts/scan_ip_changes")
 @login_required

@@ -83,6 +83,20 @@
 
     <!-- Header -->
     <div class="hc-header">
+      {% if h.custom_image %}
+      <div style="width:48px;height:48px;border-radius:8px;overflow:hidden;flex-shrink:0;margin-right:0.75rem;">
+        <img src="{{ h.custom_image }}" alt="{{ name }}" style="width:100%;height:100%;object-fit:cover;">
+      </div>
+      {% else %}
+      <div class="hc-os-icon" style="width:48px;height:48px;border-radius:8px;background:var(--bg-secondary);display:flex;align-items:center;justify-content:center;font-size:1.8rem;flex-shrink:0;margin-right:0.75rem;">
+        {% set _os = h.os_profiles[0].type if h.os_profiles else 'linux' %}
+        {% if _os == 'windows' %}&#x1FA9F;
+        {% elif _os == 'proxmox' %}&#x1F5A5;
+        {% elif _os == 'unraid' %}&#x1F4BE;
+        {% elif _os == 'macos' %}&#xF8FF;
+        {% else %}&#x1F427;{% endif %}
+      </div>
+      {% endif %}
       <div style="min-width:0;flex:1;">
         <div class="hc-title-row">
           <span class="hc-name">{{ name }}</span>
@@ -160,6 +174,11 @@
       {% if h.host not in localhost_identifiers and h.host|lower not in localhost_identifiers %}
       <a class="btn btn-secondary btn-sm" href="/hosts/install_key/{{ name }}">&#x1F511; SSH</a>
       <a class="btn btn-ghost btn-sm" href="/hosts/detect_mac/{{ name }}">&#x1F50D; MAC</a>
+      <button class="btn btn-ghost btn-sm" onclick="detectOS('{{ name }}', this)" title="Auto-detect OS via SSH">&#x1F4BB; OS</button>
+      <label class="btn btn-ghost btn-sm" title="Upload custom server image" style="cursor:pointer;margin:0">
+        &#x1F5BC; Img
+        <input type="file" accept="image/*" style="display:none" onchange="uploadHostImage('{{ name }}', this)">
+      </label>
       {% endif %}
       <a class="btn btn-primary btn-sm" href="/update/{{ name }}">&#x2B06; Update</a>
       {# Plugin hook: host_card_actions #}
@@ -525,5 +544,62 @@ function setView(mode) {
 }
 const savedView = localStorage.getItem('fp_host_view');
 if (savedView) setView(savedView);
+
+// OS Auto-Detection
+async function detectOS(name, btn) {
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Detecting…';
+  try {
+    const resp = await fetch(`/hosts/detect_os/${encodeURIComponent(name)}`);
+    const data = await resp.json();
+    if (data.ok) {
+      showToast(`✅ ${name}: ${data.os.name} (${data.os.type})`, 'success');
+      setTimeout(() => location.reload(), 1200);
+    } else {
+      showToast(`❌ OS detection failed: ${data.error}`, 'error');
+    }
+  } catch(e) {
+    showToast(`❌ Error: ${e.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+}
+
+// Custom Image Upload
+async function uploadHostImage(name, input) {
+  if (!input.files || !input.files[0]) return;
+  const fd = new FormData();
+  fd.append('image', input.files[0]);
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  if (csrfToken) fd.append('csrf_token', csrfToken);
+  try {
+    const resp = await fetch(`/hosts/upload_image/${encodeURIComponent(name)}`, { method: 'POST', body: fd });
+    const data = await resp.json();
+    if (data.ok) {
+      showToast(`✅ Image uploaded for ${name}`, 'success');
+      setTimeout(() => location.reload(), 800);
+    } else {
+      showToast(`❌ Upload failed: ${data.error}`, 'error');
+    }
+  } catch(e) {
+    showToast(`❌ Error: ${e.message}`, 'error');
+  }
+}
+
+// Toast notification helper (if not already defined)
+if (typeof showToast === 'undefined') {
+  function showToast(msg, type) {
+    const t = document.createElement('div');
+    t.className = `toast toast-${type || 'info'}`;
+    t.textContent = msg;
+    t.style.cssText = 'position:fixed;bottom:1.5rem;right:1.5rem;padding:0.75rem 1.25rem;border-radius:8px;font-size:0.9rem;z-index:9999;max-width:360px;box-shadow:0 4px 12px rgba(0,0,0,.25);';
+    t.style.background = type === 'success' ? '#22c55e' : type === 'error' ? '#ef4444' : '#3b82f6';
+    t.style.color = '#fff';
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 3500);
+  }
+}
 </script>
 {% endblock %}
