@@ -359,7 +359,7 @@ class UnraidClient:
 
     Unraid 6.12+ ships with a built-in GraphQL API (port 443, /graphql).
     Older versions use the community JSON API plugin.
-    We support both; the built-in REST/JSON endpoints are used where possible.
+    We support both; GraphQL is tried first, then REST fallbacks.
     """
 
     def __init__(self, host: str, port: int, api_key: str,
@@ -370,12 +370,33 @@ class UnraidClient:
         self._api_key = api_key
         self.base_http = f"http://{host}"   # Unraid typically HTTP on LAN
         self.base_https = f"https://{host}:{port}"
+        self._gql_available: Optional[bool] = None  # cached after first probe
 
     def _headers(self) -> Dict:
         return {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
         }
+
+    def _gql_headers(self) -> Dict:
+        return {
+            "x-api-key": self._api_key,
+            "Content-Type": "application/json",
+        }
+
+    def _gql(self, query: str) -> Dict:
+        """Execute a GraphQL query against the Unraid Connect API."""
+        url = f"{self.base_https}/graphql"
+        return _http("POST", url, headers=self._gql_headers(),
+                     body={"query": query}, verify_ssl=self.verify_ssl)
+
+    def _is_gql_available(self) -> bool:
+        """Probe once whether the GraphQL endpoint is available and authenticated."""
+        if self._gql_available is not None:
+            return self._gql_available
+        r = self._gql("{ array { state } }")
+        self._gql_available = r["ok"] and isinstance(r.get("data"), dict) and "data" in r["data"]
+        return self._gql_available
 
     def _get_json(self, path: str, use_https: bool = False) -> Dict:
         base = self.base_https if use_https else self.base_http
@@ -385,7 +406,20 @@ class UnraidClient:
     # ── System info ───────────────────────────────────────────────────────────
 
     def get_system_info(self) -> Dict:
-        """Try /api/system/info (built-in) then fall back to /state/var.ini."""
+        """Try GraphQL first, then /api/system/info, then /state/var.ini."""
+        # GraphQL (Unraid 6.12+ Connect API)
+        if self._is_gql_available():
+            r = self._gql("{ info { os { platform release } } array { state } }")
+            if r["ok"] and isinstance(r.get("data"), dict):
+                d = r["data"].get("data", {})
+                info = d.get("info", {})
+                arr = d.get("array", {})
+                return {
+                    "platform": info.get("os", {}).get("platform", "linux"),
+                    "version": info.get("os", {}).get("release", "?"),
+                    "array_state": arr.get("state", ""),
+                }
+        # Legacy REST
         r = self._get_json("/api/system/info")
         if r["ok"] and isinstance(r["data"], dict):
             return r["data"]
@@ -404,6 +438,23 @@ class UnraidClient:
     # ── Array / Disks ─────────────────────────────────────────────────────────
 
     def get_array_status(self) -> Dict:
+        # GraphQL first (Unraid 6.12+ Connect API)
+        if self._is_gql_available():
+            r = self._gql("""
+            { array {
+                state
+                capacity { kilobytes { free used total } }
+            } }
+            """)
+            if r["ok"] and isinstance(r.get("data"), dict):
+                d = r["data"].get("data", {}).get("array", {})
+                cap = d.get("capacity", {}).get("kilobytes", {})
+                return {
+                    "state": d.get("state", ""),
+                    "free_kb": cap.get("free", 0),
+                    "used_kb": cap.get("used", 0),
+                    "total_kb": cap.get("total", 0),
+                }
         r = self._get_json("/api/array")
         if r["ok"] and isinstance(r["data"], dict):
             return r["data"]
@@ -419,8 +470,91 @@ class UnraidClient:
             return info
         return {}
 
+    def get_disks_gql(self) -> List[Dict]:
+        """Fetch disks via GraphQL (Unraid 6.12+ Connect API)."""
+        # Top-level disks: model name, serial, temp, smartStatus
+        r_top = self._gql("""
+        {
+          disks {
+            id name size type temperature smartStatus serialNum
+            partitions { name fsType size }
+          }
+        }
+        """)
+        top_by_serial: Dict[str, Dict] = {}
+        if r_top["ok"] and isinstance(r_top.get("data"), dict):
+            for d in r_top["data"].get("data", {}).get("disks", []):
+                sn = d.get("serialNum", "")
+                if sn:
+                    top_by_serial[sn] = d
+
+        # Array disks: pool assignment, fsSize, fsFree, status
+        r_arr = self._gql("""
+        {
+          array {
+            state
+            disks  { id name size status temp device fsType fsSize fsFree rotational numErrors }
+            parities { id name size status temp device }
+            caches { id name size status temp device fsType fsSize fsFree }
+          }
+        }
+        """)
+        result = []
+        if r_arr["ok"] and isinstance(r_arr.get("data"), dict):
+            arr = r_arr["data"].get("data", {}).get("array", {})
+
+            def _norm(d: Dict, pool: str) -> Dict:
+                raw_id = d.get("id", "")
+                serial = raw_id.split(":", 1)[1] if ":" in raw_id else raw_id
+                top = top_by_serial.get(serial, {})
+                size_bytes = d.get("size", 0) or 0
+                size_gb = round(size_bytes / 1e9, 1) if size_bytes else None
+                fs_size = d.get("fsSize") or 0
+                fs_free = d.get("fsFree") or 0
+                used_gb = round((fs_size - fs_free) / 1e9, 1) if fs_size else None
+                status_raw = (d.get("status") or "").upper()
+                if "DISK_OK" in status_raw:
+                    health = "GOOD"
+                elif "DISK_NP" in status_raw:
+                    health = "NOT_PRESENT"
+                elif "DISK_DSBL" in status_raw:
+                    health = "DISABLED"
+                elif "ERROR" in status_raw or "INVALID" in status_raw:
+                    health = "CRITICAL"
+                else:
+                    health = "UNKNOWN"
+                return {
+                    "id": d.get("name", serial),
+                    "name": d.get("name", ""),
+                    "model": top.get("name", ""),
+                    "serial": serial,
+                    "size_gb": size_gb,
+                    "temp": d.get("temp"),
+                    "health": health,
+                    "smart_status": top.get("smartStatus", ""),
+                    "pool": pool,
+                    "source": "unraid",
+                    "fsType": d.get("fsType", ""),
+                    "used_gb": used_gb,
+                    "device": d.get("device", ""),
+                    "rotational": d.get("rotational"),
+                    "num_errors": d.get("numErrors", 0),
+                }
+
+            for d in arr.get("disks", []):
+                result.append(_norm(d, "array"))
+            for d in arr.get("parities", []):
+                result.append(_norm(d, "parity"))
+            for d in arr.get("caches", []):
+                result.append(_norm(d, "cache"))
+        return result
+
     def get_disks(self) -> List[Dict]:
-        """Return disk list from /api/disks or /state/disks.ini."""
+        """Return disk list — GraphQL first, then legacy REST/INI fallbacks."""
+        if self._is_gql_available():
+            disks = self.get_disks_gql()
+            if disks:
+                return disks
         r = self._get_json("/api/disks")
         if r["ok"] and isinstance(r["data"], list):
             return r["data"]
@@ -476,17 +610,24 @@ class UnraidClient:
     # ── Normalized disk summary ───────────────────────────────────────────────
 
     def get_disk_summary(self) -> List[Dict]:
-        """Return normalized disk dicts for FleetPilot disk manager."""
+        """Return normalized disk dicts for FleetPilot disk manager.
+
+        When GraphQL is available (Unraid 6.12+ Connect API), get_disks()
+        already returns fully-normalized dicts from get_disks_gql().
+        For legacy REST/INI responses we normalize here.
+        """
         raw = self.get_disks()
+        # GraphQL path: dicts already have 'health' and all fields set correctly
+        if raw and "health" in raw[0]:
+            return raw
+        # Legacy path: normalize raw REST/INI dicts
         result = []
         for d in raw:
             name = d.get("name", d.get("id", ""))
-            # Unraid reports temp in °C as string
             try:
                 temp = int(d.get("temp", d.get("diskTemp", 0)) or 0)
             except (ValueError, TypeError):
                 temp = None
-            # Health from status field
             status_raw = d.get("status", d.get("diskStatus", "")).upper()
             if "DISK_OK" in status_raw or status_raw == "OK":
                 health = "GOOD"
@@ -498,7 +639,6 @@ class UnraidClient:
                 health = "CRITICAL"
             else:
                 health = "UNKNOWN"
-            # Size
             try:
                 size_gb = round(int(d.get("size", d.get("diskSize", 0)) or 0) / 1e9, 1)
             except (ValueError, TypeError):
