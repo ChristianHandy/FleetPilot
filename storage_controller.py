@@ -29,9 +29,11 @@ DB_FILE = Path(__file__).parent / "storage_controller.db"
 # ── Encryption (same pattern as vm_controller) ────────────────────────────────
 try:
     from cryptography.fernet import Fernet
-    _FERNET_KEY = os.environ.get("SECRET_KEY", "").encode()[:32].ljust(32, b"0")
     import base64 as _b64
-    _fernet = Fernet(_b64.urlsafe_b64encode(_FERNET_KEY))
+    import hashlib as _hashlib
+    # Use SHA256 of SECRET_KEY — consistent with app.py and all other controllers
+    _secret = os.environ.get("SECRET_KEY", "")
+    _fernet = Fernet(_b64.urlsafe_b64encode(_hashlib.sha256(_secret.encode()).digest()))
     def _encrypt(s: str) -> str:
         return _fernet.encrypt(s.encode()).decode()
     def _decrypt(s: str) -> str:
