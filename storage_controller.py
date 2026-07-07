@@ -505,7 +505,12 @@ class UnraidClient:
 
             def _norm(d: Dict, pool: str) -> Dict:
                 raw_id = d.get("id", "")
-                serial = raw_id.split(":", 1)[1] if ":" in raw_id else raw_id
+                # ID format: hash:MODEL_SERIAL  (e.g. abc123:ST22000NM002E-3HL113_ZX27Y0G8)
+                # or hash:VENDOR_MODEL_SERIAL for NVMe
+                # Top-level serialNum is just the serial (e.g. ZX27Y0G8)
+                id_suffix = raw_id.split(":", 1)[1] if ":" in raw_id else raw_id
+                # Extract serial: last underscore-separated segment
+                serial = id_suffix.rsplit("_", 1)[-1] if "_" in id_suffix else id_suffix
                 top = top_by_serial.get(serial, {})
                 size_bytes = d.get("size", 0) or 0
                 size_gb = round(size_bytes / 1e9, 1) if size_bytes else None
