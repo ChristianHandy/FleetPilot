@@ -243,7 +243,7 @@ def delete_device(dev_id: int):
 def _ssh_connect(dev: Dict):
     import paramiko
     ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.set_missing_host_key_policy(paramiko.WarningPolicy())
     kwargs = dict(
         hostname=dev["host"],
         port=dev.get("port", 22),

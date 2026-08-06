@@ -21,7 +21,7 @@ HIST_INTERVAL = 30
 def ssh_run(ip, port, user, pw, cmd, timeout=12):
     try:
         c = paramiko.SSHClient()
-        c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        c.set_missing_host_key_policy(paramiko.WarningPolicy())
         c.connect(ip, port=port, username=user, password=pw,
                   timeout=8, allow_agent=False, look_for_keys=False)
         _, stdout, stderr = c.exec_command(cmd, timeout=timeout)
@@ -36,7 +36,7 @@ def ssh_run_script(ip, port, user, pw, script_content, timeout=15):
     remote_path = f"/tmp/_hw_script_{abs(hash(script_content[:50]))}.py"
     try:
         c = paramiko.SSHClient()
-        c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        c.set_missing_host_key_policy(paramiko.WarningPolicy())
         c.connect(ip, port=port, username=user, password=pw,
                   timeout=8, allow_agent=False, look_for_keys=False)
         # Datei via SFTP übertragen

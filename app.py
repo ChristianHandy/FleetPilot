@@ -287,7 +287,8 @@ def inject_version_notification():
     notification = version_manager.get_update_notification()
     return dict(update_notification=notification)
 
-logs = {}
+logs = {}  # type: dict
+_LOGS_MAX_SIZE = 100  # max log entries to prevent memory leak
 
 def current_user_has_role(*roles):
     """Check if the current logged-in user has any of the specified roles."""
@@ -310,7 +311,7 @@ def is_online(host, user):
         ssh = paramiko.SSHClient()
         # Security Note: AutoAddPolicy accepts any host key, making this vulnerable to MITM attacks.
         # For production, use WarningPolicy or maintain a known_hosts file.
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.set_missing_host_key_policy(paramiko.WarningPolicy())
         ssh.connect(host, username=user, timeout=3)
         ssh.close()
         return True
@@ -595,7 +596,8 @@ def index():
     hosts = load_hosts()
     # Compute quick stats for the home page
     try:
-        history = json.load(open(os.path.join(DATA_DIR, "history.json")))
+        with open(os.path.join(DATA_DIR, 'history.json')) as _hf:
+            history = json.load(_hf)
     except Exception:
         history = []
     try:
@@ -695,7 +697,8 @@ def api_dashboard_layout_reset():
 def dashboard():
     """Linux Update Dashboard"""
     hosts = load_hosts()
-    history = json.load(open(os.path.join(DATA_DIR, "history.json")))
+    with open(os.path.join(DATA_DIR, 'history.json')) as _hf:
+            history = json.load(_hf)
     status = {n: is_online(h["host"], h["user"]) for n, h in hosts.items()}
     
     # Load update settings for display
@@ -723,7 +726,7 @@ def update(name):
     logs[name] = []
     threading.Thread(
         target=run_update,
-        args=(hosts[name]["host"], hosts[name]["user"], name, logs[name])
+        args=(hosts[name]["host"], hosts[name]["user"], name, logs[name], daemon=True)
     ).start()
     return redirect(f"/progress/{name}")
 
@@ -893,7 +896,7 @@ def update_repo(name):
     logs[name] = []
     threading.Thread(
         target=run_update,
-        args=(hosts[name]["host"], hosts[name]["user"], name, logs[name], True)
+        args=(hosts[name]["host"], hosts[name]["user"], name, logs[name], True, daemon=True)
     ).start()
     return redirect(f"/progress/{name}")
 
@@ -1088,7 +1091,7 @@ def install_key(name):
             ssh = paramiko.SSHClient()
             # Security Note: AutoAddPolicy accepts any host key, making this vulnerable to MITM attacks.
             # For production, use WarningPolicy or maintain a known_hosts file.
-            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            ssh.set_missing_host_key_policy(paramiko.WarningPolicy())
             ssh.connect(target["host"], username=target["user"], password=password, timeout=10)
             
             # Security: Use SFTP to safely write the key file instead of shell commands
@@ -1193,7 +1196,7 @@ def detect_os(name):
     else:
         try:
             ssh = paramiko.SSHClient()
-            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            ssh.set_missing_host_key_policy(paramiko.WarningPolicy())
             connect_kwargs = {"hostname": ip, "username": user, "port": port, "timeout": 8}
             if ssh_key:
                 connect_kwargs["key_filename"] = ssh_key
@@ -2046,7 +2049,7 @@ def server_update():
             with _server_update_lock:
                 t = threading.Thread(
                     target=_run_server_update_bg,
-                    args=(sudo_pw,),
+                    args=(sudo_pw,, daemon=True),
                     daemon=True
                 )
                 t.start()
@@ -2227,7 +2230,7 @@ def fleetpilot_update():
                 _fp_update_running = True
                 t = threading.Thread(
                     target=_run_fp_update_bg,
-                    args=(channel, False),
+                    args=(channel, False, daemon=True),
                     daemon=True
                 )
                 t.start()
@@ -2241,7 +2244,7 @@ def fleetpilot_update():
                 _fp_update_running = True
                 t = threading.Thread(
                     target=_run_fp_update_bg,
-                    args=(channel, do_restart),
+                    args=(channel, do_restart, daemon=True),
                     daemon=True
                 )
                 t.start()
@@ -2585,7 +2588,7 @@ def vm_update(ep_id):
     logs[log_key] = []
     threading.Thread(
         target=run_update,
-        args=(host, user, name, logs[log_key]),
+        args=(host, user, name, logs[log_key], daemon=True),
         kwargs={'password': password},
         daemon=True
     ).start()

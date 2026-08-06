@@ -133,7 +133,7 @@ def _ssh_run(host: str, port: int, username: str, password: str,
         return 1, "", "paramiko not installed"
 
     client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.set_missing_host_key_policy(paramiko.WarningPolicy())
     try:
         connect_kwargs: Dict[str, Any] = {
             "hostname": host,
@@ -593,7 +593,7 @@ def _duplicati_auth(srv: Dict) -> Optional[str]:
         return None
     try:
         # Get nonce
-        r = requests.get(f"{base}/api/v1/auth/issignin", timeout=10, verify=False)
+        r = requests.get(f"{base}/api/v1/auth/issignin", timeout=10, verify=True)
         if not r.ok:
             return None
         nonce_data = r.json()
@@ -609,7 +609,7 @@ def _duplicati_auth(srv: Dict) -> Optional[str]:
         # Sign in
         r2 = requests.post(f"{base}/api/v1/auth/signin",
                            json={"Password": final_hash},
-                           timeout=10, verify=False)
+                           timeout=10, verify=True)
         if r2.ok:
             return r2.json().get("Token")
     except Exception as e:
@@ -628,7 +628,7 @@ def _poll_duplicati(srv: Dict) -> Dict:
 
     try:
         r = requests.get(f"{base}/api/v1/backups",
-                         headers=headers, timeout=15, verify=False)
+                         headers=headers, timeout=15, verify=True)
         backups = r.json() if r.ok else []
     except Exception as e:
         return {"ok": False, "error": str(e)}
@@ -647,7 +647,7 @@ def _poll_duplicati(srv: Dict) -> Dict:
             # Get last result
             try:
                 r2 = requests.get(f"{base}/api/v1/backup/{bk_id}/filesets",
-                                  headers=headers, timeout=10, verify=False)
+                                  headers=headers, timeout=10, verify=True)
                 filesets = r2.json() if r2.ok else []
                 last_status = "ok" if filesets else "warning"
                 if last_status == "ok":
@@ -691,7 +691,7 @@ def trigger_duplicati_backup(srv: Dict, backup_id: str) -> Dict:
         headers["Authorization"] = f"Bearer {token}"
     try:
         r = requests.post(f"{base}/api/v1/backup/{backup_id}/run",
-                          headers=headers, timeout=15, verify=False)
+                          headers=headers, timeout=15, verify=True)
         return {"ok": r.ok, "status_code": r.status_code, "message": r.text[:200]}
     except Exception as e:
         return {"ok": False, "error": str(e)}
@@ -708,7 +708,7 @@ def _poll_restic(srv: Dict) -> Dict:
 
     try:
         # List repos (top-level directories)
-        r = requests.get(f"{base}/", auth=auth, timeout=15, verify=False)
+        r = requests.get(f"{base}/", auth=auth, timeout=15, verify=True)
         if not r.ok:
             return {"ok": False, "error": f"HTTP {r.status_code}: {r.text[:100]}"}
         repos = r.json() if r.headers.get("content-type", "").startswith("application/json") else []
@@ -722,7 +722,7 @@ def _poll_restic(srv: Dict) -> Dict:
             repo_name = repo if isinstance(repo, str) else repo.get("name", "")
             try:
                 r2 = requests.get(f"{base}/{repo_name}/snapshots/",
-                                  auth=auth, timeout=15, verify=False)
+                                  auth=auth, timeout=15, verify=True)
                 snaps = r2.json() if r2.ok else []
                 jobs_ok += 1
                 for snap in snaps[-10:]:
@@ -762,7 +762,7 @@ def _poll_borgwarehouse(srv: Dict) -> Dict:
 
     try:
         r = requests.get(f"{base}/api/v1/repositories",
-                         headers=headers, timeout=15, verify=False)
+                         headers=headers, timeout=15, verify=True)
         if not r.ok:
             return {"ok": False, "error": f"HTTP {r.status_code}: {r.text[:100]}"}
         repos = r.json().get("repoList", [])
@@ -832,7 +832,7 @@ def _urbackup_login(srv: Dict) -> Optional[str]:
         r = requests.get(f"{base}/x?a=login",
                          params={"username": srv.get("username", "admin"),
                                  "password": srv.get("password", "")},
-                         timeout=10, verify=False)
+                         timeout=10, verify=True)
         if r.ok:
             data = r.json()
             if data.get("success"):
@@ -852,7 +852,7 @@ def _poll_urbackup(srv: Dict) -> Dict:
     jobs_ok = jobs_warn = jobs_error = 0
 
     try:
-        r = requests.get(f"{base}/x", params={**params, "a": "status"}, timeout=15, verify=False)
+        r = requests.get(f"{base}/x", params={**params, "a": "status"}, timeout=15, verify=True)
         if not r.ok:
             return {"ok": False, "error": f"HTTP {r.status_code}"}
         data = r.json()
@@ -1042,17 +1042,17 @@ def test_connection(server_id: int) -> Dict:
                 r = sess.get(url, timeout=10)
             elif stype == "duplicati":
                 url = f"{base}/api/v1/serverstate"
-                r = requests.get(url, timeout=10, verify=False)
+                r = requests.get(url, timeout=10, verify=True)
             elif stype == "restic":
                 url = f"{base}/"
                 auth = (srv.get("username"), srv.get("password")) if srv.get("username") else None
-                r = requests.get(url, auth=auth, timeout=10, verify=False)
+                r = requests.get(url, auth=auth, timeout=10, verify=True)
             elif stype == "borgwarehouse":
                 url = f"{base}/api/v1/version"
-                r = requests.get(url, timeout=10, verify=False)
+                r = requests.get(url, timeout=10, verify=True)
             elif stype == "urbackup":
                 url = f"{base}/x?a=login"
-                r = requests.get(url, timeout=10, verify=False)
+                r = requests.get(url, timeout=10, verify=True)
             else:
                 return {"ok": False, "error": "Unknown type"}
             return {

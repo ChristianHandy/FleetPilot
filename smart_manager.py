@@ -431,7 +431,7 @@ def collect_ssh_host_disks(host_name: str, host_ip: str, user: str,
     try:
         import paramiko
         ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.set_missing_host_key_policy(paramiko.WarningPolicy())
         connect_kwargs = dict(hostname=host_ip, username=user, port=port, timeout=10)
         if key_path and Path(key_path).exists():
             connect_kwargs["key_filename"] = key_path

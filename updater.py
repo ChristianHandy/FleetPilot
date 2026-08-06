@@ -259,7 +259,7 @@ def run_update(host, user, name, log_list, repo_only=False, password=None):
         # as it automatically accepts unknown host keys (vulnerable to MITM attacks).
         # For production use, implement proper host key verification.
         ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.set_missing_host_key_policy(paramiko.WarningPolicy())
         
         # Connect to the remote host using SSH key or password authentication
         if password:

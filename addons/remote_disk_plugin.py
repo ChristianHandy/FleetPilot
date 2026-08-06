@@ -78,7 +78,7 @@ def execute_remote_command(host, port, username, command):
         ssh = paramiko.SSHClient()
         # Security Note: AutoAddPolicy accepts any host key, making this vulnerable to MITM attacks.
         # For production, use WarningPolicy or maintain a known_hosts file.
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.set_missing_host_key_policy(paramiko.WarningPolicy())
         ssh.connect(host, port=port, username=username, timeout=10)
         
         stdin, stdout, stderr = ssh.exec_command(command)

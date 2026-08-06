@@ -171,7 +171,7 @@ def _ssh_connect(dev: Dict):
     """Open a paramiko SSH connection to the device's host."""
     import paramiko
     ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.set_missing_host_key_policy(paramiko.WarningPolicy())
     kwargs = dict(
         hostname=dev["host"],
         port=dev.get("port", 22),

@@ -176,7 +176,8 @@ except: pass
 # ── Memory ──
 try:
     mi = {}
-    for l in open('/proc/meminfo'):
+    with open('/proc/meminfo') as _mf:
+        for l in _mf:
         k,v = l.split(':')
         mi[k.strip()] = int(v.strip().split()[0])
     d['ram_total_mb'] = mi['MemTotal']//1024
@@ -186,12 +187,14 @@ try:
 except: pass
 
 # ── Uptime ──
-try: d['uptime_s'] = int(float(open('/proc/uptime').read().split()[0]))
+try:
+            with open('/proc/uptime') as _uf: d['uptime_s'] = int(float(_uf.read().split()[0]))
 except: pass
 
 # ── Network ──
 try:
-    for l in open('/proc/net/dev'):
+    with open('/proc/net/dev') as _nf:
+        for l in _nf:
         l = l.strip()
         if ':' in l and not l.startswith('lo'):
             iface = l.split(':')[0].strip()
