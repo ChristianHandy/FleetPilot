@@ -726,7 +726,7 @@ def update(name):
     logs[name] = []
     threading.Thread(
         target=run_update,
-        args=(hosts[name]["host"], hosts[name]["user"], name, logs[name], daemon=True)
+        args=(hosts[name]["host"], hosts[name]["user"], name, logs[name])
     ).start()
     return redirect(f"/progress/{name}")
 
@@ -896,7 +896,7 @@ def update_repo(name):
     logs[name] = []
     threading.Thread(
         target=run_update,
-        args=(hosts[name]["host"], hosts[name]["user"], name, logs[name], True, daemon=True)
+        args=(hosts[name]["host"], hosts[name]["user"], name, logs[name], True)
     ).start()
     return redirect(f"/progress/{name}")
 
@@ -2049,7 +2049,7 @@ def server_update():
             with _server_update_lock:
                 t = threading.Thread(
                     target=_run_server_update_bg,
-                    args=(sudo_pw,, daemon=True),
+                    args=(sudo_pw,),
                     daemon=True
                 )
                 t.start()
@@ -2230,7 +2230,7 @@ def fleetpilot_update():
                 _fp_update_running = True
                 t = threading.Thread(
                     target=_run_fp_update_bg,
-                    args=(channel, False, daemon=True),
+                    args=(channel, False),
                     daemon=True
                 )
                 t.start()
@@ -2244,7 +2244,7 @@ def fleetpilot_update():
                 _fp_update_running = True
                 t = threading.Thread(
                     target=_run_fp_update_bg,
-                    args=(channel, do_restart, daemon=True),
+                    args=(channel, do_restart),
                     daemon=True
                 )
                 t.start()
@@ -2588,7 +2588,7 @@ def vm_update(ep_id):
     logs[log_key] = []
     threading.Thread(
         target=run_update,
-        args=(host, user, name, logs[log_key], daemon=True),
+        args=(host, user, name, logs[log_key]),
         kwargs={'password': password},
         daemon=True
     ).start()
