@@ -23,6 +23,12 @@ import corsair_commander
 import backup_controller as _bc
 import hw_monitor as _hw
 try:
+    import server_registry as _registry
+    _REGISTRY_AVAILABLE = True
+except Exception as _reg_err:
+    _REGISTRY_AVAILABLE = False
+    print(f'[ServerRegistry] Module not available: {_reg_err}')
+try:
     import two_factor as _2fa
     _2FA_AVAILABLE = True
 except Exception as _2fa_err:
@@ -237,6 +243,17 @@ with app.app_context():
         _hw.start_polling()
     except Exception as _hw_err:
         print(f"[HW Monitor] Init error: {_hw_err}")
+    # Initialize central server registry and import from all existing DBs
+    if _REGISTRY_AVAILABLE:
+        try:
+            _reg = _registry.get_registry(DATA_DIR)
+            _reg.import_from_hosts_json(os.path.join(DATA_DIR, 'hosts.json'))
+            _reg.import_from_hw_monitor_db(os.path.join(DATA_DIR, 'hw_monitor.db'))
+            _reg.import_from_fan_controller_db(os.path.join(DATA_DIR, 'fan_controller.db'))
+            _reg.import_from_backup_db(os.path.join(DATA_DIR, 'backup_controller.db'))
+            print(f'[ServerRegistry] Ready — {_reg.stats()["total_servers"]} servers registered')
+        except Exception as _re:
+            print(f'[ServerRegistry] Init error: {_re}')
 
 # Template function for HTML extensions
 @app.context_processor
@@ -955,6 +972,26 @@ def manage_hosts():
             hosts[name] = host_data
             save_hosts(hosts)
             cache_invalidate('hosts')
+            # Sync to central registry so server appears in all modules
+            if _REGISTRY_AVAILABLE:
+                try:
+                    _reg = _registry.get_registry(DATA_DIR)
+                    sid = _reg.upsert_server(
+                        name=name, host=host,
+                        port=host_data.get('port', 22),
+                        user=host_data.get('user', 'root'),
+                        ssh_key=host_data.get('ssh_key', ''),
+                        description=host_data.get('description', ''),
+                        location=host_data.get('location', ''),
+                        environment=host_data.get('environment', 'Production'),
+                        criticality=host_data.get('criticality', 'Medium'),
+                        tags=host_data.get('tags', []),
+                        mac=host_data.get('mac', ''),
+                        notes=host_data.get('notes', ''),
+                    )
+                    _reg.register_module(sid, 'update_manager')
+                except Exception as _re:
+                    app.logger.warning(f'[ServerRegistry] Sync error: {_re}')
         return redirect("/hosts")
     return render_template(
         "hosts.html",
@@ -3870,3 +3907,113 @@ def api_backup_snapshots(server_id):
 def api_backup_history(server_id):
     hours = int(request.args.get("hours", 24))
     return jsonify(_bc.get_history(server_id, hours=hours))
+
+
+# ── Central Server Registry API ───────────────────────────────────────────────
+
+@app.route("/api/registry/servers")
+@login_required
+def api_registry_servers():
+    """Return all servers from the central registry."""
+    if not _REGISTRY_AVAILABLE:
+        return jsonify([])
+    module = request.args.get('module')
+    reg = _registry.get_registry(DATA_DIR)
+    servers = reg.list_servers(module=module)
+    return jsonify(servers)
+
+
+@app.route("/api/registry/servers/<int:server_id>")
+@login_required
+def api_registry_server(server_id):
+    """Return a single server from the central registry."""
+    if not _REGISTRY_AVAILABLE:
+        return jsonify({'error': 'Registry not available'}), 503
+    reg = _registry.get_registry(DATA_DIR)
+    srv = reg.get_server(id=server_id)
+    if not srv:
+        return jsonify({'error': 'Not found'}), 404
+    return jsonify(srv)
+
+
+@app.route("/api/registry/servers", methods=["POST"])
+@login_required
+def api_registry_add_server():
+    """Add or update a server in the central registry."""
+    if not _REGISTRY_AVAILABLE:
+        return jsonify({'error': 'Registry not available'}), 503
+    data = request.get_json(force=True)
+    if not data or not data.get('name') or not data.get('host'):
+        return jsonify({'error': 'name and host are required'}), 400
+    reg = _registry.get_registry(DATA_DIR)
+    sid = reg.upsert_server(**data)
+    # Also sync to hosts.json for backward compatibility
+    hosts = load_hosts()
+    hosts[data['name']] = {
+        'host': data.get('host', ''),
+        'user': data.get('user', 'root'),
+        'port': data.get('port', 22),
+        'ssh_key': data.get('ssh_key', ''),
+        'description': data.get('description', ''),
+        'location': data.get('location', ''),
+        'environment': data.get('environment', 'Production'),
+        'criticality': data.get('criticality', 'Medium'),
+        'tags': data.get('tags', []),
+        'mac': data.get('mac', ''),
+        'notes': data.get('notes', ''),
+    }
+    save_hosts(hosts)
+    return jsonify({'id': sid, 'ok': True})
+
+
+@app.route("/api/registry/servers/<int:server_id>", methods=["DELETE"])
+@login_required
+def api_registry_delete_server(server_id):
+    """Delete a server from the central registry."""
+    if not _REGISTRY_AVAILABLE:
+        return jsonify({'error': 'Registry not available'}), 503
+    reg = _registry.get_registry(DATA_DIR)
+    srv = reg.get_server(id=server_id)
+    if srv:
+        reg.delete_server(server_id)
+        # Also remove from hosts.json
+        hosts = load_hosts()
+        hosts.pop(srv['name'], None)
+        save_hosts(hosts)
+    return jsonify({'ok': True})
+
+
+@app.route("/api/registry/suggest")
+@login_required
+def api_registry_suggest():
+    """Suggest servers for a module — returns all known servers with module info."""
+    if not _REGISTRY_AVAILABLE:
+        return jsonify([])
+    module = request.args.get('module', '')
+    reg = _registry.get_registry(DATA_DIR)
+    all_servers = reg.list_servers()
+    module_servers = {s['id'] for s in reg.list_servers(module=module)} if module else set()
+    result = []
+    for srv in all_servers:
+        result.append({
+            'id': srv['id'],
+            'name': srv['name'],
+            'host': srv['host'],
+            'port': srv['port'],
+            'user': srv['user'],
+            'description': srv.get('description', ''),
+            'tags': srv.get('tags', []),
+            'online': srv.get('online', 0),
+            'already_configured': srv['id'] in module_servers,
+        })
+    return jsonify(result)
+
+
+@app.route("/api/registry/stats")
+@login_required
+def api_registry_stats():
+    """Return registry statistics."""
+    if not _REGISTRY_AVAILABLE:
+        return jsonify({'error': 'Registry not available'}), 503
+    reg = _registry.get_registry(DATA_DIR)
+    return jsonify(reg.stats())
