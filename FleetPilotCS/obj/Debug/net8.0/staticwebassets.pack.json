@@ -1,0 +1,25 @@
+{
+  "Files": [
+    {
+      "Id": "/home/ubuntu/FleetPilotCS/wwwroot/index.html",
+      "PackagePath": "staticwebassets/index.html"
+    },
+    {
+      "Id": "obj/Debug/net8.0/staticwebassets/msbuild.FleetPilot.Microsoft.AspNetCore.StaticWebAssets.props",
+      "PackagePath": "build\\Microsoft.AspNetCore.StaticWebAssets.props"
+    },
+    {
+      "Id": "obj/Debug/net8.0/staticwebassets/msbuild.build.FleetPilot.props",
+      "PackagePath": "build\\FleetPilot.props"
+    },
+    {
+      "Id": "obj/Debug/net8.0/staticwebassets/msbuild.buildMultiTargeting.FleetPilot.props",
+      "PackagePath": "buildMultiTargeting\\FleetPilot.props"
+    },
+    {
+      "Id": "obj/Debug/net8.0/staticwebassets/msbuild.buildTransitive.FleetPilot.props",
+      "PackagePath": "buildTransitive\\FleetPilot.props"
+    }
+  ],
+  "ElementsToRemove": []
+}

@@ -1,0 +1,39 @@
+{
+  "Version": 1,
+  "Hash": "YN0mmfP6payJGWkyuVZtdsl8ChANWhRFdS2okRPk6Fs=",
+  "Source": "FleetPilot",
+  "BasePath": "_content/FleetPilot",
+  "Mode": "Default",
+  "ManifestType": "Publish",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [
+    {
+      "Name": "FleetPilot/wwwroot",
+      "Source": "FleetPilot",
+      "ContentRoot": "/home/ubuntu/FleetPilotCS/wwwroot/",
+      "BasePath": "_content/FleetPilot",
+      "Pattern": "**"
+    }
+  ],
+  "Assets": [
+    {
+      "Identity": "/home/ubuntu/FleetPilotCS/wwwroot/index.html",
+      "SourceId": "FleetPilot",
+      "SourceType": "Discovered",
+      "ContentRoot": "/home/ubuntu/FleetPilotCS/wwwroot/",
+      "BasePath": "_content/FleetPilot",
+      "RelativePath": "index.html",
+      "AssetKind": "All",
+      "AssetMode": "All",
+      "AssetRole": "Primary",
+      "AssetMergeBehavior": "PreferTarget",
+      "AssetMergeSource": "",
+      "RelatedAsset": "",
+      "AssetTraitName": "",
+      "AssetTraitValue": "",
+      "CopyToOutputDirectory": "Never",
+      "CopyToPublishDirectory": "PreserveNewest",
+      "OriginalItemSpec": "wwwroot/index.html"
+    }
+  ]
+}
