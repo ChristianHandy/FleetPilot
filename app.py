@@ -21,6 +21,7 @@ import smart_manager
 import system_monitor
 import corsair_commander
 import backup_controller as _bc
+import hw_monitor as _hw
 # Load environment variables from .env file if python-dotenv is available
 try:
     from dotenv import load_dotenv
@@ -224,6 +225,13 @@ with app.app_context():
     corsair_commander.start_polling()
     _bc.init_db(DATA_DIR)
     _bc.start_all_polling()
+    # HW Monitor
+    try:
+        _hw.init_db(DATA_DIR)
+        _hw.register_routes(app, login_required, _csrf if '_csrf' in dir() else None)
+        _hw.start_polling()
+    except Exception as _hw_err:
+        print(f"[HW Monitor] Init error: {_hw_err}")
 
 # Template function for HTML extensions
 @app.context_processor

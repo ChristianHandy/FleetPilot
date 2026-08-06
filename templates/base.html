@@ -73,6 +73,9 @@
       <a class="sidebar-link {% if request.path.startswith('/backup') %}active{% endif %}" href="/backup">
         <span class="sidebar-icon">&#x1F6E1;</span> Backup Servers
       </a>
+      <a class="sidebar-link {% if request.path.startswith('/hw') %}active{% endif %}" href="/hw">
+        <span class="sidebar-icon">&#x1F9EA;</span> HW Monitor
+      </a>
 
       <span class="sidebar-section-label">{{ _('Settings') }}</span>
       {% if is_admin is defined and is_admin %}
