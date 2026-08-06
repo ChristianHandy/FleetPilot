@@ -21,7 +21,12 @@ def _get_db_path(data_dir):
     return os.path.join(data_dir, "hw_monitor.db")
 
 def get_db(data_dir=None):
-    path = data_dir or _DB_PATH or "/data/hw_monitor.db"
+    path = data_dir or _DB_PATH or "/opt/fleetpilot/data/hw_monitor.db"
+    # If path is a directory, append filename
+    import os as _os
+    if _os.path.isdir(path):
+        path = _os.path.join(path, "hw_monitor.db")
+    _os.makedirs(_os.path.dirname(path), exist_ok=True)
     conn = sqlite3.connect(path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn

@@ -225,10 +225,9 @@ with app.app_context():
     corsair_commander.start_polling()
     _bc.init_db(DATA_DIR)
     _bc.start_all_polling()
-    # HW Monitor
+    # HW Monitor — init_db and start_polling only; register_routes called after login_required is defined
     try:
         _hw.init_db(DATA_DIR)
-        _hw.register_routes(app, login_required, _csrf if '_csrf' in dir() else None)
         _hw.start_polling()
     except Exception as _hw_err:
         print(f"[HW Monitor] Init error: {_hw_err}")
@@ -404,6 +403,12 @@ def login_required(f):
             return f(*args, **kwargs)
         return redirect(url_for('login', next=request.path))
     return wrapped
+
+# ── HW Monitor route registration (after login_required is defined) ──────────────
+try:
+    _hw.register_routes(app, login_required, _csrf if '_csrf' in dir() else None)
+except Exception as _hw_reg_err:
+    print(f"[HW Monitor] Route registration error: {_hw_reg_err}")
 
 @app.route("/", methods=["GET", "POST"])
 def login():
