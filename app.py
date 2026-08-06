@@ -35,6 +35,12 @@ except Exception as _hwi_err:
     _HW_INFO_AVAILABLE = False
     print(f'[HwInfo] Module not available: {_hwi_err}')
 try:
+    import data_sync as _data_sync
+    _DATA_SYNC_AVAILABLE = True
+except Exception as _ds_err:
+    _DATA_SYNC_AVAILABLE = False
+    print(f'[DataSync] Module not available: {_ds_err}')
+try:
     import two_factor as _2fa
     _2FA_AVAILABLE = True
 except Exception as _2fa_err:
@@ -266,6 +272,14 @@ with app.app_context():
             print(f'[ServerRegistry] Ready — {_reg.stats()["total_servers"]} servers registered')
         except Exception as _re:
             print(f'[ServerRegistry] Init error: {_re}')
+    # Initialize Data Sync (peer URL from environment)
+    if _DATA_SYNC_AVAILABLE:
+        try:
+            _peer_url = os.environ.get('SYNC_PEER_URL', '')
+            _is_primary = os.environ.get('SYNC_ROLE', 'primary').lower() == 'primary'
+            _data_sync.init(app, DATA_DIR, peer_url=_peer_url, is_primary=_is_primary)
+        except Exception as _ds_e:
+            print(f'[DataSync] Init error: {_ds_e}')
 
 # Template function for HTML extensions
 @app.context_processor
