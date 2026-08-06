@@ -22,6 +22,12 @@ import system_monitor
 import corsair_commander
 import backup_controller as _bc
 import hw_monitor as _hw
+try:
+    import two_factor as _2fa
+    _2FA_AVAILABLE = True
+except Exception as _2fa_err:
+    _2FA_AVAILABLE = False
+    print(f'[2FA] Module not available: {_2fa_err}')
 # Load environment variables from .env file if python-dotenv is available
 try:
     from dotenv import load_dotenv
@@ -427,6 +433,12 @@ def login():
         user_id = user_management.verify_password(username, password)
         if user_id:
             _clear_login_attempts(ip)
+            # Check if user has 2FA enabled
+            if _2FA_AVAILABLE and _2fa.user_has_2fa(user_id):
+                session['_2fa_pending_user_id'] = user_id
+                session['_2fa_pending_username'] = username
+                session['_2fa_next'] = next_url
+                return redirect(url_for('tfa_verify'))
             session["user_id"] = user_id
             session["username"] = username
             session["login"] = True
@@ -444,6 +456,129 @@ def login():
         _record_failed_login(ip)
         flash('Invalid username or password')
     return render_template("login.html", next=next_url)
+
+# ── 2FA Routes ─────────────────────────────────────────────────────────────────
+
+@app.route('/2fa/verify', methods=['GET', 'POST'])
+def tfa_verify():
+    """2FA verification step after successful password login."""
+    if not _2FA_AVAILABLE:
+        return redirect(url_for('index'))
+    user_id = session.get('_2fa_pending_user_id')
+    username = session.get('_2fa_pending_username', '')
+    if not user_id:
+        return redirect(url_for('login'))
+    if request.method == 'POST':
+        code = request.form.get('code', '').strip()
+        next_url = session.get('_2fa_next', url_for('index'))
+        result = _2fa.verify_2fa(user_id, code)
+        if result['success']:
+            session.pop('_2fa_pending_user_id', None)
+            session.pop('_2fa_pending_username', None)
+            session.pop('_2fa_next', None)
+            session['user_id'] = user_id
+            session['username'] = username
+            session['login'] = True
+            flash(f'Logged in successfully (2FA: {result["method"]})')
+            return redirect(next_url)
+        flash('Invalid authentication code. Please try again.', 'error')
+    methods = _2fa.get_2fa_methods(user_id) if _2FA_AVAILABLE else {}
+    return render_template('2fa_verify.html', username=username,
+                           next=session.get('_2fa_next', '/index'), methods=methods)
+
+@app.route('/2fa', methods=['GET'])
+@login_required
+def tfa_setup():
+    """2FA setup page."""
+    if not _2FA_AVAILABLE:
+        flash('2FA module not available.', 'warning')
+        return redirect(url_for('index'))
+    user_id = session.get('user_id')
+    methods = _2fa.get_2fa_methods(user_id)
+    totp_status = _2fa.get_totp_status(user_id)
+    yubikeys = _2fa.get_yubikeys(user_id)
+    totp_secret = totp_status.get('secret') if not totp_status.get('enabled') else None
+    qr_code = None
+    if totp_secret:
+        try:
+            qr_code = _2fa.get_totp_qr_base64(totp_secret, session.get('username', 'user'))
+        except Exception:
+            pass
+    backup_codes_list = session.pop('_backup_codes_list', None)
+    return render_template('2fa_setup.html', methods=methods, totp_secret=totp_secret,
+                           qr_code=qr_code, yubikeys=yubikeys,
+                           backup_codes_list=backup_codes_list)
+
+@app.route('/2fa/totp/setup', methods=['POST'])
+@login_required
+def tfa_totp_setup():
+    user_id = session.get('user_id')
+    _2fa.setup_totp(user_id)
+    return redirect(url_for('tfa_setup'))
+
+@app.route('/2fa/totp/enable', methods=['POST'])
+@login_required
+def tfa_totp_enable():
+    user_id = session.get('user_id')
+    code = request.form.get('code', '')
+    if _2fa.enable_totp(user_id, code):
+        # Show backup codes once
+        codes = _2fa.regenerate_backup_codes(user_id)
+        session['_backup_codes_list'] = codes
+        flash('Authenticator app enabled successfully!', 'success')
+    else:
+        flash('Invalid code. Please try again.', 'error')
+    return redirect(url_for('tfa_setup'))
+
+@app.route('/2fa/totp/disable', methods=['POST'])
+@login_required
+def tfa_totp_disable():
+    user_id = session.get('user_id')
+    _2fa.disable_totp(user_id)
+    flash('Authenticator app disabled.', 'warning')
+    return redirect(url_for('tfa_setup'))
+
+@app.route('/2fa/yubikey/register', methods=['POST'])
+@login_required
+def tfa_yubikey_register():
+    user_id = session.get('user_id')
+    otp = request.form.get('otp', '').strip()
+    label = sanitize_input(request.form.get('label', 'YubiKey'), max_len=64)
+    client_id = os.environ.get('YUBICO_CLIENT_ID', '1')
+    secret_key = os.environ.get('YUBICO_SECRET_KEY', '')
+    result = _2fa.register_yubikey(user_id, otp, label, client_id, secret_key)
+    if result['success']:
+        flash(f'YubiKey registered successfully! (ID: {result["key_id"]})', 'success')
+    else:
+        flash(f'YubiKey registration failed: {result["error"]}', 'error')
+    return redirect(url_for('tfa_setup'))
+
+@app.route('/2fa/yubikey/<int:key_id>/delete', methods=['POST'])
+@login_required
+def tfa_yubikey_delete(key_id):
+    user_id = session.get('user_id')
+    if _2fa.delete_yubikey(user_id, key_id):
+        flash('YubiKey removed.', 'success')
+    else:
+        flash('YubiKey not found.', 'error')
+    return redirect(url_for('tfa_setup'))
+
+@app.route('/2fa/backup/regenerate', methods=['POST'])
+@login_required
+def tfa_backup_regenerate():
+    user_id = session.get('user_id')
+    codes = _2fa.regenerate_backup_codes(user_id)
+    session['_backup_codes_list'] = codes
+    flash('Backup codes regenerated. Save them now!', 'warning')
+    return redirect(url_for('tfa_setup'))
+
+@app.route('/api/2fa/status')
+@login_required
+def api_tfa_status():
+    user_id = session.get('user_id')
+    if not _2FA_AVAILABLE:
+        return jsonify({'available': False})
+    return jsonify({'available': True, 'methods': _2fa.get_2fa_methods(user_id)})
 
 @app.route("/logout")
 def logout():

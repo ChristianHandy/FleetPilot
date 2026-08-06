@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Two-Factor Authentication — FleetPilot{% endblock %}
+{% block content %}
+<div class="container" style="max-width:480px;margin:80px auto;">
+  <div class="card shadow-lg border-0" style="border-radius:16px;overflow:hidden;">
+    <div class="card-header text-center py-4" style="background:linear-gradient(135deg,#1a1a2e,#16213e);">
+      <div style="font-size:2.5rem;">🔐</div>
+      <h4 class="text-white mb-0 mt-2">Two-Factor Authentication</h4>
+      <small class="text-muted">Logged in as <strong class="text-info">{{ username }}</strong></small>
+    </div>
+    <div class="card-body p-4">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in messages %}
+          <div class="alert alert-{{ 'danger' if cat == 'error' else cat }} alert-dismissible fade show" role="alert">
+            {{ msg }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+          </div>
+        {% endfor %}
+      {% endwith %}
+
+      <p class="text-muted text-center mb-4">
+        Enter your authentication code to continue.
+      </p>
+
+      <form method="POST" action="/2fa/verify" id="tfa-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is callable else '' }}">
+        <input type="hidden" name="next" value="{{ next }}">
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Authentication Code</label>
+          <input type="text" name="code" id="tfa-code" class="form-control form-control-lg text-center"
+                 placeholder="000000 or YubiKey OTP or backup code"
+                 autocomplete="one-time-code" autofocus
+                 style="letter-spacing:4px;font-size:1.3rem;font-family:monospace;">
+          <div class="form-text text-muted mt-2">
+            Enter a 6-digit TOTP code, press your YubiKey, or enter a backup code (XXXX-XXXX).
+          </div>
+        </div>
+
+        <div class="d-grid gap-2">
+          <button type="submit" class="btn btn-primary btn-lg">
+            <i class="bi bi-shield-check"></i> Verify
+          </button>
+        </div>
+      </form>
+
+      <hr class="my-4">
+
+      <div class="text-center">
+        <small class="text-muted">
+          Lost access?
+          <a href="/2fa/backup" class="text-decoration-none">Use a backup code</a>
+          &nbsp;|&nbsp;
+          <a href="/logout" class="text-decoration-none text-danger">Cancel</a>
+        </small>
+      </div>
+
+      <!-- Method indicators -->
+      <div class="d-flex justify-content-center gap-3 mt-3">
+        {% if methods.totp %}
+        <span class="badge bg-success-subtle text-success border border-success">
+          <i class="bi bi-phone"></i> TOTP
+        </span>
+        {% endif %}
+        {% if methods.yubikeys > 0 %}
+        <span class="badge bg-warning-subtle text-warning border border-warning">
+          <i class="bi bi-usb-symbol"></i> YubiKey
+        </span>
+        {% endif %}
+        {% if methods.backup_codes > 0 %}
+        <span class="badge bg-secondary-subtle text-secondary border border-secondary">
+          <i class="bi bi-key"></i> Backup ({{ methods.backup_codes }} left)
+        </span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Auto-submit when YubiKey OTP is entered (44 chars modhex)
+document.getElementById('tfa-code').addEventListener('input', function() {
+  const val = this.value.trim();
+  if (/^[cbdefghijklnrtuv]{44}$/.test(val)) {
+    document.getElementById('tfa-form').submit();
+  }
+});
+</script>
+{% endblock %}
