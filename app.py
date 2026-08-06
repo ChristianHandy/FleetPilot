@@ -29,6 +29,12 @@ except Exception as _reg_err:
     _REGISTRY_AVAILABLE = False
     print(f'[ServerRegistry] Module not available: {_reg_err}')
 try:
+    import hw_info as _hw_info
+    _HW_INFO_AVAILABLE = True
+except Exception as _hwi_err:
+    _HW_INFO_AVAILABLE = False
+    print(f'[HwInfo] Module not available: {_hwi_err}')
+try:
     import two_factor as _2fa
     _2FA_AVAILABLE = True
 except Exception as _2fa_err:
@@ -243,6 +249,12 @@ with app.app_context():
         _hw.start_polling()
     except Exception as _hw_err:
         print(f"[HW Monitor] Init error: {_hw_err}")
+    # Initialize HW Info collector
+    if _HW_INFO_AVAILABLE:
+        try:
+            _hw_info.init(DATA_DIR)
+        except Exception as _hwi_e:
+            print(f'[HwInfo] Init error: {_hwi_e}')
     # Initialize central server registry and import from all existing DBs
     if _REGISTRY_AVAILABLE:
         try:
@@ -431,6 +443,13 @@ def login_required(f):
 # ── HW Monitor route registration (after login_required is defined) ──────────────
 try:
     _hw.register_routes(app, login_required, _csrf if '_csrf' in dir() else None)
+    # HW Info (Fastfetch-style hardware overview)
+    if _HW_INFO_AVAILABLE:
+        try:
+            app.config['DATA_DIR'] = DATA_DIR
+            _hw_info.register_routes(app, login_required)
+        except Exception as _hwi_re:
+            print(f'[HwInfo] Route registration error: {_hwi_re}')
 except Exception as _hw_reg_err:
     print(f"[HW Monitor] Route registration error: {_hw_reg_err}")
 
