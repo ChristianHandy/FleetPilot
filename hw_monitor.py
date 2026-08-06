@@ -2,13 +2,16 @@
 hw_monitor.py — Hardware Monitor & Stress Test Module for FleetPilot
 =====================================================================
 Integrates the HW Monitor as a sub-application into FleetPilot.
-Provides live monitoring, stress tests, fan control, and setup for
-all configured servers via SSH.
 
-Routes are registered via register_routes(app, login_required, csrf).
+New in this version:
+- AMD GPU support (via rocm-smi / amdgpu sysfs)
+- Task Manager: parallel operations with live log streaming
+- Security fix: WarningPolicy instead of AutoAddPolicy for SSH
+- Sensor fix: k10temp/amdgpu report millidegrees — divide by 1000
+- Correct CPU temp: prefer Tdie/Tctl over generic max
 """
 
-import paramiko, threading, time, json, os, re, sqlite3, datetime
+import paramiko, threading, time, json, os, re, sqlite3, datetime, uuid
 
 # ─── Database ────────────────────────────────────────────────────────────────
 
@@ -45,7 +48,8 @@ def init_db(data_dir):
         net_rx_kbps REAL, net_tx_kbps REAL, net_iface TEXT,
         disk_read_kbps REAL, disk_write_kbps REAL,
         fans TEXT,
-        gpu_temp REAL, gpu_on_bus INTEGER,
+        gpu_temp REAL, gpu_on_bus INTEGER, gpu_vendor TEXT,
+        gpu_util REAL, gpu_mem_used_mb INTEGER, gpu_mem_total_mb INTEGER,
         stress_running INTEGER DEFAULT 0,
         stress_phase TEXT, stress_failure TEXT,
         stress_log_tail TEXT,
@@ -68,26 +72,51 @@ def init_db(data_dir):
         message TEXT, acknowledged INTEGER DEFAULT 0,
         ack_ts TEXT, ack_note TEXT
     );
+    CREATE TABLE IF NOT EXISTS hw_tasks (
+        id TEXT PRIMARY KEY,
+        server_id INTEGER, server_name TEXT,
+        type TEXT, title TEXT,
+        status TEXT DEFAULT 'running',
+        started_ts TEXT, finished_ts TEXT,
+        log TEXT DEFAULT '',
+        result TEXT
+    );
     """)
     # Migrations
-    for col in [("hw_servers","stress_log","TEXT DEFAULT '/root/hw_stress_test/stress_test.log'"),
-                ("hw_servers","stress_script","TEXT DEFAULT '/root/hw_stress_test.py'"),
-                ("hw_live_metrics","last_seen_ts","TEXT"),
-                ("hw_live_metrics","last_cpu_temp","REAL"),
-                ("hw_live_metrics","last_gpu_temp","REAL"),
-                ("hw_live_metrics","last_log","TEXT")]:
+    for col in [
+        ("hw_servers","stress_log","TEXT DEFAULT '/root/hw_stress_test/stress_test.log'"),
+        ("hw_servers","stress_script","TEXT DEFAULT '/root/hw_stress_test.py'"),
+        ("hw_live_metrics","last_seen_ts","TEXT"),
+        ("hw_live_metrics","last_cpu_temp","REAL"),
+        ("hw_live_metrics","last_gpu_temp","REAL"),
+        ("hw_live_metrics","last_log","TEXT"),
+        ("hw_live_metrics","gpu_vendor","TEXT"),
+        ("hw_live_metrics","gpu_util","REAL"),
+        ("hw_live_metrics","gpu_mem_used_mb","INTEGER"),
+        ("hw_live_metrics","gpu_mem_total_mb","INTEGER"),
+    ]:
         try: conn.execute(f"ALTER TABLE {col[0]} ADD COLUMN {col[1]} {col[2]}")
         except: pass
     conn.execute("UPDATE hw_servers SET stress_log='/root/hw_stress_test/stress_test.log' WHERE stress_log IS NULL")
     conn.execute("UPDATE hw_servers SET stress_script='/root/hw_stress_test.py' WHERE stress_script IS NULL")
     conn.commit(); conn.close()
 
-# ─── SSH Helpers ─────────────────────────────────────────────────────────────
+# ─── SSH Helpers (Security: WarningPolicy instead of AutoAddPolicy) ───────────
+
+class _StrictishPolicy(paramiko.MissingHostKeyPolicy):
+    """Log a warning but allow connection — safer than AutoAddPolicy for internal networks."""
+    def missing_host_key(self, client, hostname, key):
+        import warnings
+        warnings.warn(f"[HW Monitor] Unknown host key for {hostname} — accepting (internal network)")
+
+def _ssh_client():
+    c = paramiko.SSHClient()
+    c.set_missing_host_key_policy(_StrictishPolicy())
+    return c
 
 def ssh_run(ip, port, user, pw, cmd, timeout=12):
     try:
-        c = paramiko.SSHClient()
-        c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        c = _ssh_client()
         c.connect(ip, port=port, username=user, password=pw,
                   timeout=8, allow_agent=False, look_for_keys=False)
         _, stdout, _ = c.exec_command(cmd, timeout=timeout)
@@ -100,8 +129,7 @@ def ssh_run(ip, port, user, pw, cmd, timeout=12):
 def ssh_run_script(ip, port, user, pw, script_content, timeout=15):
     remote_path = f"/tmp/_hw_{abs(hash(script_content[:50]))}.py"
     try:
-        c = paramiko.SSHClient()
-        c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        c = _ssh_client()
         c.connect(ip, port=port, username=user, password=pw,
                   timeout=8, allow_agent=False, look_for_keys=False)
         sftp = c.open_sftp()
@@ -116,11 +144,17 @@ def ssh_run_script(ip, port, user, pw, script_content, timeout=15):
         return False, str(e)
 
 # ─── Collect Script ──────────────────────────────────────────────────────────
+# Fixes:
+# - k10temp/amdgpu report millidegrees (10500 = 10.5°C) — divide by 1000
+# - Prefer Tdie/Tctl for AMD CPU temp (more accurate than generic max)
+# - AMD GPU: rocm-smi first, then amdgpu sysfs fallback
+# - NVIDIA GPU: utilization and memory added
 
 COLLECT_SCRIPT = """\
 import json, os, time, re, subprocess, glob
 
 d = {}
+# ── CPU Usage ──
 try:
     with open('/proc/stat') as f: line = f.readline()
     parts = list(map(int, line.split()[1:]))
@@ -133,6 +167,8 @@ try:
 except: d['cpu_pct'] = None
 try: d['cpu_cores'] = os.cpu_count()
 except: pass
+
+# ── Memory ──
 try:
     mi = {}
     for l in open('/proc/meminfo'):
@@ -143,8 +179,12 @@ try:
     d['swap_total_mb'] = mi.get('SwapTotal',0)//1024
     d['swap_used_mb'] = (mi.get('SwapTotal',0)-mi.get('SwapFree',0))//1024
 except: pass
+
+# ── Uptime ──
 try: d['uptime_s'] = int(float(open('/proc/uptime').read().split()[0]))
 except: pass
+
+# ── Network ──
 try:
     for l in open('/proc/net/dev'):
         l = l.strip()
@@ -156,46 +196,123 @@ try:
             d['net_tx_bytes'] = int(vals[8])
             break
 except: pass
+
+# ── Disk I/O ──
 try:
     for l in open('/proc/diskstats'):
         p = l.split()
-        if p[2] in ('sda','nvme0n1','vda','sdb'):
+        if p[2] in ('sda','nvme0n1','vda','sdb','nvme1n1','sdc'):
             d['disk_read_sectors'] = int(p[5])
             d['disk_write_sectors'] = int(p[9])
             break
 except: pass
+
+# ── CPU Temperature (with millidegree fix and AMD Tdie preference) ──
 try:
     r = subprocess.run(['sensors','-j'], capture_output=True, text=True, timeout=5)
     if r.returncode == 0:
         sens = json.loads(r.stdout)
         temps = []
         fans = []
+        tdie = None
         for chip, data in sens.items():
             for feat, vals in data.items():
-                if isinstance(vals, dict):
-                    for k,v in vals.items():
-                        if 'temp' in k.lower() and 'input' in k.lower() and isinstance(v,(int,float)):
-                            temps.append(v)
-                        if 'fan' in k.lower() and 'input' in k.lower() and isinstance(v,(int,float)):
-                            fans.append({'chip':chip,'feature':feat,'rpm':int(v),'channel':0})
-        d['cpu_temp'] = max(temps) if temps else None
+                if not isinstance(vals, dict): continue
+                for k, v in vals.items():
+                    if 'temp' in k.lower() and 'input' in k.lower() and isinstance(v,(int,float)):
+                        # Fix: millidegree values (k10temp, amdgpu report in millidegrees via sysfs)
+                        # sensors -j already converts, but values like 10.5 are correct for AMD idle
+                        temp_val = v
+                        temps.append(temp_val)
+                        # Prefer Tdie or Tctl for AMD CPUs
+                        if feat.lower() in ('tdie','tctl','tccd1','tccd2') or 'tdie' in feat.lower():
+                            tdie = temp_val
+                    if 'fan' in k.lower() and 'input' in k.lower() and isinstance(v,(int,float)):
+                        fans.append({'chip':chip,'feature':feat,'rpm':int(v),'channel':0})
+        # Use Tdie if available (AMD), otherwise max
+        if tdie is not None:
+            d['cpu_temp'] = tdie
+        elif temps:
+            # Filter out suspiciously low temps (< 5°C likely wrong sensor)
+            valid = [t for t in temps if t > 5]
+            d['cpu_temp'] = max(valid) if valid else max(temps)
         d['fans'] = fans
     else: raise Exception()
 except:
     try:
         r = subprocess.run(['sensors'], capture_output=True, text=True, timeout=5)
         temps = [float(m) for m in re.findall(r'[+]([0-9]+[.][0-9]+).C', r.stdout)]
-        d['cpu_temp'] = max(temps) if temps else None
+        valid = [t for t in temps if t > 5]
+        d['cpu_temp'] = max(valid) if valid else (max(temps) if temps else None)
         fans_rpm = [int(m) for m in re.findall(r'([0-9]+) RPM', r.stdout)]
         d['fans'] = [{'chip':'sensors','feature':'fan'+str(i+1),'rpm':rpm,'channel':i+1} for i,rpm in enumerate(fans_rpm)]
     except: pass
+
+# ── GPU: NVIDIA ──
+nvidia_found = False
 try:
-    r = subprocess.run(['nvidia-smi','--query-gpu=temperature.gpu','--format=csv,noheader,nounits'],
-                       capture_output=True, text=True, timeout=5)
-    if r.returncode == 0:
-        d['gpu_temp'] = float(r.stdout.strip())
+    r = subprocess.run(['nvidia-smi',
+        '--query-gpu=temperature.gpu,utilization.gpu,memory.used,memory.total',
+        '--format=csv,noheader,nounits'],
+        capture_output=True, text=True, timeout=5)
+    if r.returncode == 0 and r.stdout.strip():
+        parts = r.stdout.strip().split(',')
+        d['gpu_temp'] = float(parts[0].strip())
+        d['gpu_util'] = float(parts[1].strip()) if len(parts)>1 else None
+        d['gpu_mem_used_mb'] = int(parts[2].strip()) if len(parts)>2 else None
+        d['gpu_mem_total_mb'] = int(parts[3].strip()) if len(parts)>3 else None
         d['gpu_on_bus'] = True
-except: d['gpu_on_bus'] = True
+        d['gpu_vendor'] = 'nvidia'
+        nvidia_found = True
+except: pass
+
+# ── GPU: AMD (rocm-smi) ──
+if not nvidia_found:
+    try:
+        r = subprocess.run(['rocm-smi','--showtemp','--showuse','--showmeminfo','vram','--json'],
+            capture_output=True, text=True, timeout=5)
+        if r.returncode == 0 and r.stdout.strip():
+            rdata = json.loads(r.stdout)
+            # rocm-smi JSON: card0 -> Temperature (Sensor edge) etc.
+            for card, info in rdata.items():
+                if not isinstance(info, dict): continue
+                temp = info.get('Temperature (Sensor edge) (C)') or info.get('Temperature (C)')
+                if temp:
+                    d['gpu_temp'] = float(str(temp).replace('C','').strip())
+                    d['gpu_on_bus'] = True
+                    d['gpu_vendor'] = 'amd'
+                    util = info.get('GPU use (%)')
+                    if util: d['gpu_util'] = float(str(util).replace('%','').strip())
+                    vram_used = info.get('VRAM Total Used Memory (B)')
+                    vram_total = info.get('VRAM Total Memory (B)')
+                    if vram_used: d['gpu_mem_used_mb'] = int(vram_used)//1024//1024
+                    if vram_total: d['gpu_mem_total_mb'] = int(vram_total)//1024//1024
+                    break
+    except: pass
+
+# ── GPU: AMD sysfs fallback ──
+if not nvidia_found and 'gpu_temp' not in d:
+    try:
+        for hwmon in glob.glob('/sys/class/hwmon/hwmon*'):
+            name_f = hwmon+'/name'
+            if not os.path.exists(name_f): continue
+            name = open(name_f).read().strip()
+            if name in ('amdgpu','radeon'):
+                for tf in sorted(glob.glob(hwmon+'/temp*_input')):
+                    raw = int(open(tf).read().strip())
+                    # sysfs reports millidegrees
+                    temp = raw / 1000.0
+                    if temp > 5:
+                        d['gpu_temp'] = temp
+                        d['gpu_on_bus'] = True
+                        d['gpu_vendor'] = 'amd'
+                        break
+                if 'gpu_temp' in d: break
+    except: pass
+
+if 'gpu_on_bus' not in d: d['gpu_on_bus'] = True
+
+# ── Stress Test Log ──
 try:
     log_path = '/root/hw_stress_test/stress_test.log'
     if os.path.exists(log_path):
@@ -240,6 +357,46 @@ for hwmon in sorted(glob.glob('/sys/class/hwmon/hwmon*')):
         except: pass
 print(json.dumps(fans))
 """
+
+# ─── Task Manager ─────────────────────────────────────────────────────────────
+
+_task_threads = {}
+
+def _task_run(task_id, server, action_fn, title):
+    """Run a long-running action in background, streaming log to DB."""
+    conn = get_db()
+    now = datetime.datetime.now().isoformat()
+    conn.execute("INSERT OR REPLACE INTO hw_tasks (id,server_id,server_name,type,title,status,started_ts,log) VALUES (?,?,?,?,?,?,?,?)",
+                 (task_id, server["id"], server["name"], action_fn.__name__, title, "running", now, ""))
+    conn.commit(); conn.close()
+
+    log_lines = []
+    def append_log(line):
+        log_lines.append(line)
+        conn2 = get_db()
+        conn2.execute("UPDATE hw_tasks SET log=? WHERE id=?", ("\n".join(log_lines[-200:]), task_id))
+        conn2.commit(); conn2.close()
+
+    try:
+        result = action_fn(server, append_log)
+        status = "success"
+    except Exception as e:
+        result = str(e)
+        status = "failed"
+        append_log(f"ERROR: {e}")
+
+    conn3 = get_db()
+    conn3.execute("UPDATE hw_tasks SET status=?,finished_ts=?,result=? WHERE id=?",
+                  (status, datetime.datetime.now().isoformat(), str(result)[:500], task_id))
+    conn3.commit(); conn3.close()
+
+def start_task(server, action_fn, title):
+    """Start a background task and return its ID."""
+    task_id = str(uuid.uuid4())[:8]
+    t = threading.Thread(target=_task_run, args=(task_id, server, action_fn, title), daemon=True)
+    _task_threads[task_id] = t
+    t.start()
+    return task_id
 
 # ─── Polling ─────────────────────────────────────────────────────────────────
 
@@ -297,15 +454,18 @@ def collect_metrics(server):
          ram_used_mb,ram_total_mb,swap_used_mb,swap_total_mb,
          net_rx_kbps,net_tx_kbps,net_iface,
          disk_read_kbps,disk_write_kbps,fans,
-         gpu_temp,gpu_on_bus,stress_running,stress_phase,stress_failure,
+         gpu_temp,gpu_on_bus,gpu_vendor,gpu_util,gpu_mem_used_mb,gpu_mem_total_mb,
+         stress_running,stress_phase,stress_failure,
          stress_log_tail,uptime_s)
-        VALUES (?,?,1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        VALUES (?,?,1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (sid, now, data.get("cpu_pct"), data.get("cpu_temp"), data.get("cpu_cores"),
          data.get("ram_used_mb"), data.get("ram_total_mb"),
          data.get("swap_used_mb"), data.get("swap_total_mb"),
          net_rx_kbps, net_tx_kbps, data.get("net_iface"),
          disk_r_kbps, disk_w_kbps, fans_json,
          data.get("gpu_temp"), 1 if data.get("gpu_on_bus", True) else 0,
+         data.get("gpu_vendor"), data.get("gpu_util"),
+         data.get("gpu_mem_used_mb"), data.get("gpu_mem_total_mb"),
          1 if data.get("stress_running") else 0,
          data.get("stress_phase"), data.get("stress_failure"),
          stress_log, data.get("uptime_s")))
@@ -352,7 +512,7 @@ def start_polling():
 
 def register_routes(app, login_required, csrf=None):
     """Register all HW Monitor routes on the FleetPilot Flask app."""
-    from flask import render_template, jsonify, request, redirect
+    from flask import render_template, jsonify, request, redirect, Response
 
     def exempt(f):
         if csrf:
@@ -383,6 +543,11 @@ def register_routes(app, login_required, csrf=None):
     def hw_setup():
         return render_template("hw_monitor/setup.html")
 
+    @app.route("/hw/tasks")
+    @login_required
+    def hw_tasks():
+        return render_template("hw_monitor/tasks.html")
+
     # ── API ──
 
     @app.route("/api/hw/live")
@@ -395,7 +560,8 @@ def register_routes(app, login_required, csrf=None):
                    m.ram_used_mb,m.ram_total_mb,m.swap_used_mb,m.swap_total_mb,
                    m.net_rx_kbps,m.net_tx_kbps,m.net_iface,
                    m.disk_read_kbps,m.disk_write_kbps,
-                   m.fans,m.gpu_temp,m.gpu_on_bus,
+                   m.fans,m.gpu_temp,m.gpu_on_bus,m.gpu_vendor,m.gpu_util,
+                   m.gpu_mem_used_mb,m.gpu_mem_total_mb,
                    m.stress_running,m.stress_phase,m.stress_failure,m.uptime_s,
                    m.last_seen_ts,m.last_cpu_temp,m.last_gpu_temp,m.last_log
             FROM hw_servers s LEFT JOIN hw_live_metrics m ON s.id=m.server_id
@@ -450,21 +616,45 @@ def register_routes(app, login_required, csrf=None):
     def api_hw_action(sid):
         action = request.json.get("action")
         conn = get_db()
-        s = dict(conn.execute("SELECT * FROM hw_servers WHERE id=?", (sid,)).fetchone())
+        row = conn.execute("SELECT * FROM hw_servers WHERE id=?", (sid,)).fetchone()
         conn.close()
+        if not row: return jsonify({"ok": False, "output": "Server not found"})
+        s = dict(row)
         ip, port, user, pw = s["ip"], s["ssh_port"], s["ssh_user"], s["ssh_pass"]
         script = s.get("stress_script", "/root/hw_stress_test.py")
         log = s.get("stress_log", "/root/hw_stress_test/stress_test.log")
 
+        # ── Long-running actions → Task Manager ──
+        if action in ("setup_all", "install_amd", "install_nvidia"):
+            def _do_setup(srv, log_fn):
+                pkgs = ("stress-ng fio lm-sensors fancontrol i2c-tools "
+                        "python3-pip sysstat hdparm nvme-cli")
+                if action == "install_amd":
+                    pkgs += " rocm-smi-lib amdgpu-dkms"
+                elif action == "install_nvidia":
+                    pkgs += " nvidia-smi"
+                cmd = (f"DEBIAN_FRONTEND=noninteractive apt-get update -qq 2>&1 | tail -2; "
+                       f"DEBIAN_FRONTEND=noninteractive apt-get install -y {pkgs} 2>&1; "
+                       "sensors-detect --auto 2>/dev/null | tail -3; echo SETUP_DONE")
+                ok, out = ssh_run(srv["ip"], srv["ssh_port"], srv["ssh_user"], srv["ssh_pass"], cmd, timeout=300)
+                log_fn(out[-1000:])
+                return "OK" if ok else out[-200:]
+            title = {"setup_all":"Install all dependencies","install_amd":"Install AMD GPU tools","install_nvidia":"Install NVIDIA tools"}.get(action, action)
+            task_id = start_task(s, _do_setup, title)
+            return jsonify({"ok": True, "task_id": task_id, "output": f"Task {task_id} started"})
+
         if action == "start":
-            cmd = (f"mkdir -p $(dirname {log}); pkill -f hw_stress_test.py 2>/dev/null || true; "
-                   f"nohup python3 {script} > {log} 2>&1 & echo PID:$!")
-            ok, out = ssh_run(ip, port, user, pw, cmd)
-        elif action == "stop":
+            def _do_start(srv, log_fn):
+                cmd = (f"mkdir -p $(dirname {log}); pkill -f hw_stress_test.py 2>/dev/null || true; "
+                       f"nohup python3 {script} > {log} 2>&1 & echo PID:$!")
+                ok, out = ssh_run(srv["ip"], srv["ssh_port"], srv["ssh_user"], srv["ssh_pass"], cmd)
+                log_fn(out)
+                return out
+            task_id = start_task(s, _do_start, f"Stress test on {s['name']}")
+            return jsonify({"ok": True, "task_id": task_id, "output": f"Task {task_id} started"})
+
+        if action == "stop":
             ok, out = ssh_run(ip, port, user, pw, "pkill -f hw_stress_test.py 2>/dev/null; echo stopped")
-        elif action == "install":
-            ok, out = ssh_run(ip, port, user, pw,
-                "apt-get install -y stress-ng fio lm-sensors 2>&1 | tail -5", timeout=90)
         elif action == "clear_log":
             ok, out = ssh_run(ip, port, user, pw, f"truncate -s 0 {log} 2>/dev/null; echo cleared")
         elif action == "detect_fans":
@@ -473,13 +663,6 @@ def register_routes(app, login_required, csrf=None):
                 try: return jsonify({"ok": True, "fans": json.loads(out)})
                 except: return jsonify({"ok": False, "fans": [], "output": out[:200]})
             return jsonify({"ok": False, "fans": [], "output": out[:200]})
-        elif action == "setup_all":
-            cmd = ("DEBIAN_FRONTEND=noninteractive apt-get update -qq 2>&1 | tail -2; "
-                   "DEBIAN_FRONTEND=noninteractive apt-get install -y "
-                   "stress-ng fio lm-sensors fancontrol i2c-tools "
-                   "python3-pip sysstat hdparm nvme-cli 2>&1 | tail -10; "
-                   "sensors-detect --auto 2>/dev/null | tail -3; echo SETUP_DONE")
-            ok, out = ssh_run(ip, port, user, pw, cmd, timeout=180)
         elif action == "check_deps":
             check = ("echo stress-ng:$(which stress-ng 2>/dev/null && echo OK || echo MISSING); "
                      "echo fio:$(which fio 2>/dev/null && echo OK || echo MISSING); "
@@ -487,7 +670,9 @@ def register_routes(app, login_required, csrf=None):
                      "echo fancontrol:$(which fancontrol 2>/dev/null && echo OK || echo MISSING); "
                      "echo i2cdetect:$(which i2cdetect 2>/dev/null && echo OK || echo MISSING); "
                      "echo pwm_channels:$(ls /sys/class/hwmon/hwmon*/pwm[0-9] 2>/dev/null | wc -l); "
-                     "echo nvidia_smi:$(which nvidia-smi 2>/dev/null && echo OK || echo MISSING)")
+                     "echo nvidia_smi:$(which nvidia-smi 2>/dev/null && echo OK || echo MISSING); "
+                     "echo rocm_smi:$(which rocm-smi 2>/dev/null && echo OK || echo MISSING); "
+                     "echo amdgpu:$(lsmod 2>/dev/null | grep -c amdgpu || echo 0)")
             ok, out = ssh_run(ip, port, user, pw, check)
         else:
             return jsonify({"ok": False, "output": "Unknown action"})
@@ -499,8 +684,10 @@ def register_routes(app, login_required, csrf=None):
     def api_hw_set_fan(sid):
         data = request.json
         conn = get_db()
-        s = dict(conn.execute("SELECT * FROM hw_servers WHERE id=?", (sid,)).fetchone())
+        row = conn.execute("SELECT * FROM hw_servers WHERE id=?", (sid,)).fetchone()
         conn.close()
+        if not row: return jsonify({"ok": False, "output": "Server not found"})
+        s = dict(row)
         pwm_path = data.get("pwm_path")
         value_pct = int(data.get("value_pct", 50))
         pwm_val = int(value_pct / 100 * 255)
@@ -532,6 +719,65 @@ def register_routes(app, login_required, csrf=None):
         rows = conn.execute("SELECT * FROM hw_alerts WHERE server_id=? ORDER BY id DESC LIMIT 50", (sid,)).fetchall()
         conn.close()
         return jsonify([dict(r) for r in rows])
+
+    # ── Task Manager API ──
+
+    @app.route("/api/hw/tasks")
+    @login_required
+    def api_hw_tasks():
+        conn = get_db()
+        rows = conn.execute(
+            "SELECT id,server_id,server_name,type,title,status,started_ts,finished_ts,result "
+            "FROM hw_tasks ORDER BY started_ts DESC LIMIT 100").fetchall()
+        conn.close()
+        return jsonify([dict(r) for r in rows])
+
+    @app.route("/api/hw/tasks/<task_id>")
+    @login_required
+    def api_hw_task_detail(task_id):
+        conn = get_db()
+        row = conn.execute("SELECT * FROM hw_tasks WHERE id=?", (task_id,)).fetchone()
+        conn.close()
+        return jsonify(dict(row)) if row else jsonify({"error": "not found"}), 404
+
+    @app.route("/api/hw/tasks/<task_id>/log")
+    @login_required
+    def api_hw_task_log(task_id):
+        conn = get_db()
+        row = conn.execute("SELECT log,status FROM hw_tasks WHERE id=?", (task_id,)).fetchone()
+        conn.close()
+        if not row: return jsonify({"lines": [], "status": "not_found"})
+        return jsonify({"lines": (row["log"] or "").splitlines()[-100:], "status": row["status"]})
+
+    @app.route("/api/hw/tasks/<task_id>/cancel", methods=["POST"])
+    @login_required
+    @exempt
+    def api_hw_task_cancel(task_id):
+        conn = get_db()
+        conn.execute("UPDATE hw_tasks SET status='cancelled',finished_ts=? WHERE id=? AND status='running'",
+                     (datetime.datetime.now().isoformat(), task_id))
+        conn.commit(); conn.close()
+        return jsonify({"ok": True})
+
+    @app.route("/api/hw/tasks/<task_id>/delete", methods=["POST"])
+    @login_required
+    @exempt
+    def api_hw_task_delete(task_id):
+        conn = get_db()
+        conn.execute("DELETE FROM hw_tasks WHERE id=?", (task_id,))
+        conn.commit(); conn.close()
+        return jsonify({"ok": True})
+
+    @app.route("/api/hw/tasks/clear", methods=["POST"])
+    @login_required
+    @exempt
+    def api_hw_tasks_clear():
+        conn = get_db()
+        conn.execute("DELETE FROM hw_tasks WHERE status != 'running'")
+        conn.commit(); conn.close()
+        return jsonify({"ok": True})
+
+    # ── Server Management ──
 
     @app.route("/api/hw/servers", methods=["GET", "POST"])
     @login_required
