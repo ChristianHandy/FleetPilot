@@ -73,8 +73,11 @@
       <a class="sidebar-link {% if request.path.startswith('/backup') %}active{% endif %}" href="/backup">
         <span class="sidebar-icon">&#x1F6E1;</span> Backup Servers
       </a>
-      <a class="sidebar-link {% if request.path.startswith('/hw') %}active{% endif %}" href="/hw">
+      <a class="sidebar-link {% if request.path.startswith('/hw') and not request.path.startswith('/hw_overview') %}active{% endif %}" href="/hw">
         <span class="sidebar-icon">&#x1F9EA;</span> HW Monitor
+      </a>
+      <a class="sidebar-link {% if request.path.startswith('/hw_overview') %}active{% endif %}" href="/hw_overview">
+        <span class="sidebar-icon">&#x1F5A5;&#xFE0F;</span> Hardware Overview
       </a>
 
       <span class="sidebar-section-label">{{ _('Settings') }}</span>
