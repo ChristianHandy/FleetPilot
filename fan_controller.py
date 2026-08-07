@@ -93,6 +93,16 @@ CONTROLLER_TYPES = {
         "check_cmd": "liquidctl --version 2>&1 | head -1",
         "detect_cmd": "liquidctl list --json 2>/dev/null || liquidctl list 2>&1 | head -20",
     },
+    "arctic_usb": {
+        "label": "Arctic Fan Controller (ACFAN00351A)",
+        "description": "Arctic ACFAN00351A USB 10-channel fan controller. Uses the arctic_fan_controller kernel driver (Linux 7.2+) or direct USB HID via python-hid as fallback. VID:PID 0x3904:0xF001.",
+        "icon": "❄",
+        "packages_apt": ["libhidapi-hidraw0", "libhidapi-libusb0", "python3-hid"],
+        "packages_pip": ["hid"],
+        "check_cmd": "python3 -c 'import hid; devs=[d for d in hid.enumerate() if d[\"vendor_id\"]==0x3904 and d[\"product_id\"]==0xF001]; print(f\"Arctic Fan Controller: {len(devs)} device(s) found\")' 2>&1 || lsusb | grep 3904",
+        "detect_cmd": "lsusb | grep -i '3904:f001' 2>/dev/null; ls /sys/class/hwmon/*/name 2>/dev/null | xargs grep -l arctic 2>/dev/null | head -3",
+        "install_note": "Requires USB access. On Proxmox/Linux: run as root or add udev rule: SUBSYSTEM==\"usb\", ATTR{idVendor}==\"3904\", ATTR{idProduct}==\"f001\", MODE=\"0666\"",
+    },
     "pwm_sysfs": {
         "label": "PWM sysfs (Direct kernel control)",
         "description": "Direct control of PWM fan outputs via Linux kernel sysfs (/sys/class/hwmon/hwmonX/pwmY). No extra tool needed.",
@@ -418,11 +428,12 @@ def fetch_status(dev: Dict) -> Dict:
     """Dispatch to the correct fetch function based on controller_type."""
     ctype = dev.get("controller_type", "lm_sensors")
     fetchers = {
-        "lm_sensors": _fetch_lm_sensors,
-        "ipmi":       _fetch_ipmi,
-        "nbfc":       _fetch_nbfc,
-        "liquidctl":  _fetch_liquidctl,
-        "pwm_sysfs":  _fetch_pwm_sysfs,
+        "lm_sensors":  _fetch_lm_sensors,
+        "ipmi":        _fetch_ipmi,
+        "nbfc":        _fetch_nbfc,
+        "liquidctl":   _fetch_liquidctl,
+        "pwm_sysfs":   _fetch_pwm_sysfs,
+        "arctic_usb":  _fetch_arctic_usb,
     }
     fn = fetchers.get(ctype, _fetch_lm_sensors)
     return fn(dev)
@@ -836,6 +847,270 @@ done
     return result
 
 
+# ── Arctic USB Fan Controller ─────────────────────────────────────────────────
+# Arctic ACFAN00351A — USB HID, VID 0x3904, PID 0xF001
+# Protocol (from kernel driver docs):
+#   IN  report: bytes 11-30 = 10 x uint16 LE = RPM values (~1 Hz)
+#   OUT report: 10 channel PWM values (0-100%), device ACKs with Report ID 0x02
+# Kernel driver: arctic_fan_controller (Linux 7.2+)
+# Fallback: python-hid direct USB HID access
+
+_ARCTIC_VID = 0x3904
+_ARCTIC_PID = 0xF001
+_ARCTIC_CHANNELS = 10
+
+# Python script run on remote host to read Arctic Fan Controller
+_ARCTIC_READ_SCRIPT = '''
+import sys, struct, time
+
+# Try kernel sysfs first (Linux 7.2+ with arctic_fan_controller module)
+import os, glob
+arctic_hwmon = None
+for h in glob.glob("/sys/class/hwmon/hwmon*"):
+    try:
+        name = open(f"{h}/name").read().strip()
+        if "arctic" in name.lower():
+            arctic_hwmon = h
+            break
+    except Exception:
+        pass
+
+if arctic_hwmon:
+    # Use sysfs interface
+    fans = []
+    pwms = []
+    for i in range(1, 11):
+        try:
+            rpm = int(open(f"{arctic_hwmon}/fan{i}_input").read().strip())
+            fans.append(rpm)
+        except Exception:
+            fans.append(0)
+        try:
+            pwm = int(open(f"{arctic_hwmon}/pwm{i}").read().strip())
+            pwms.append(pwm)
+        except Exception:
+            pwms.append(0)
+    print("METHOD:sysfs")
+    print("HWMON:" + arctic_hwmon)
+    for i, (rpm, pwm) in enumerate(zip(fans, pwms), 1):
+        pct = round(pwm / 255 * 100)
+        print(f"CH{i}:{rpm}:{pwm}:{pct}")
+else:
+    # Fallback: direct USB HID
+    try:
+        import hid
+    except ImportError:
+        print("ERROR:python-hid not installed. Run: pip3 install hid")
+        sys.exit(1)
+    devs = [d for d in hid.enumerate() if d["vendor_id"]==0x3904 and d["product_id"]==0xF001]
+    if not devs:
+        print("ERROR:Arctic Fan Controller not found (VID:3904 PID:F001). Check USB connection.")
+        sys.exit(1)
+    h = hid.device()
+    h.open(0x3904, 0xF001)
+    h.set_nonblocking(0)
+    print("METHOD:hid")
+    print("DEVICE:" + (devs[0].get("product_string", "Arctic Fan Controller")))
+    # Read one IN report (64 bytes), retry up to 5 times
+    data = None
+    for _ in range(5):
+        try:
+            d = h.read(64, timeout_ms=2000)
+            if d and len(d) >= 30:
+                data = d
+                break
+        except Exception:
+            pass
+        time.sleep(0.5)
+    h.close()
+    if data:
+        # bytes 11-30: 10 x uint16 LE = RPM values
+        rpms = struct.unpack_from("<10H", bytes(data), 11)
+        for i, rpm in enumerate(rpms, 1):
+            print(f"CH{i}:{rpm}:0:0")
+    else:
+        print("ERROR:Could not read data from device")
+        sys.exit(1)
+'''
+
+_ARCTIC_SET_SCRIPT = '''
+import sys, struct, time, os, glob
+
+channel = int(sys.argv[1])  # 1-10, or 0 for all
+speed_pct = int(sys.argv[2])  # 0-100
+
+# Try kernel sysfs first
+arctic_hwmon = None
+for h in glob.glob("/sys/class/hwmon/hwmon*"):
+    try:
+        name = open(f"{h}/name").read().strip()
+        if "arctic" in name.lower():
+            arctic_hwmon = h
+            break
+    except Exception:
+        pass
+
+if arctic_hwmon:
+    pwm_val = max(0, min(255, int(speed_pct * 255 / 100)))
+    channels = range(1, 11) if channel == 0 else [channel]
+    ok_count = 0
+    for ch in channels:
+        try:
+            with open(f"{arctic_hwmon}/pwm{ch}", "w") as f:
+                f.write(str(pwm_val))
+            ok_count += 1
+        except Exception as e:
+            print(f"WARN:ch{ch}: {e}")
+    print(f"OK:sysfs:{ok_count} channel(s) set to {pwm_val}/255 ({speed_pct}%)")
+else:
+    try:
+        import hid
+    except ImportError:
+        print("ERROR:python-hid not installed")
+        sys.exit(1)
+    devs = [d for d in hid.enumerate() if d["vendor_id"]==0x3904 and d["product_id"]==0xF001]
+    if not devs:
+        print("ERROR:Arctic Fan Controller not found")
+        sys.exit(1)
+    # Build OUT report: 10 channel values (0-100%)
+    # First read current values to avoid overwriting other channels
+    h = hid.device()
+    h.open(0x3904, 0xF001)
+    h.set_nonblocking(0)
+    # Read current state
+    current = [50] * 10  # default 50% if can\'t read
+    try:
+        data = h.read(64, timeout_ms=2000)
+        if data and len(data) >= 30:
+            rpms = struct.unpack_from("<10H", bytes(data), 11)
+            # We don\'t have current PWM from IN report, keep defaults
+    except Exception:
+        pass
+    # Set target channel(s)
+    if channel == 0:
+        current = [speed_pct] * 10
+    else:
+        current[channel - 1] = speed_pct
+    # Build OUT report (Report ID 0x01, 10 bytes of 0-100% values)
+    report = [0x01] + current[:10] + [0] * (63 - 10)
+    try:
+        h.write(report[:65])
+        # Wait for ACK (Report ID 0x02)
+        ack = h.read(64, timeout_ms=1500)
+        if ack and len(ack) >= 2 and ack[0] == 0x02 and ack[1] == 0x00:
+            print(f"OK:hid:channel {channel} set to {speed_pct}% (ACK received)")
+        else:
+            print(f"OK:hid:channel {channel} set to {speed_pct}% (no ACK — may still work)")
+    except Exception as e:
+        print(f"ERROR:{e}")
+    h.close()
+'''
+
+
+def _fetch_arctic_usb(dev: Dict) -> Dict:
+    """Fetch status from Arctic ACFAN00351A USB fan controller."""
+    result = _base_result(dev)
+    result["pwm_nodes"] = []
+    ssh = None
+    try:
+        ssh = _ssh_connect(dev)
+        # Upload and run the read script
+        script_path = "/tmp/_fp_arctic_read.py"
+        sftp = ssh.open_sftp()
+        with sftp.file(script_path, 'w') as f:
+            f.write(_ARCTIC_READ_SCRIPT)
+        sftp.close()
+        out, err, code = _run_remote(ssh, f"python3 {script_path} 2>&1", timeout=15)
+        result["raw"] = out
+
+        method = "unknown"
+        for line in out.splitlines():
+            if line.startswith("ERROR:"):
+                result["error"] = line[6:]
+                return result
+            elif line.startswith("METHOD:"):
+                method = line[7:]
+            elif line.startswith("CH"):
+                # CH1:1200:128:50
+                parts = line.split(":")
+                if len(parts) >= 4:
+                    ch_num = int(parts[0][2:])
+                    rpm = int(parts[1])
+                    pwm_raw = int(parts[2])
+                    pct = int(parts[3])
+                    result["fans"].append({
+                        "label": f"Fan {ch_num}",
+                        "rpm": rpm,
+                        "channel": ch_num,
+                    })
+                    result["pwm_nodes"].append({
+                        "path": f"arctic_ch{ch_num}",
+                        "chip": "arctic_fan_controller",
+                        "label": f"pwm{ch_num}",
+                        "channel": ch_num,
+                        "value": pwm_raw,
+                        "percent": pct,
+                        "enable_mode": "1",
+                    })
+
+        result["ok"] = bool(result["fans"])
+        if not result["ok"] and not result["error"]:
+            result["error"] = "No fan data received. Check USB connection and permissions."
+    except Exception as exc:
+        result["error"] = str(exc)
+        logger.warning("[fan_controller] arctic_usb fetch error for %s: %s", dev.get("name"), exc)
+    finally:
+        if ssh:
+            try: ssh.close()
+            except Exception: pass
+    return result
+
+
+def _set_fan_arctic_usb(dev: Dict, channel: str, speed, extra: dict) -> Dict:
+    """Set fan speed on Arctic ACFAN00351A USB fan controller."""
+    result = {"ok": False, "message": ""}
+    ssh = None
+    try:
+        ssh = _ssh_connect(dev)
+        # Parse channel: "all" or "1"-"10"
+        if str(channel).lower() in ("all", "0", ""):
+            ch_num = 0
+        else:
+            ch_num = max(0, min(10, int(str(channel).replace("arctic_ch", "").replace("ch", ""))))
+
+        # Parse speed: percent 0-100
+        if isinstance(speed, (int, float)):
+            if speed > 100:
+                speed_pct = max(0, min(100, int(speed * 100 / 255)))
+            else:
+                speed_pct = max(0, min(100, int(speed)))
+        else:
+            speed_pct = 50
+
+        # Upload and run set script
+        script_path = "/tmp/_fp_arctic_set.py"
+        sftp = ssh.open_sftp()
+        with sftp.file(script_path, 'w') as f:
+            f.write(_ARCTIC_SET_SCRIPT)
+        sftp.close()
+
+        out, err, code = _run_remote(
+            ssh,
+            f"python3 {script_path} {ch_num} {speed_pct} 2>&1",
+            timeout=15
+        )
+        combined = (out or "") + (err or "")
+        result["ok"] = "OK:" in combined
+        result["message"] = combined.strip() or ("OK" if result["ok"] else "No output")
+    except Exception as exc:
+        result["message"] = str(exc)
+    finally:
+        if ssh:
+            try: ssh.close()
+            except Exception: pass
+    return result
+
+
 # ── Fan speed control ─────────────────────────────────────────────────────────
 
 def set_fan_speed(dev: Dict, channel: str, speed, extra: dict = None) -> Dict:
@@ -846,11 +1121,12 @@ def set_fan_speed(dev: Dict, channel: str, speed, extra: dict = None) -> Dict:
     """
     ctype = dev.get("controller_type", "lm_sensors")
     setters = {
-        "lm_sensors": _set_fan_lm_sensors,
-        "ipmi":       _set_fan_ipmi,
-        "nbfc":       _set_fan_nbfc,
-        "liquidctl":  _set_fan_liquidctl,
-        "pwm_sysfs":  _set_fan_pwm_sysfs,
+        "lm_sensors":  _set_fan_lm_sensors,
+        "ipmi":        _set_fan_ipmi,
+        "nbfc":        _set_fan_nbfc,
+        "liquidctl":   _set_fan_liquidctl,
+        "pwm_sysfs":   _set_fan_pwm_sysfs,
+        "arctic_usb":  _set_fan_arctic_usb,
     }
     fn = setters.get(ctype, _set_fan_lm_sensors)
     return fn(dev, channel, speed, extra or {})
@@ -1403,6 +1679,36 @@ def detect_controllers(host: str, port: int = 22, username: str = "root",
                 "confidence": confidence,
                 "reason": reason,
                 "detected_devices": nbfc_status[:300] if nbfc_code == 0 else "",
+                "extra_config": {},
+            })
+
+        # 6. Arctic USB Fan Controller (ACFAN00351A)
+        arctic_usb_out, _, arctic_code = _r("lsusb 2>/dev/null | grep -i '3904:f001'")
+        if arctic_code == 0 and arctic_usb_out:
+            # Check if kernel driver is loaded (Linux 7.2+)
+            arctic_hwmon_out, _, _ = _r(
+                "for h in /sys/class/hwmon/hwmon*; do "
+                "name=$(cat $h/name 2>/dev/null); "
+                "echo $name | grep -qi arctic && echo $h; "
+                "done 2>/dev/null"
+            )
+            hid_ok, _, hid_code = _r("python3 -c 'import hid' 2>&1")
+            if arctic_hwmon_out:
+                method = "kernel sysfs (arctic_fan_controller driver)"
+                confidence = "high"
+            elif hid_code == 0:
+                method = "python-hid (USB HID direct)"
+                confidence = "high"
+            else:
+                method = "USB HID (python-hid not yet installed)"
+                confidence = "medium"
+            suggestions.insert(0, {
+                "controller_type": "arctic_usb",
+                "label": CONTROLLER_TYPES["arctic_usb"]["label"],
+                "icon": CONTROLLER_TYPES["arctic_usb"]["icon"],
+                "confidence": confidence,
+                "reason": f"Arctic Fan Controller detected via USB ({arctic_usb_out.strip()}). Method: {method}",
+                "detected_devices": arctic_usb_out.strip(),
                 "extra_config": {},
             })
 
