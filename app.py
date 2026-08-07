@@ -3574,6 +3574,13 @@ def fc_add():
                 extra[key] = val
         if request.form.get('use_direct') == '1':
             extra['use_direct'] = True
+        # Parse pump_channels for arctic_usb (comma-separated channel numbers)
+        pump_channels_str = request.form.get('pump_channels', '').strip() or request.form.get('pump_channels_str', '').strip()
+        if pump_channels_str and ctype == 'arctic_usb':
+            try:
+                extra['pump_channels'] = [int(x.strip()) for x in pump_channels_str.split(',') if x.strip().isdigit()]
+            except Exception:
+                pass
 
         if not name or not host:
             flash('Name and host are required.', 'danger')

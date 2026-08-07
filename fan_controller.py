@@ -1012,6 +1012,9 @@ def _fetch_arctic_usb(dev: Dict) -> Dict:
     result = _base_result(dev)
     result["pwm_nodes"] = []
     ssh = None
+    # Read pump_channels from extra_config (list of channel numbers that are pumps)
+    extra_cfg = dev.get("extra_config", {})
+    pump_channels = set(extra_cfg.get("pump_channels", []))
     try:
         ssh = _ssh_connect(dev)
         # Upload and run the read script
@@ -1038,10 +1041,13 @@ def _fetch_arctic_usb(dev: Dict) -> Dict:
                     rpm = int(parts[1])
                     pwm_raw = int(parts[2])
                     pct = int(parts[3])
+                    is_pump = ch_num in pump_channels
+                    label = f"Pump {ch_num} (AIO)" if is_pump else f"Fan {ch_num}"
                     result["fans"].append({
-                        "label": f"Fan {ch_num}",
+                        "label": label,
                         "rpm": rpm,
                         "channel": ch_num,
+                        "is_pump": is_pump,
                     })
                     result["pwm_nodes"].append({
                         "path": f"arctic_ch{ch_num}",
@@ -1051,6 +1057,8 @@ def _fetch_arctic_usb(dev: Dict) -> Dict:
                         "value": pwm_raw,
                         "percent": pct,
                         "enable_mode": "1",
+                        "is_pump": is_pump,
+                        "min_percent": 60 if is_pump else 0,  # Pumps must not go below 60%
                     })
 
         result["ok"] = bool(result["fans"])
@@ -1070,6 +1078,9 @@ def _set_fan_arctic_usb(dev: Dict, channel: str, speed, extra: dict) -> Dict:
     """Set fan speed on Arctic ACFAN00351A USB fan controller."""
     result = {"ok": False, "message": ""}
     ssh = None
+    # Read pump_channels from extra_config
+    extra_cfg = dev.get("extra_config", {})
+    pump_channels = set(extra_cfg.get("pump_channels", []))
     try:
         ssh = _ssh_connect(dev)
         # Parse channel: "all" or "1"-"10"
@@ -1086,6 +1097,17 @@ def _set_fan_arctic_usb(dev: Dict, channel: str, speed, extra: dict) -> Dict:
                 speed_pct = max(0, min(100, int(speed)))
         else:
             speed_pct = 50
+
+        # Safety: pump channels must not go below 60%
+        if ch_num in pump_channels and speed_pct < 60:
+            result["message"] = f"⚠ Pump protection: Channel {ch_num} is an AIO pump — minimum speed is 60%. Requested {speed_pct}% blocked."
+            result["ok"] = False
+            return result
+        # If setting all channels and some are pumps, enforce minimum
+        if ch_num == 0 and pump_channels and speed_pct < 60:
+            result["message"] = f"⚠ Pump protection: Some channels are AIO pumps (channels {sorted(pump_channels)}). Minimum speed is 60%. Use per-channel control to set fans lower."
+            result["ok"] = False
+            return result
 
         # Upload and run set script
         script_path = "/tmp/_fp_arctic_set.py"

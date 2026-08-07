@@ -431,6 +431,32 @@ function updateTypeUI() {
         <strong>nbfc-linux</strong> must be installed on the target laptop.<br>
         Use the <strong>Install Packages</strong> button on the device detail page to attempt automatic installation.
       </div>`;
+  } else if (key === 'arctic_usb') {
+    ef.innerHTML = `
+      <div class="alert alert-info mb-2">
+        <i class="bi bi-usb-symbol me-1"></i>
+        <strong>Arctic Fan Controller ACFAN00351A</strong> — 10 channels via USB HID.<br>
+        Uses <strong>python-hid</strong> (auto-installed) or the native kernel driver (Linux 7.2+).
+      </div>
+      <div class="mb-3">
+        <label class="form-label">
+          <i class="bi bi-droplet me-1 text-info"></i>Pump Channels
+          <span class="text-muted small ms-1">(AIO pump protection)</span>
+        </label>
+        <input type="text" name="pump_channels" id="f_pump_channels" class="form-control"
+               placeholder="e.g. 2  or  2,3  (comma-separated channel numbers)"
+               oninput="document.getElementById('f_pump_channels_hidden').value=this.value">
+        <input type="hidden" name="pump_channels_str" id="f_pump_channels_hidden">
+        <div class="form-text">
+          Mark channels connected to AIO pump heads. These channels will be <strong>protected</strong>:
+          minimum speed enforced at 60% to prevent overheating.
+          Leave blank if no pump is connected.
+        </div>
+      </div>
+      <div class="alert alert-warning mb-0 py-2">
+        <i class="bi bi-exclamation-triangle me-1"></i>
+        <strong>Safety:</strong> Never set an AIO pump below 60% — this can cause CPU overheating and damage.
+      </div>`;
   } else {
     ef.innerHTML = `<div class="text-muted small">No additional options required for this controller type.</div>`;
   }
