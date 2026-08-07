@@ -3194,41 +3194,8 @@ def checkmk_download_script(script_type):
     )
 
 
-if __name__ == "__main__":
-    # Initialize User Management database
-    user_management.init_user_db()
-    # Migrate environment variable user to database
-    if user_management.migrate_env_user_to_db():
-        print(f"INFO: Migrated environment variable user '{USERNAME}' to database.")
-    
-    # Initialize Disk Tools database
-    disktool_core.init_db()
-    # Start Disk Tools auto-mode worker
-    threading.Thread(target=disktool_core.auto_mode_worker, daemon=True).start()
-    
-    # Configure automatic update scheduler
-    scheduler.configure_scheduler()
-    
-    # Background task to check for dashboard version updates
-    def version_check_worker():
-        """Background worker to periodically check for dashboard updates"""
-        import time
-        while True:
-            try:
-                settings = scheduler.load_update_settings()
-                if settings.get("dashboard_update_notifications", True):
-                    if version_manager.should_check_for_updates(check_interval_hours=24):
-                        version_manager.check_for_updates()
-            except Exception as e:
-                print(f"Error checking for dashboard updates: {e}")
-            # Sleep for 1 hour before checking again
-            time.sleep(3600)
-    
-    threading.Thread(target=version_check_worker, daemon=True).start()
-    
-    # Security: Disable debug mode in production
-    debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
-    app.run(host="0.0.0.0", port=5000, debug=debug_mode)
+# NOTE: if __name__ == '__main__' block moved to end of file
+# so all routes are registered before Flask starts
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -4158,3 +4125,44 @@ def api_sync_pull(filename):
     from flask import send_file
     return send_file(filepath)
 
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Entry point — MUST be at the end so all routes are registered first
+# ─────────────────────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    # Initialize User Management database
+    user_management.init_user_db()
+    # Migrate environment variable user to database
+    if user_management.migrate_env_user_to_db():
+        print(f"INFO: Migrated environment variable user '{USERNAME}' to database.")
+
+    # Initialize Disk Tools database
+    disktool_core.init_db()
+    # Start Disk Tools auto-mode worker
+    threading.Thread(target=disktool_core.auto_mode_worker, daemon=True).start()
+
+    # Configure automatic update scheduler
+    scheduler.configure_scheduler()
+
+    # Background task to check for dashboard version updates
+    def version_check_worker():
+        """Background worker to periodically check for dashboard updates"""
+        import time
+        while True:
+            try:
+                settings = scheduler.load_update_settings()
+                if settings.get("dashboard_update_notifications", True):
+                    if version_manager.should_check_for_updates(check_interval_hours=24):
+                        version_manager.check_for_updates()
+            except Exception as e:
+                print(f"Error checking for dashboard updates: {e}")
+            # Sleep for 1 hour before checking again
+            time.sleep(3600)
+
+    threading.Thread(target=version_check_worker, daemon=True).start()
+
+    # Security: Disable debug mode in production
+    debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
+    app.run(host="0.0.0.0", port=5000, debug=debug_mode)
