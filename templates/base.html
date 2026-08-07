@@ -34,119 +34,176 @@
     <nav class="sidebar-nav">
 
       {# ── DASHBOARD ──────────────────────────────────────────────────── #}
-      <span class="sidebar-section-label">&#x1F4CA; Dashboard</span>
-      <a class="sidebar-link {% if request.path == '/index' or request.path == '/' %}active{% endif %}" href="/index">
-        <span class="sidebar-icon">&#x1F3E0;</span> {{ _('Home') }}
-      </a>
-      <a class="sidebar-link {% if request.path.startswith('/hw') and not request.path.startswith('/hw_overview') %}active{% endif %}" href="/hw">
-        <span class="sidebar-icon">&#x26A1;</span> HW Monitor
-      </a>
+      <span class="sidebar-section-label" onclick="toggleGroup('grp-dash',this)" data-group="grp-dash">
+        &#x1F4CA; Dashboard <span class="nav-chevron">&#x25BC;</span>
+      </span>
+      <div class="sidebar-nav-group" id="grp-dash">
+        <a class="sidebar-link {% if request.path == '/index' or request.path == '/' %}active{% endif %}" href="/index">
+          <span class="sidebar-icon">&#x1F3E0;</span> {{ _('Home') }}
+        </a>
+        <a class="sidebar-link {% if request.path.startswith('/hw') and not request.path.startswith('/hw_overview') %}active{% endif %}" href="/hw">
+          <span class="sidebar-icon">&#x26A1;</span> HW Monitor
+        </a>
+      </div>
 
       {# ── SERVER ─────────────────────────────────────────────────────── #}
-      <span class="sidebar-section-label">&#x1F5A7; Server</span>
-      <a class="sidebar-link {% if request.path.startswith('/hosts') %}active{% endif %}" href="/hosts">
-        <span class="sidebar-icon">&#x1F4DD;</span> {{ _('Manage Hosts') }}
-      </a>
-      <a class="sidebar-link {% if request.path == '/scanner' %}active{% endif %}" href="/scanner">
-        <span class="sidebar-icon">&#x1F50D;</span> {{ _('Network Scanner') }}
-      </a>
-      <a class="sidebar-link {% if request.path.startswith('/dashboard') %}active{% endif %}" href="/dashboard">
-        <span class="sidebar-icon">&#x1F504;</span> {{ _('Update Dashboard') }}
-      </a>
-      {% if is_admin is defined and is_admin %}
-      <a class="sidebar-link {% if request.path.startswith('/server_update') %}active{% endif %}" href="/server_update">
-        <span class="sidebar-icon">&#x2B06;</span> Server Update
-        <span class="badge badge-amber" style="margin-left:auto;font-size:0.65rem;padding:0.1rem 0.4rem;">{{ _('Admin') }}</span>
-      </a>
-      {% endif %}
+      <span class="sidebar-section-label" onclick="toggleGroup('grp-srv',this)" data-group="grp-srv">
+        &#x1F5A7; Server <span class="nav-chevron">&#x25BC;</span>
+      </span>
+      <div class="sidebar-nav-group" id="grp-srv">
+        <a class="sidebar-link {% if request.path.startswith('/hosts') %}active{% endif %}" href="/hosts">
+          <span class="sidebar-icon">&#x1F4DD;</span> {{ _('Manage Hosts') }}
+        </a>
+        <a class="sidebar-link {% if request.path == '/scanner' %}active{% endif %}" href="/scanner">
+          <span class="sidebar-icon">&#x1F50D;</span> {{ _('Network Scanner') }}
+        </a>
+        <a class="sidebar-link {% if request.path.startswith('/dashboard') %}active{% endif %}" href="/dashboard">
+          <span class="sidebar-icon">&#x1F504;</span> {{ _('Update Dashboard') }}
+        </a>
+        {% if is_admin is defined and is_admin %}
+        <a class="sidebar-link {% if request.path.startswith('/server_update') %}active{% endif %}" href="/server_update">
+          <span class="sidebar-icon">&#x2B06;</span> Server Update
+          <span class="badge badge-amber" style="margin-left:auto;font-size:0.6rem;padding:0.1rem 0.35rem;">Admin</span>
+        </a>
+        {% endif %}
+      </div>
 
       {# ── HARDWARE ───────────────────────────────────────────────────── #}
-      <span class="sidebar-section-label">&#x1F9F0; Hardware</span>
-      <a class="sidebar-link {% if request.path.startswith('/hw_overview') %}active{% endif %}" href="/hw_overview">
-        <span class="sidebar-icon">&#x1F5A5;</span> Hardware Overview
-      </a>
-      <a class="sidebar-link {% if request.path.startswith('/smart') %}active{% endif %}" href="/smart">
-        <span class="sidebar-icon">&#x1F4CA;</span> SMART Dashboard
-      </a>
-      <a class="sidebar-link {% if request.path.startswith('/disks') %}active{% endif %}" href="/disks">
-        <span class="sidebar-icon">&#x1F4BE;</span> {{ _('Disk Tools') }}
-      </a>
-      <a class="sidebar-link {% if request.path.startswith('/fans') %}active{% endif %}" href="/fans">
-        <span class="sidebar-icon">&#x1F32C;</span> Fan Controllers
-      </a>
-      <a class="sidebar-link {% if request.path.startswith('/commander') %}active{% endif %}" href="/commander">
-        <span class="sidebar-icon">&#x1F4A8;</span> Commander Pro
-      </a>
+      <span class="sidebar-section-label" onclick="toggleGroup('grp-hw',this)" data-group="grp-hw">
+        &#x1F9F0; Hardware <span class="nav-chevron">&#x25BC;</span>
+      </span>
+      <div class="sidebar-nav-group" id="grp-hw">
+        <a class="sidebar-link {% if request.path.startswith('/hw_overview') %}active{% endif %}" href="/hw_overview">
+          <span class="sidebar-icon">&#x1F5A5;</span> Hardware Overview
+        </a>
+        <a class="sidebar-link {% if request.path.startswith('/smart') %}active{% endif %}" href="/smart">
+          <span class="sidebar-icon">&#x1F4CA;</span> SMART Dashboard
+        </a>
+        <a class="sidebar-link {% if request.path.startswith('/disks') %}active{% endif %}" href="/disks">
+          <span class="sidebar-icon">&#x1F4BE;</span> {{ _('Disk Tools') }}
+        </a>
+        <a class="sidebar-link {% if request.path.startswith('/fans') or request.path.startswith('/commander') %}active{% endif %}" href="/fans">
+          <span class="sidebar-icon">&#x1F32C;</span> Fan &amp; Cooling
+        </a>
+      </div>
 
       {# ── VIRTUALISIERUNG ────────────────────────────────────────────── #}
-      <span class="sidebar-section-label">&#x2601; Virtualisierung</span>
-      <a class="sidebar-link {% if request.path.startswith('/vm') %}active{% endif %}" href="/vm">
-        <span class="sidebar-icon">&#x1F5A5;</span> VM Controller
-      </a>
-      <a class="sidebar-link {% if request.path.startswith('/storage') %}active{% endif %}" href="/storage">
-        <span class="sidebar-icon">&#x1F5C4;</span> Storage Controller
-      </a>
+      <span class="sidebar-section-label" onclick="toggleGroup('grp-virt',this)" data-group="grp-virt">
+        &#x2601; Virtualisierung <span class="nav-chevron">&#x25BC;</span>
+      </span>
+      <div class="sidebar-nav-group" id="grp-virt">
+        <a class="sidebar-link {% if request.path.startswith('/vm') %}active{% endif %}" href="/vm">
+          <span class="sidebar-icon">&#x1F5A5;</span> VM Controller
+        </a>
+        <a class="sidebar-link {% if request.path.startswith('/storage') %}active{% endif %}" href="/storage">
+          <span class="sidebar-icon">&#x1F5C4;</span> Storage Controller
+        </a>
+      </div>
 
-      {# ── DATENSICHERUNG ─────────────────────────────────────────────── #}
-      <span class="sidebar-section-label">&#x1F6E1; Datensicherung</span>
-      <a class="sidebar-link {% if request.path.startswith('/backup') %}active{% endif %}" href="/backup">
-        <span class="sidebar-icon">&#x1F4BE;</span> Backup Servers
-      </a>
-
-      {# ── MONITORING ─────────────────────────────────────────────────── #}
-      <span class="sidebar-section-label">&#x1F50E; Monitoring</span>
-      <a class="sidebar-link {% if request.path.startswith('/checkmk') %}active{% endif %}" href="/checkmk">
-        <span class="sidebar-icon">&#x2705;</span> CheckMK
-      </a>
-      {% if is_admin is defined and is_admin %}
-      <a class="sidebar-link {% if request.path.startswith('/monitor') %}active{% endif %}" href="/monitor">
-        <span class="sidebar-icon">&#x1F321;</span> System Monitor
-        <span class="badge badge-blue" style="margin-left:auto;font-size:0.65rem;padding:0.1rem 0.4rem;">{{ _('Admin') }}</span>
-      </a>
-      {% endif %}
+      {# ── DATENSICHERUNG + MONITORING (zusammengefasst) ───────────────── #}
+      <span class="sidebar-section-label" onclick="toggleGroup('grp-ops',this)" data-group="grp-ops">
+        &#x1F4F6; Betrieb <span class="nav-chevron">&#x25BC;</span>
+      </span>
+      <div class="sidebar-nav-group" id="grp-ops">
+        <a class="sidebar-link {% if request.path.startswith('/backup') %}active{% endif %}" href="/backup">
+          <span class="sidebar-icon">&#x1F6E1;</span> Backup Servers
+        </a>
+        <a class="sidebar-link {% if request.path.startswith('/checkmk') %}active{% endif %}" href="/checkmk">
+          <span class="sidebar-icon">&#x2705;</span> CheckMK
+        </a>
+        {% if is_admin is defined and is_admin %}
+        <a class="sidebar-link {% if request.path.startswith('/monitor') %}active{% endif %}" href="/monitor">
+          <span class="sidebar-icon">&#x1F321;</span> System Monitor
+          <span class="badge badge-blue" style="margin-left:auto;font-size:0.6rem;padding:0.1rem 0.35rem;">Admin</span>
+        </a>
+        {% endif %}
+      </div>
 
       {# ── SYSTEM ─────────────────────────────────────────────────────── #}
-      <span class="sidebar-section-label">&#x2699; System</span>
-      {% if is_admin is defined and is_admin %}
-      <a class="sidebar-link {% if request.path.startswith('/fleetpilot_update') %}active{% endif %}" href="/fleetpilot_update">
-        <span class="sidebar-icon">&#x1F680;</span> FleetPilot Update
-        <span class="badge badge-blue" style="margin-left:auto;font-size:0.65rem;padding:0.1rem 0.4rem;">{{ _('Admin') }}</span>
-      </a>
-      {% endif %}
-      <a class="sidebar-link {% if request.path.startswith('/update_settings') %}active{% endif %}" href="/update_settings">
-        <span class="sidebar-icon">&#x2699;&#xFE0F;</span> {{ _('Update Settings') }}
-      </a>
-      <a class="sidebar-link {% if request.path.startswith('/email_settings') %}active{% endif %}" href="/email_settings">
-        <span class="sidebar-icon">&#x2709;&#xFE0F;</span> {{ _('Email Config') }}
-      </a>
-      {% if is_admin is defined and is_admin %}
-      <a class="sidebar-link {% if request.path.startswith('/plugins') %}active{% endif %}" href="/plugins">
-        <span class="sidebar-icon">&#x1F9E9;</span> Plugin Manager
-        <span class="badge badge-blue" style="margin-left:auto;font-size:0.65rem;padding:0.1rem 0.4rem;">{{ _('Admin') }}</span>
-      </a>
-      {% endif %}
-
-      {# Dynamic sidebar links from plugins #}
-      {% if addon_mgr is defined %}
-        {% for sl in addon_mgr.get_sidebar_links() %}
-        <a class="sidebar-link {% if request.path.startswith(sl.url) %}active{% endif %}" href="{{ sl.url }}">
-          <span class="sidebar-icon">{{ sl.icon|default('&#x1F527;') }}</span> {{ sl.label }}
+      <span class="sidebar-section-label" onclick="toggleGroup('grp-sys',this)" data-group="grp-sys">
+        &#x2699; System <span class="nav-chevron">&#x25BC;</span>
+      </span>
+      <div class="sidebar-nav-group" id="grp-sys">
+        {% if is_admin is defined and is_admin %}
+        <a class="sidebar-link {% if request.path.startswith('/fleetpilot_update') %}active{% endif %}" href="/fleetpilot_update">
+          <span class="sidebar-icon">&#x1F680;</span> FleetPilot Update
+          <span class="badge badge-blue" style="margin-left:auto;font-size:0.6rem;padding:0.1rem 0.35rem;">Admin</span>
         </a>
-        {% endfor %}
-      {% endif %}
+        {% endif %}
+        <a class="sidebar-link {% if request.path.startswith('/update_settings') %}active{% endif %}" href="/update_settings">
+          <span class="sidebar-icon">&#x2699;&#xFE0F;</span> {{ _('Update Settings') }}
+        </a>
+        <a class="sidebar-link {% if request.path.startswith('/email_settings') %}active{% endif %}" href="/email_settings">
+          <span class="sidebar-icon">&#x2709;&#xFE0F;</span> {{ _('Email Config') }}
+        </a>
+        {% if is_admin is defined and is_admin %}
+        <a class="sidebar-link {% if request.path.startswith('/plugins') %}active{% endif %}" href="/plugins">
+          <span class="sidebar-icon">&#x1F9E9;</span> Plugin Manager
+          <span class="badge badge-blue" style="margin-left:auto;font-size:0.6rem;padding:0.1rem 0.35rem;">Admin</span>
+        </a>
+        {% endif %}
+        {# Dynamic sidebar links from plugins #}
+        {% if addon_mgr is defined %}
+          {% for sl in addon_mgr.get_sidebar_links() %}
+          <a class="sidebar-link {% if request.path.startswith(sl.url) %}active{% endif %}" href="{{ sl.url }}">
+            <span class="sidebar-icon">{{ sl.icon|default('&#x1F527;') }}</span> {{ sl.label }}
+          </a>
+          {% endfor %}
+        {% endif %}
+      </div>
 
       {# ── ACCOUNT ────────────────────────────────────────────────────── #}
-      <span class="sidebar-section-label">&#x1F464; Account</span>
-      <a class="sidebar-link {% if request.path.startswith('/users/profile') %}active{% endif %}" href="/users/profile">
-        <span class="sidebar-icon">&#x1F464;</span> {{ _('My Profile') }}
-      </a>
-      {% if is_admin is defined and is_admin %}
-      <a class="sidebar-link {% if request.path.startswith('/users') and not request.path.startswith('/users/profile') %}active{% endif %}" href="/users">
-        <span class="sidebar-icon">&#x1F465;</span> {{ _('User Management') }}
-      </a>
-      {% endif %}
+      <span class="sidebar-section-label" onclick="toggleGroup('grp-acc',this)" data-group="grp-acc">
+        &#x1F464; Account <span class="nav-chevron">&#x25BC;</span>
+      </span>
+      <div class="sidebar-nav-group" id="grp-acc">
+        <a class="sidebar-link {% if request.path.startswith('/users/profile') %}active{% endif %}" href="/users/profile">
+          <span class="sidebar-icon">&#x1F464;</span> {{ _('My Profile') }}
+        </a>
+        {% if is_admin is defined and is_admin %}
+        <a class="sidebar-link {% if request.path.startswith('/users') and not request.path.startswith('/users/profile') %}active{% endif %}" href="/users">
+          <span class="sidebar-icon">&#x1F465;</span> {{ _('User Management') }}
+        </a>
+        {% endif %}
+      </div>
 
     </nav>
+
+    <script>
+    // Collapsible sidebar groups
+    (function() {
+      var STORAGE_KEY = 'fp_nav_collapsed';
+      var collapsed = {};
+      try { collapsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch(e) {}
+
+      function applyCollapsed(grpId, label, animate) {
+        var el = document.getElementById(grpId);
+        if (!el) return;
+        if (collapsed[grpId]) {
+          if (!animate) el.style.maxHeight = '0';
+          else el.style.maxHeight = el.scrollHeight + 'px', requestAnimationFrame(function(){ el.style.maxHeight = '0'; });
+          el.classList.add('collapsed');
+          if (label) label.classList.add('collapsed');
+        } else {
+          el.style.maxHeight = el.scrollHeight + 'px';
+          el.classList.remove('collapsed');
+          if (label) label.classList.remove('collapsed');
+          setTimeout(function(){ if (!collapsed[grpId]) el.style.maxHeight = 'none'; }, 300);
+        }
+      }
+
+      window.toggleGroup = function(grpId, label) {
+        collapsed[grpId] = !collapsed[grpId];
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(collapsed)); } catch(e) {}
+        applyCollapsed(grpId, label, true);
+      };
+
+      // Apply on load (no animation)
+      document.querySelectorAll('[data-group]').forEach(function(label) {
+        applyCollapsed(label.dataset.group, label, false);
+      });
+    })();
+    </script>
 
     <!-- Update Notification in Sidebar -->
     {% if update_notification %}

@@ -3477,13 +3477,32 @@ except Exception as _fc_init_err:
 @app.route('/fans')
 @login_required
 def fc_index():
-    """Fan Controller overview page."""
+    """Fan Controller overview page — includes Commander Pro devices."""
     devices = _fc.list_devices()
     latest_map = {d['id']: _fc.get_latest(d['id']) for d in devices}
+    # Also load Commander Pro devices and merge them in
+    commander_devices = []
+    commander_latest = {}
+    try:
+        import corsair_commander as _cc_mod
+        raw = _cc_mod.list_devices()
+        for d in raw:
+            # Prefix ID to avoid collision with fan_controller IDs
+            merged = dict(d)
+            merged['_source'] = 'commander'
+            merged['controller_type'] = 'liquidctl'
+            commander_devices.append(merged)
+            lat = _cc_mod.get_latest(d['id'])
+            if lat:
+                commander_latest[d['id']] = lat
+    except Exception:
+        pass
     return render_template('fans/index.html',
                            devices=devices,
                            latest_map=latest_map,
-                           controller_types=_fc.CONTROLLER_TYPES)
+                           controller_types=_fc.CONTROLLER_TYPES,
+                           commander_devices=commander_devices,
+                           commander_latest=commander_latest)
 
 
 def _get_known_servers_for_module(module: str = None):

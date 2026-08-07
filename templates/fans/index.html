@@ -106,6 +106,7 @@
             </tr>
           </thead>
           <tbody>
+            {# ── Universal Fan Controllers ── #}
             {% for d in devices %}
             {% set lat = latest_map.get(d.id) %}
             {% set type_info = controller_types.get(d.controller_type, {}) %}
@@ -181,6 +182,63 @@
               </td>
             </tr>
             {% endfor %}
+            {# ── Commander Pro Devices ── #}
+            {% if commander_devices is defined and commander_devices %}
+            <tr><td colspan="8" class="py-1 px-3" style="background:rgba(99,102,241,.06);border-top:1px solid rgba(99,102,241,.2)">
+              <span class="small fw-semibold" style="color:#818cf8">&#x1F4A8; Commander Pro Devices</span>
+            </td></tr>
+            {% for d in commander_devices %}
+            {% set lat = commander_latest.get(d.id) if commander_latest is defined else none %}
+            <tr>
+              <td>
+                <a href="/commander/{{ d.id }}" class="fw-semibold text-decoration-none">
+                  &#x1F4A8; {{ d.name }}
+                </a>
+              </td>
+              <td><span class="badge" style="background:rgba(99,102,241,.2);color:#818cf8">Commander Pro</span></td>
+              <td class="font-monospace small">{{ d.host }}:{{ d.port }}</td>
+              <td>
+                {% if lat and lat.fans %}
+                  {% for fan in lat.fans[:3] %}
+                    <span class="badge bg-info text-dark me-1">
+                      {{ fan.label.split('/')[-1].strip() }}
+                      {% if fan.rpm is defined %} {{ fan.rpm }} RPM{% endif %}
+                    </span>
+                  {% endfor %}
+                {% else %}
+                  <span class="text-muted small">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if lat and lat.temperatures %}
+                  {% for t in lat.temperatures[:2] %}
+                    <span class="badge {% if t.value > 80 %}bg-danger{% elif t.value > 65 %}bg-warning text-dark{% else %}bg-success{% endif %} me-1">
+                      {{ t.label.split('/')[-1].strip() }}: {{ t.value }}°C
+                    </span>
+                  {% endfor %}
+                {% else %}
+                  <span class="text-muted small">—</span>
+                {% endif %}
+              </td>
+              <td class="small text-muted">—</td>
+              <td>
+                {% if lat and lat.ok %}
+                  <span class="badge bg-success">Online</span>
+                {% else %}
+                  <span class="badge bg-secondary">Pending</span>
+                {% endif %}
+              </td>
+              <td class="text-end">
+                <a href="/commander/{{ d.id }}" class="btn btn-sm btn-outline-primary me-1" title="Details">
+                  <i class="bi bi-eye"></i>
+                </a>
+                <a href="/commander/{{ d.id }}/edit" class="btn btn-sm btn-outline-secondary" title="Edit">
+                  <i class="bi bi-pencil"></i>
+                </a>
+              </td>
+            </tr>
+            {% endfor %}
+            {% endif %}
           </tbody>
         </table>
       </div>
