@@ -4156,6 +4156,131 @@ def api_sync_pull(filename):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Alias routes — convenience URLs that redirect to canonical routes
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/hosts/add', methods=['GET', 'POST'])
+@login_required
+def hosts_add_alias():
+    """Alias: /hosts/add → /hosts (add form is embedded in hosts page)."""
+    if request.method == 'POST':
+        return manage_hosts()
+    return redirect(url_for('manage_hosts'))
+
+
+@app.route('/hosts/<name>/test')
+@login_required
+def hosts_test_alias(name):
+    """Alias: /hosts/<name>/test → /hosts/detect_os/<name>."""
+    return redirect(url_for('detect_os', name=name))
+
+
+@app.route('/api/hosts')
+@login_required
+def api_hosts_list():
+    """API: List all configured hosts."""
+    hosts = load_hosts()
+    result = []
+    for name, h in hosts.items():
+        result.append({
+            'name': name,
+            'host': h.get('host', ''),
+            'user': h.get('user', ''),
+            'port': h.get('port', 22),
+            'environment': h.get('environment', ''),
+            'os': h.get('os', ''),
+            'tags': h.get('tags', []),
+        })
+    return jsonify(result)
+
+
+@app.route('/api/disks/scan')
+@login_required
+def api_disks_scan():
+    """API: Scan local disks."""
+    try:
+        disks = disktool_core.list_disks()
+        return jsonify({'disks': disks, 'count': len(disks)})
+    except Exception as e:
+        return jsonify({'error': str(e), 'disks': []}), 200
+
+
+@app.route('/api/smart/status')
+@login_required
+def api_smart_status():
+    """API: SMART status summary — alias for /api/smart/summary."""
+    try:
+        summary = smart_manager.get_summary()
+        return jsonify(summary)
+    except Exception as e:
+        return jsonify({'error': str(e), 'hosts': [], 'total_disks': 0}), 200
+
+
+@app.route('/api/fans/list')
+@login_required
+def api_fans_list_alias():
+    """API: List fan controller devices — alias for /api/fans/devices."""
+    return redirect(url_for('api_fans_devices'))
+
+
+@app.route('/api/backup/list')
+@login_required
+def api_backup_list_alias():
+    """API: List backup servers — alias for /api/backup/servers."""
+    return redirect(url_for('api_backup_servers'))
+
+
+@app.route('/api/monitor/data')
+@login_required
+def api_monitor_data_alias():
+    """API: Monitor data — alias for /api/monitor/latest."""
+    return redirect(url_for('api_monitor_latest'))
+
+
+@app.route('/api/hw_overview')
+@login_required
+def api_hw_overview_alias():
+    """API: HW overview — alias for /api/hw_overview/servers."""
+    try:
+        if _HW_INFO_AVAILABLE:
+            servers = _hw_info.list_servers()
+            return jsonify({'servers': servers})
+        return jsonify({'servers': [], 'error': 'HW Info not available'})
+    except Exception as e:
+        return jsonify({'servers': [], 'error': str(e)}), 200
+
+
+@app.route('/api/fp_version')
+@login_required
+def api_fp_version():
+    """API: Return current FleetPilot version info."""
+    try:
+        import version_manager as _vm
+        info = _vm.get_version_info() if hasattr(_vm, 'get_version_info') else {}
+    except Exception:
+        info = {}
+    import subprocess
+    try:
+        commit = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'],
+            capture_output=True, text=True, cwd='/opt/fleetpilot').stdout.strip()
+    except Exception:
+        commit = 'unknown'
+    return jsonify({
+        'version': info.get('version', '1.0.0'),
+        'commit': commit,
+        'branch': info.get('branch', 'main'),
+        'ok': True
+    })
+
+
+@app.route('/2fa/setup', methods=['GET', 'POST'])
+@login_required
+def twofa_setup_alias():
+    """Alias: /2fa/setup → /2fa (2FA management page)."""
+    return redirect(url_for('twofa_page'))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Entry point — MUST be at the end so all routes are registered first
 # ─────────────────────────────────────────────────────────────────────────────
 
