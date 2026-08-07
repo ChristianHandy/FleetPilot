@@ -3332,7 +3332,9 @@ def commander_add():
         _tok = _gcf()
     except Exception:
         _tok = ''
-    return render_template('commander/add.html', csrf_token_value=_tok)
+    return render_template('commander/add.html',
+                           known_servers=_get_known_servers_for_module('commander'),
+                           csrf_token_value=_tok)
 
 
 @app.route('/commander/<int:dev_id>')
@@ -3512,6 +3514,43 @@ def fc_index():
                            controller_types=_fc.CONTROLLER_TYPES)
 
 
+def _get_known_servers_for_module(module: str = None):
+    """Return list of servers from the central registry, merging hosts.json.
+    Used to pre-populate server pickers in Fan Controller, HW Monitor, etc.
+    """
+    servers = []
+    seen_hosts = set()
+    # From central registry
+    if _REGISTRY_AVAILABLE:
+        try:
+            reg = _registry.get_registry(DATA_DIR)
+            for s in reg.list_servers():
+                h = s.get('host', '')
+                if h and h not in seen_hosts:
+                    seen_hosts.add(h)
+                    servers.append(s)
+        except Exception:
+            pass
+    # Also include hosts.json entries not yet in registry
+    try:
+        hosts = load_hosts()
+        for hname, hdata in hosts.items():
+            h = hdata.get('host', '')
+            if h and h not in seen_hosts:
+                seen_hosts.add(h)
+                servers.append({
+                    'name': hname,
+                    'host': h,
+                    'port': hdata.get('port', 22),
+                    'user': hdata.get('user', 'root'),
+                    'password': '',
+                    'ssh_key': hdata.get('ssh_key', ''),
+                })
+    except Exception:
+        pass
+    return servers
+
+
 @app.route('/fans/add', methods=['GET', 'POST'])
 @login_required
 def fc_add():
@@ -3540,14 +3579,25 @@ def fc_add():
             flash('Name and host are required.', 'danger')
             return render_template('fans/add.html',
                                    controller_types=_fc.CONTROLLER_TYPES,
+                                   known_servers=_get_known_servers_for_module('fan_controller'),
                                    csrf_token_value=csrf_token_value)
 
         dev_id = _fc.add_device(name, ctype, host, port, username, password, ssh_key, extra, notes)
+        # Sync to central server registry so this server appears everywhere
+        if _REGISTRY_AVAILABLE:
+            try:
+                reg = _registry.get_registry(DATA_DIR)
+                sid = reg.upsert_server(name=name, host=host, port=port, user=username,
+                                        ssh_key=ssh_key, notes=notes)
+                reg.register_module(sid, 'fan_controller')
+            except Exception as _re:
+                app.logger.warning(f'[ServerRegistry] Fan controller sync error: {_re}')
         flash(f'Device "{name}" added successfully.', 'success')
         return redirect(url_for('fc_detail', dev_id=dev_id))
 
     return render_template('fans/add.html',
                            controller_types=_fc.CONTROLLER_TYPES,
+                           known_servers=_get_known_servers_for_module('fan_controller'),
                            csrf_token_value=csrf_token_value)
 
 
@@ -3822,6 +3872,7 @@ def backup_add():
         csrf_val = ""
     return render_template("backup/add.html",
                            server_types=_bc.SERVER_TYPES,
+                           known_servers=_get_known_servers_for_module('backup'),
                            csrf_token_value=csrf_val)
 
 

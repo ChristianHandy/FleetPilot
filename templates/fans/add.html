@@ -14,6 +14,29 @@
     {% endfor %}
   {% endwith %}
 
+  <!-- ── Step 0: Pick from known servers ─────────────────────────────────── -->
+  {% if known_servers %}
+  <div class="card mb-3 border-primary" id="knownServersCard">
+    <div class="card-header fw-semibold text-primary">
+      <i class="bi bi-server me-1"></i>Quick Select — Known Servers
+    </div>
+    <div class="card-body">
+      <p class="text-muted small mb-2">Select a server you already configured to pre-fill the connection details:</p>
+      <div class="row g-2">
+        {% for s in known_servers %}
+        <div class="col-12 col-md-6">
+          <button type="button" class="btn btn-outline-secondary w-100 text-start py-2"
+                  onclick="pickKnownServer('{{ s.host }}', {{ s.port|default(22) }}, '{{ s.user|default('root') }}', '{{ s.password|default('') }}', '{{ s.ssh_key|default('') }}', '{{ s.name }}')">
+            <div class="fw-semibold"><i class="bi bi-hdd-network me-1"></i>{{ s.name }}</div>
+            <div class="text-muted small">{{ s.host }}{% if s.port and s.port != 22 %}:{{ s.port }}{% endif %} — {{ s.user|default('root') }}</div>
+          </button>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   <!-- ── Step 1: SSH Connection + Auto-Detect ─────────────────────────────── -->
   <div class="card mb-3" id="sshCard">
     <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
@@ -415,6 +438,22 @@ function updateTypeUI() {
 
 function escHtml(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Known Server Quick-Pick ─────────────────────────────────────────────────
+function pickKnownServer(host, port, user, pass, key, name) {
+  document.getElementById('d_host').value = host;
+  document.getElementById('d_port').value = port || 22;
+  document.getElementById('d_user').value = user || 'root';
+  document.getElementById('d_pass').value = pass || '';
+  document.getElementById('d_key').value  = key  || '';
+  // Pre-fill name suggestion
+  const nameField = document.getElementById('f_name');
+  if (!nameField.value) nameField.value = name.replace(/\s+/g, '-').toLowerCase() + '-fans';
+  // Scroll to SSH card and trigger detect
+  document.getElementById('sshCard').scrollIntoView({behavior: 'smooth', block: 'start'});
+  // Auto-run detect after a short delay
+  setTimeout(runDetect, 300);
 }
 
 // Init
