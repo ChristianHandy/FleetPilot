@@ -274,6 +274,15 @@ with app.app_context():
             _hw_info.init(DATA_DIR)
         except Exception as _hwi_e:
             print(f'[HwInfo] Init error: {_hwi_e}')
+    # Initialize Fan Controller (must be in app_context so DB is created before routes are hit)
+    try:
+        import fan_controller as _fc_early
+        _fc_early.init_db(DATA_DIR)
+        _fc_early.start_polling()
+        print('[FanController] DB initialized OK')
+    except Exception as _fce:
+        print(f'[FanController] Early init error: {_fce}')
+
     # Initialize central server registry and import from all existing DBs
     if _REGISTRY_AVAILABLE:
         try:
@@ -3463,15 +3472,7 @@ def api_commander_all():
 # ═══════════════════════════════════════════════════════════════════════════════
 # Fan Controller — universal fan management (lm-sensors, IPMI, nbfc, liquidctl)
 # ═══════════════════════════════════════════════════════════════════════════════
-import fan_controller as _fc
-
-# Initialise DB and start polling (called once at startup via app context)
-try:
-    _fc.init_db(DATA_DIR)
-    _fc.start_polling()
-except Exception as _fc_init_err:
-    import logging as _logging
-    _logging.getLogger(__name__).warning("fan_controller init failed: %s", _fc_init_err)
+import fan_controller as _fc  # DB already initialized in with app.app_context() block above
 
 
 @app.route('/fans')
