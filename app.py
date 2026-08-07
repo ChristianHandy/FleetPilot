@@ -4219,8 +4219,12 @@ def api_smart_status():
 @app.route('/api/fans/list')
 @login_required
 def api_fans_list_alias():
-    """API: List fan controller devices — alias for /api/fans/devices."""
-    return redirect(url_for('api_fc_devices'))
+    """API: List fan controller devices — returns JSON directly."""
+    try:
+        devices = _fc.list_devices()
+        return jsonify({'devices': devices, 'count': len(devices)})
+    except Exception as e:
+        return jsonify({'devices': [], 'error': str(e)})
 
 
 @app.route('/api/backup/list')
