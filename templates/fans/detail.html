@@ -73,6 +73,19 @@
     </form>
   </div>
 
+  <!-- Live sensor bar: temps + fans (auto-refresh) -->
+  <div class="card mb-3" id="liveSensorBar">
+    <div class="card-header d-flex align-items-center justify-content-between py-2">
+      <span class="fw-semibold small">&#x1F321; Live Sensors</span>
+      <span class="text-muted" style="font-size:.7rem" id="sensorLastUpdate">Lade...</span>
+    </div>
+    <div class="card-body py-2">
+      <div class="d-flex flex-wrap gap-2" id="tempChips">
+        <span class="text-muted small">Verbinde...</span>
+      </div>
+    </div>
+  </div>
+
   <!-- Live stat cards -->
   <div class="row g-3 mb-3" id="statCards">
     {% if latest %}
@@ -432,6 +445,97 @@ function testConn() {
       alert('Error: ' + e);
     });
 }
+
+// ── Live sensor auto-refresh ─────────────────────────────────────────────────
+function tcColor(v) {
+  if (v == null) return 'var(--text-muted)';
+  if (v >= 90) return 'var(--accent-red)';
+  if (v >= 75) return '#f97316';
+  if (v >= 60) return 'var(--accent-amber)';
+  return 'var(--accent-green)';
+}
+
+function renderSensorChips(data) {
+  const chips = document.getElementById('tempChips');
+  if (!chips) return;
+  const parts = [];
+
+  // Temperatures
+  (data.temperatures || []).forEach(t => {
+    const col = tcColor(t.value);
+    const label = t.label.split('/').pop().trim();
+    parts.push(
+      `<span style="display:inline-flex;align-items:center;gap:5px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:4px 10px;font-size:.78rem;">`+
+      `<span style="font-size:.9rem">&#x1F321;</span>`+
+      `<span style="color:var(--text-secondary)">${label}</span>`+
+      `<span style="font-weight:800;color:${col}">${t.value}&#x00B0;C</span>`+
+      `</span>`
+    );
+  });
+
+  // Fans
+  (data.fans || []).filter(f => f.rpm > 0).forEach(f => {
+    const label = f.label.split('/').pop().trim();
+    const isPump = f.is_pump;
+    const icon = isPump ? '&#x1F4A7;' : '&#x1F300;';
+    const color = isPump ? 'var(--accent-blue)' : 'var(--accent-cyan)';
+    const rpmColor = f.rpm < 200 ? 'var(--accent-red)' : 'var(--accent-cyan)';
+    parts.push(
+      `<span style="display:inline-flex;align-items:center;gap:5px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:4px 10px;font-size:.78rem;${isPump?'border-color:rgba(59,130,246,.3);background:rgba(59,130,246,.05);':''}">`+
+      `<span style="font-size:.9rem;animation:${isPump?'none':'fp-spin 3s linear infinite'}">${icon}</span>`+
+      `<span style="color:var(--text-secondary)">${label}</span>`+
+      `<span style="font-weight:800;color:${rpmColor}">${f.rpm} RPM</span>`+
+      (f.percent != null ? `<span style="font-size:.68rem;color:var(--text-muted)">${f.percent}%</span>` : '')+
+      `</span>`
+    );
+  });
+
+  // Voltages
+  (data.voltages || []).forEach(v => {
+    const label = v.label.split('/').pop().trim();
+    parts.push(
+      `<span style="display:inline-flex;align-items:center;gap:5px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:4px 10px;font-size:.78rem;">`+
+      `<span style="font-size:.9rem">&#x26A1;</span>`+
+      `<span style="color:var(--text-secondary)">${label}</span>`+
+      `<span style="font-weight:800;color:var(--accent-amber)">${v.value}V</span>`+
+      `</span>`
+    );
+  });
+
+  if (!parts.length) {
+    chips.innerHTML = `<span class="text-muted small">${data.error || 'Keine Sensordaten — Pakete installiert?'}</span>`;
+  } else {
+    chips.innerHTML = parts.join('');
+  }
+
+  const upd = document.getElementById('sensorLastUpdate');
+  if (upd) upd.textContent = 'Aktualisiert: ' + new Date().toLocaleTimeString('de-DE');
+}
+
+async function refreshLiveSensors() {
+  try {
+    const r = await fetch('/api/fans/' + DEV_ID + '/status');
+    const d = await r.json();
+    if (d && (d.temperatures || d.fans || d.voltages)) {
+      renderSensorChips(d);
+      // Update status badge
+      const badge = document.getElementById('statusBadge');
+      if (badge) {
+        badge.className = d.ok ? 'badge bg-success' : 'badge bg-danger';
+        badge.textContent = d.ok ? 'Online' : (d.error || 'Error');
+      }
+    }
+  } catch(e) {
+    const chips = document.getElementById('tempChips');
+    if (chips) chips.innerHTML = '<span class="text-muted small">Verbindungsfehler</span>';
+  }
+}
+
+// Initial load + auto-refresh every 10s
+document.addEventListener('DOMContentLoaded', function() {
+  refreshLiveSensors();
+  setInterval(refreshLiveSensors, 10000);
+});
 
 // ── Force poll ────────────────────────────────────────────────────────────────
 function forcePoll() {

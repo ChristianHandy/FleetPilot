@@ -77,6 +77,17 @@
     </div>
   </div>
 
+  <!-- Live sensor overview (auto-refresh every 10s) -->
+  <div class="card mb-3">
+    <div class="card-header d-flex align-items-center justify-content-between py-2">
+      <span class="fw-semibold small">&#x1F321; Live Sensor Overview — alle Ger&#228;te</span>
+      <span class="text-muted" style="font-size:.7rem" id="overviewLastUpdate">Lade...</span>
+    </div>
+    <div class="card-body py-2" id="overviewRows">
+      <span class="text-muted small">Verbinde...</span>
+    </div>
+  </div>
+
   <!-- Device table -->
   <div class="card">
     <div class="card-body p-0">
@@ -204,6 +215,62 @@
 </div>
 
 <script>
+// Device IDs for live polling
+const DEVICE_IDS = [{% for d in devices %}{{ d.id }}{% if not loop.last %},{% endif %}{% endfor %}];
+const DEVICE_NAMES = {{% for d in devices %}{{ d.id }}: "{{ d.name }}"{% if not loop.last %},{% endif %}{% endfor %}};
+
+function tcColor(v) {
+  if (v == null) return '#64748b';
+  if (v >= 90) return '#ef4444';
+  if (v >= 75) return '#f97316';
+  if (v >= 60) return '#f59e0b';
+  return '#10b981';
+}
+
+async function refreshOverview() {
+  const rows = document.getElementById('overviewRows');
+  if (!rows || !DEVICE_IDS.length) return;
+  const results = await Promise.allSettled(
+    DEVICE_IDS.map(id => fetch('/api/fans/' + id + '/status').then(r => r.json()).then(d => ({id, data: d})))
+  );
+  let html = '<div style="display:flex;flex-direction:column;gap:10px">';
+  results.forEach(res => {
+    if (res.status !== 'fulfilled') return;
+    const {id, data} = res.value;
+    const name = DEVICE_NAMES[id] || 'Device ' + id;
+    const chips = [];
+    (data.temperatures || []).forEach(t => {
+      const col = tcColor(t.value);
+      const lbl = t.label.split('/').pop().trim();
+      chips.push(`<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(0,0,0,.2);border:1px solid rgba(255,255,255,.08);border-radius:7px;padding:3px 9px;font-size:.75rem">`+
+        `<span>&#x1F321;</span><span style="color:#94a3b8">${lbl}</span><span style="font-weight:700;color:${col}">${t.value}&#x00B0;C</span></span>`);
+    });
+    (data.fans || []).filter(f => f.rpm > 0).forEach(f => {
+      const lbl = f.label.split('/').pop().trim();
+      const isPump = f.is_pump;
+      const rpmCol = f.rpm < 200 ? '#ef4444' : '#06b6d4';
+      chips.push(`<span style="display:inline-flex;align-items:center;gap:4px;background:${isPump?'rgba(59,130,246,.08)':'rgba(0,0,0,.2)'};border:1px solid ${isPump?'rgba(59,130,246,.3)':'rgba(255,255,255,.08)'};border-radius:7px;padding:3px 9px;font-size:.75rem">`+
+        `<span style="animation:${isPump?'none':'fp-spin 3s linear infinite'}">${isPump?'&#x1F4A7;':'&#x1F300;'}</span>`+
+        `<span style="color:#94a3b8">${lbl}</span><span style="font-weight:700;color:${rpmCol}">${f.rpm} RPM</span></span>`);
+    });
+    const status = data.ok ? '<span style="color:#10b981;font-size:.7rem">&#x25CF; Online</span>' : `<span style="color:#ef4444;font-size:.7rem">&#x25CF; ${data.error||'Offline'}</span>`;
+    html += `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">`+
+      `<a href="/fans/${id}" style="font-size:.82rem;font-weight:700;color:var(--text-primary,#e2e8f0);text-decoration:none;min-width:120px">${name}</a>`+
+      status+
+      `<div style="display:flex;flex-wrap:wrap;gap:5px">${chips.join('')}</div>`+
+      `</div>`;
+  });
+  html += '</div>';
+  rows.innerHTML = html;
+  const upd = document.getElementById('overviewLastUpdate');
+  if (upd) upd.textContent = 'Aktualisiert: ' + new Date().toLocaleTimeString('de-DE');
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  refreshOverview();
+  setInterval(refreshOverview, 10000);
+});
+
 function forcePoll(devId, btn) {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
