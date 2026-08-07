@@ -766,8 +766,11 @@ def api_dashboard_layout_reset():
 def dashboard():
     """Linux Update Dashboard"""
     hosts = load_hosts()
-    with open(os.path.join(DATA_DIR, 'history.json')) as _hf:
+    try:
+        with open(os.path.join(DATA_DIR, 'history.json')) as _hf:
             history = json.load(_hf)
+    except (FileNotFoundError, json.JSONDecodeError):
+        history = []
     status = {n: is_online(h["host"], h["user"]) for n, h in hosts.items()}
     
     # Load update settings for display

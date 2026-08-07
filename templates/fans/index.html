@@ -275,7 +275,7 @@
 <script>
 // Device IDs for live polling
 const DEVICE_IDS = [{% for d in devices %}{{ d.id }}{% if not loop.last %},{% endif %}{% endfor %}];
-const DEVICE_NAMES = {{% for d in devices %}{{ d.id }}: "{{ d.name }}"{% if not loop.last %},{% endif %}{% endfor %}};
+const DEVICE_NAMES = { {% for d in devices %}{{ d.id }}: "{{ d.name }}"{% if not loop.last %}, {% endif %}{% endfor %} };
 
 function tcColor(v) {
   if (v == null) return '#64748b';
