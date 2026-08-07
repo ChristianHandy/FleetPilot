@@ -31,6 +31,43 @@ def get_db(data_dir=None):
     conn.row_factory = sqlite3.Row
     return conn
 
+def _auto_import_from_hosts(data_dir):
+    """Auto-import servers from hosts.json into hw_servers table (upsert by IP)."""
+    import json as _json
+    hosts_path = os.path.join(data_dir, 'hosts.json')
+    if not os.path.exists(hosts_path):
+        return
+    try:
+        with open(hosts_path) as f:
+            hosts = _json.load(f)
+        conn = get_db(data_dir)
+        for h in hosts:
+            ip = h.get('ip') or h.get('address') or h.get('host')
+            name = h.get('name') or h.get('hostname') or ip
+            port = int(h.get('port') or h.get('ssh_port') or 22)
+            user = h.get('user') or h.get('username') or h.get('ssh_user') or 'root'
+            pw = h.get('password') or h.get('ssh_pass') or h.get('pass') or ''
+            if not ip:
+                continue
+            # Upsert: insert if not exists, update credentials if exists
+            existing = conn.execute('SELECT id FROM hw_servers WHERE ip=?', (ip,)).fetchone()
+            if existing:
+                conn.execute(
+                    'UPDATE hw_servers SET name=?, ssh_port=?, ssh_user=?, ssh_pass=?, enabled=1 WHERE ip=?',
+                    (name, port, user, pw, ip)
+                )
+            else:
+                conn.execute(
+                    'INSERT INTO hw_servers (name, ip, ssh_port, ssh_user, ssh_pass, enabled) VALUES (?,?,?,?,?,1)',
+                    (name, ip, port, user, pw)
+                )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        import warnings
+        warnings.warn(f'[HW Monitor] Auto-import from hosts.json failed: {e}')
+
+
 def init_db(data_dir):
     global _DB_PATH
     _DB_PATH = _get_db_path(data_dir)
@@ -105,6 +142,8 @@ def init_db(data_dir):
     conn.execute("UPDATE hw_servers SET stress_log='/root/hw_stress_test/stress_test.log' WHERE stress_log IS NULL")
     conn.execute("UPDATE hw_servers SET stress_script='/root/hw_stress_test.py' WHERE stress_script IS NULL")
     conn.commit(); conn.close()
+    # Auto-import servers from hosts.json (central registry)
+    _auto_import_from_hosts(data_dir)
 
 # ─── SSH Helpers (Security: WarningPolicy instead of AutoAddPolicy) ───────────
 

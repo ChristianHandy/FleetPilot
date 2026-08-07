@@ -133,6 +133,12 @@
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
+        <!-- Quick-Select from Registry -->
+        <div id="quickSelectSection" class="mb-3" style="display:none">
+          <label class="form-label fw-semibold small">&#x26A1; Bekannte Server (aus Update Manager)</label>
+          <div id="quickSelectBtns" class="d-flex flex-wrap gap-2"></div>
+          <hr style="border-color:rgba(255,255,255,.1);margin:12px 0 8px">
+        </div>
         <div class="mb-3"><label class="form-label">Name</label><input class="form-control" id="fn" placeholder="pve05"></div>
         <div class="mb-3"><label class="form-label">IP-Adresse</label><input class="form-control" id="fi" placeholder="192.168.1.x"></div>
         <div class="mb-3"><label class="form-label">SSH-Port</label><input class="form-control" id="fp" value="22"></div>
@@ -289,7 +295,38 @@ async function confirmAck(){
   setTimeout(refresh,1000);
 }
 
-function openAdd(){addModalBS.show();}
+async function openAdd(){
+  addModalBS.show();
+  // Load known servers from registry for quick-select
+  try {
+    const r = await fetch('/api/known_servers');
+    const known = await r.json();
+    // Filter out already-added servers
+    const existingIPs = new Set(servers.map(s => s.ip));
+    const available = (known || []).filter(s => !existingIPs.has(s.ip));
+    const section = document.getElementById('quickSelectSection');
+    const btns = document.getElementById('quickSelectBtns');
+    if (available.length > 0) {
+      btns.innerHTML = available.map(s =>
+        `<button type="button" class="btn btn-sm btn-outline-info" onclick="quickFill('${s.name}','${s.ip}',${s.port||22},'${s.user||'root'}','${(s.password||'').replace(/'/g,\"'\")}')">`+
+        `<strong>${s.name}</strong> <span style="opacity:.7;font-size:.75rem">${s.ip}</span></button>`
+      ).join('');
+      section.style.display = '';
+    } else {
+      section.style.display = 'none';
+    }
+  } catch(e) {
+    document.getElementById('quickSelectSection').style.display = 'none';
+  }
+}
+
+function quickFill(name, ip, port, user, pw) {
+  document.getElementById('fn').value = name;
+  document.getElementById('fi').value = ip;
+  document.getElementById('fp').value = port;
+  document.getElementById('fu').value = user;
+  document.getElementById('fw').value = pw;
+}
 async function addServer(){
   const d={name:document.getElementById('fn').value,ip:document.getElementById('fi').value,port:parseInt(document.getElementById('fp').value)||22,user:document.getElementById('fu').value,password:document.getElementById('fw').value};
   if(!d.name||!d.ip){showToast('Name und IP erforderlich','danger');return;}

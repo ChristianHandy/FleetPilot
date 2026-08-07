@@ -419,6 +419,11 @@ def save_hosts(hosts):
     with open(os.path.join(DATA_DIR, "hosts.json"), "w") as f:
         json.dump(hosts, f, indent=2)
     cache_invalidate('hosts')
+    # Auto-sync to HW Monitor (so servers appear there without manual re-entry)
+    try:
+        _hw._auto_import_from_hosts(DATA_DIR)
+    except Exception:
+        pass
 
 def get_local_public_key():
     """
