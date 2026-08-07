@@ -4324,18 +4324,21 @@ def api_host_metrics():
             connect_kwargs['password'] = pwd
         client.connect(**connect_kwargs)
         # Single command: cpu%, ram%, uptime, load
+        # Use /proc/stat for reliable CPU measurement (two samples 0.5s apart)
         cmd = ("python3 -c \""
-               "import psutil,os;"
-               "cpu=psutil.cpu_percent(interval=0.5);"
-               "vm=psutil.virtual_memory();"
-               "ram=vm.percent;"
-               "import subprocess,re;"
-               "up=subprocess.check_output(['uptime','-p'],text=True).strip().replace('up ','');"
+               "import time,os;"
+               "def cpu_pct():\n"
+               "  s1=open('/proc/stat').readline().split()[1:];time.sleep(0.5);s2=open('/proc/stat').readline().split()[1:]\n"
+               "  d=[int(b)-int(a) for a,b in zip(s1,s2)];tot=sum(d);idle=d[3]+d[4]\n"
+               "  return round((1-idle/tot)*100,1) if tot>0 else 0.0\n"
+               "cpu=cpu_pct();"
+               "import psutil;vm=psutil.virtual_memory();ram=round(vm.percent,1);"
+               "up=open('/proc/uptime').read().split()[0];"
+               "secs=int(float(up));h=secs//3600;m=(secs%3600)//60;"
+               "upstr=f'{h}h {m}m' if h>0 else f'{m}m';"
                "ld=open('/proc/loadavg').read().split()[:3];"
-               "print(f'{cpu}|{ram}|{up}|{ld[0]} {ld[1]} {ld[2]}')"
-               "\" 2>/dev/null || "
-               "awk '{u=$1/100} NR==1{printf u}' /proc/uptime && "
-               "echo '|0|unknown|0 0 0'")
+               "print(f'{cpu}|{ram}|{upstr}|{ld[0]} {ld[1]} {ld[2]}')"
+               "\" 2>/dev/null")
         _, stdout, _ = client.exec_command(cmd, timeout=10)
         out = stdout.read().decode().strip()
         client.close()
