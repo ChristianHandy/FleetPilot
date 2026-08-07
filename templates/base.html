@@ -24,10 +24,10 @@
   <!-- ── Sidebar ───────────────────────────────────────── -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">
-      <div class="sidebar-brand-icon">&#x1F6E9;</div>
+      <div class="sidebar-brand-icon" style="background:linear-gradient(135deg,#3b82f6,#8b5cf6);box-shadow:0 0 16px rgba(59,130,246,.5);border-radius:10px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;">&#x1F6E9;</div>
       <div class="sidebar-brand-text">
-        <span class="sidebar-brand-title">FleetPilot</span>
-        <span class="sidebar-brand-sub">Linux &amp; Windows</span>
+        <span class="sidebar-brand-title" style="font-size:0.95rem;font-weight:800;letter-spacing:-0.01em;">FleetPilot</span>
+        <span class="sidebar-brand-sub" style="font-size:0.62rem;color:var(--text-muted);letter-spacing:0.05em;">Linux &amp; Windows</span>
       </div>
     </div>
 
@@ -228,16 +228,18 @@
         <button class="hamburger" id="hamburger" aria-label="{{ _('Toggle menu') }}" type="button">
           <span></span><span></span><span></span>
         </button>
-        <div class="topbar-title">
-          <span>{% block page_icon %}&#x1F4CA;{% endblock %}</span>
-          {% block page_title %}Dashboard{% endblock %}
-        </div>
+        <!-- Breadcrumb Navigation -->
+        <nav class="topbar-breadcrumb" style="display:flex;align-items:center;gap:0.4rem;font-size:0.82rem;">
+          <a href="/" style="color:var(--accent-blue);text-decoration:none;font-weight:600;">Dashboard</a>
+          <span style="color:var(--text-muted);opacity:0.5;">&#x276F;</span>
+          <span style="color:var(--text-primary);font-weight:600;">{% block page_title %}Home{% endblock %}</span>
+        </nav>
       </div>
 
       <div class="topbar-actions">
         {% block nav_extra %}{% endblock %}
 
-        <!-- Language Selector (GET-based, no CSRF needed) -->
+        <!-- Language Selector -->
         <select class="lang-select" title="{{ _('Language') }}"
                 onchange="window.location='/set_language?lang='+this.value+'&next='+encodeURIComponent(window.location.pathname+window.location.search)"
                 style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-md);
@@ -255,7 +257,12 @@
           <span class="theme-icon-dark">&#x1F319;</span>
         </button>
 
-        <a class="btn btn-ghost btn-sm" href="/users/profile">&#x1F464; {{ _('Profile') }}</a>
+        <!-- Avatar Profile Button -->
+        <a class="topbar-profile" href="/users/profile">
+          <div class="topbar-profile-avatar online-indicator">{{ (current_user.username[:2]|upper) if current_user is defined and current_user.is_authenticated else 'AD' }}</div>
+          <span style="font-size:0.82rem;font-weight:600;">{{ current_user.username|title if current_user is defined and current_user.is_authenticated else 'Admin' }}</span>
+          <span style="color:var(--text-muted);font-size:0.75rem;">&#x25BE;</span>
+        </a>
       </div>
     </header>
 

@@ -407,41 +407,55 @@
   </div>
   <div class="card-v4">
     <div class="card-v4-header">
-      <div class="card-v4-header-title">&#x1F5A7; {{ _('Fleet Overview') }}</div>
-      <a class="btn btn-sm btn-outline-secondary" href="/hosts" style="font-size:0.75rem;padding:0.25rem 0.65rem;">{{ _('View All') }} →</a>
+      <div class="card-v4-header-title">
+        <span style="font-size:1rem;">&#x1F5A7;</span> {{ _('Fleet Overview') }}
+      </div>
+      <a class="btn btn-sm btn-outline-secondary" href="/hosts" style="font-size:0.75rem;padding:0.25rem 0.65rem;">{{ _('View All Hosts') }} →</a>
     </div>
     <div style="overflow-x:auto;">
-      <table class="fleet-table">
+      <table class="fleet-table" id="fleetTable">
         <thead>
           <tr>
             <th>{{ _('Hostname') }}</th>
             <th>{{ _('IP Address') }}</th>
-            <th style="min-width:120px;">{{ _('Environment') }}</th>
-            <th>{{ _('Tags') }}</th>
+            <th style="min-width:130px;">CPU Usage</th>
+            <th style="min-width:130px;">RAM Usage</th>
+            <th>Status</th>
+            <th>Uptime</th>
+            <th>Load Average</th>
+            <th style="width:32px;"></th>
           </tr>
         </thead>
-        <tbody>
+        <tbody id="fleetTableBody">
           {% for name, h in hosts.items() %}
-          {% set env_slug = (h.environment|lower).replace(' ','') %}
-          {% set crit_slug = h.criticality|lower %}
-          <tr>
+          <tr data-host="{{ name }}" data-ip="{{ h.host }}">
             <td>
               <div class="host-name-cell">
-                <span class="host-dot online"></span>
-                <a href="/hosts" style="color:var(--text-primary);font-weight:700;text-decoration:none;">{{ name }}</a>
+                <span class="host-dot online" id="dot-{{ loop.index }}"></span>
+                <span style="display:flex;align-items:center;gap:0.4rem;">
+                  <span style="font-size:0.85rem;">&#x1F5A5;</span>
+                  <a href="/hosts" style="color:var(--text-primary);font-weight:700;text-decoration:none;">{{ name }}</a>
+                </span>
               </div>
             </td>
             <td><span class="ip-mono">{{ h.host }}</span></td>
             <td>
-              <span class="env-badge env-{{ env_slug }}">{{ h.environment }}</span>
-              <span class="crit-badge crit-{{ crit_slug }}" style="margin-left:0.3rem;">{{ h.criticality }}</span>
+              <div class="usage-bar-wrap" id="cpu-{{ loop.index }}">
+                <div class="usage-bar"><div class="usage-bar-fill low" style="width:0%"></div></div>
+                <span class="usage-pct">--</span>
+              </div>
             </td>
             <td>
-              <div style="display:flex;gap:0.25rem;flex-wrap:wrap;">
-                {% for tag in h.tags[:3] %}
-                <span class="tag-chip tag-chip-default">{{ tag }}</span>
-                {% endfor %}
+              <div class="usage-bar-wrap" id="ram-{{ loop.index }}">
+                <div class="usage-bar"><div class="usage-bar-fill low" style="width:0%"></div></div>
+                <span class="usage-pct">--</span>
               </div>
+            </td>
+            <td><span class="status-pill online" id="status-{{ loop.index }}">ONLINE</span></td>
+            <td><span class="uptime-badge" id="uptime-{{ loop.index }}">--</span></td>
+            <td><span class="load-avg" id="load-{{ loop.index }}">--</span></td>
+            <td>
+              <button style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:1rem;padding:0.2rem;" title="More">&#x22EE;</button>
             </td>
           </tr>
           {% endfor %}
@@ -449,6 +463,78 @@
       </table>
     </div>
   </div>
+
+<script>
+// Live Fleet Metrics
+(function() {
+  var rows = document.querySelectorAll('#fleetTableBody tr[data-host]');
+  var idx = 1;
+  rows.forEach(function(row) {
+    var i = idx++;
+    var ip = row.dataset.ip;
+    if (!ip) return;
+    // Fetch live metrics via SSH (via FleetPilot API)
+    fetch('/api/host_metrics?host=' + encodeURIComponent(row.dataset.host))
+      .then(function(r){ return r.json(); })
+      .then(function(d) {
+        if (!d || d.error) {
+          var dot = document.getElementById('dot-'+i);
+          if (dot) { dot.className = 'host-dot offline'; }
+          var st = document.getElementById('status-'+i);
+          if (st) { st.className = 'status-pill offline'; st.textContent = 'OFFLINE'; }
+          return;
+        }
+        // CPU
+        var cpuEl = document.getElementById('cpu-'+i);
+        if (cpuEl && d.cpu !== undefined) {
+          var pct = Math.round(d.cpu);
+          var cls = pct > 85 ? 'high' : pct > 60 ? 'medium' : 'low';
+          cpuEl.querySelector('.usage-bar-fill').style.width = pct + '%';
+          cpuEl.querySelector('.usage-bar-fill').className = 'usage-bar-fill ' + cls;
+          cpuEl.querySelector('.usage-pct').textContent = pct + '%';
+          if (pct > 85) cpuEl.querySelector('.usage-pct').style.color = '#f87171';
+          else if (pct > 60) cpuEl.querySelector('.usage-pct').style.color = '#fbbf24';
+          else cpuEl.querySelector('.usage-pct').style.color = '';
+        }
+        // RAM
+        var ramEl = document.getElementById('ram-'+i);
+        if (ramEl && d.ram !== undefined) {
+          var rpct = Math.round(d.ram);
+          var rcls = rpct > 85 ? 'high' : rpct > 60 ? 'medium' : 'low';
+          ramEl.querySelector('.usage-bar-fill').style.width = rpct + '%';
+          ramEl.querySelector('.usage-bar-fill').className = 'usage-bar-fill ' + rcls;
+          ramEl.querySelector('.usage-pct').textContent = rpct + '%';
+          if (rpct > 85) ramEl.querySelector('.usage-pct').style.color = '#f87171';
+          else if (rpct > 60) ramEl.querySelector('.usage-pct').style.color = '#fbbf24';
+          else ramEl.querySelector('.usage-pct').style.color = '';
+        }
+        // Status
+        var stEl = document.getElementById('status-'+i);
+        if (stEl) {
+          if (d.cpu > 90 || d.ram > 90) {
+            stEl.className = 'status-pill critical'; stEl.textContent = 'CRITICAL';
+          } else {
+            stEl.className = 'status-pill online'; stEl.textContent = 'ONLINE';
+          }
+        }
+        // Uptime
+        var upEl = document.getElementById('uptime-'+i);
+        if (upEl && d.uptime) { upEl.textContent = d.uptime; }
+        // Load
+        var ldEl = document.getElementById('load-'+i);
+        if (ldEl && d.load) { ldEl.textContent = d.load; }
+      })
+      .catch(function() {
+        var dot = document.getElementById('dot-'+i);
+        if (dot) dot.className = 'host-dot offline';
+        var st = document.getElementById('status-'+i);
+        if (st) { st.className = 'status-pill offline'; st.textContent = 'OFFLINE'; }
+      });
+  });
+  // Refresh every 30s
+  setTimeout(function(){ location.reload(); }, 30000);
+})();
+</script>
 </div>
 {% endif %}
 

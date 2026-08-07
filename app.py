@@ -4293,6 +4293,66 @@ def twofa_setup_alias():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Live Host Metrics API — for Fleet Overview dashboard widget
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/api/host_metrics')
+@login_required
+def api_host_metrics():
+    """Return live CPU, RAM, uptime and load for a host via SSH."""
+    import json as _json
+    host_name = request.args.get('host', '')
+    if not host_name:
+        return jsonify({'error': 'no host'}), 400
+    try:
+        hosts_data = load_hosts()
+        h = hosts_data.get(host_name)
+        if not h:
+            return jsonify({'error': 'unknown host'}), 404
+        ip   = h.get('host', '')
+        user = h.get('user', 'root')
+        port = int(h.get('port', 22))
+        pwd  = h.get('password', '')
+        key  = h.get('ssh_key', '')
+        import paramiko, io
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.WarningPolicy())
+        connect_kwargs = dict(hostname=ip, port=port, username=user, timeout=8)
+        if key:
+            connect_kwargs['pkey'] = paramiko.RSAKey.from_private_key(io.StringIO(key))
+        else:
+            connect_kwargs['password'] = pwd
+        client.connect(**connect_kwargs)
+        # Single command: cpu%, ram%, uptime, load
+        cmd = ("python3 -c \""
+               "import psutil,os;"
+               "cpu=psutil.cpu_percent(interval=0.5);"
+               "vm=psutil.virtual_memory();"
+               "ram=vm.percent;"
+               "import subprocess,re;"
+               "up=subprocess.check_output(['uptime','-p'],text=True).strip().replace('up ','');"
+               "ld=open('/proc/loadavg').read().split()[:3];"
+               "print(f'{cpu}|{ram}|{up}|{ld[0]} {ld[1]} {ld[2]}')"
+               "\" 2>/dev/null || "
+               "awk '{u=$1/100} NR==1{printf u}' /proc/uptime && "
+               "echo '|0|unknown|0 0 0'")
+        _, stdout, _ = client.exec_command(cmd, timeout=10)
+        out = stdout.read().decode().strip()
+        client.close()
+        parts = out.split('|')
+        if len(parts) >= 4:
+            return jsonify({
+                'cpu':    float(parts[0]) if parts[0] else 0,
+                'ram':    float(parts[1]) if parts[1] else 0,
+                'uptime': parts[2] or '--',
+                'load':   parts[3] or '--'
+            })
+        return jsonify({'error': 'parse error', 'raw': out})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Entry point — MUST be at the end so all routes are registered first
 # ─────────────────────────────────────────────────────────────────────────────
 
