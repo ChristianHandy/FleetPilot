@@ -4220,21 +4220,29 @@ def api_smart_status():
 @login_required
 def api_fans_list_alias():
     """API: List fan controller devices — alias for /api/fans/devices."""
-    return redirect(url_for('api_fans_devices'))
+    return redirect(url_for('api_fc_devices'))
 
 
 @app.route('/api/backup/list')
 @login_required
 def api_backup_list_alias():
     """API: List backup servers — alias for /api/backup/servers."""
-    return redirect(url_for('api_backup_servers'))
+    try:
+        servers = _bc.list_servers()
+        return jsonify({'servers': servers})
+    except Exception as e:
+        return jsonify({'servers': [], 'error': str(e)})
 
 
 @app.route('/api/monitor/data')
 @login_required
 def api_monitor_data_alias():
     """API: Monitor data — alias for /api/monitor/latest."""
-    return redirect(url_for('api_monitor_latest'))
+    try:
+        data = system_monitor.get_latest()
+        return jsonify(data if data else {})
+    except Exception as e:
+        return jsonify({'error': str(e)})
 
 
 @app.route('/api/hw_overview')
@@ -4277,7 +4285,7 @@ def api_fp_version():
 @login_required
 def twofa_setup_alias():
     """Alias: /2fa/setup → /2fa (2FA management page)."""
-    return redirect(url_for('twofa_page'))
+    return redirect(url_for('tfa_setup'))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
