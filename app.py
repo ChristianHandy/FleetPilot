@@ -262,6 +262,13 @@ with app.app_context():
     corsair_commander.start_polling()
     _bc.init_db(DATA_DIR)
     _bc.start_all_polling()
+    # Scheduled Shutdown
+    try:
+        import scheduled_shutdown as _ss_init
+        _ss_init.init_db(DATA_DIR)
+        _ss_init.start_polling()
+    except Exception as _ss_err:
+        print(f'[Scheduled Shutdown] Init error: {_ss_err}')
     # HW Monitor — init_db and start_polling only; register_routes called after login_required is defined
     try:
         _hw.init_db(DATA_DIR)
@@ -4393,6 +4400,103 @@ def host_wol(name):
 def api_host_wol(name):
     """Alias for WOL via API."""
     return host_wol(name)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Scheduled Shutdown Routes
+# ─────────────────────────────────────────────────────────────────────────────
+
+import scheduled_shutdown as _ss
+
+
+@app.route('/shutdown_schedule')
+@login_required
+def shutdown_schedule_index():
+    schedules = _ss.list_schedules()
+    log = _ss.get_log(limit=30)
+    known_hosts = load_hosts()
+    return render_template('scheduled_shutdown.html',
+                           schedules=schedules, log=log,
+                           known_hosts=known_hosts)
+
+
+@app.route('/shutdown_schedule/add', methods=['POST'])
+@login_required
+def shutdown_schedule_add():
+    days = request.form.getlist('days')
+    _ss.add_schedule(
+        name=request.form.get('name', ''),
+        host=request.form.get('host', ''),
+        port=int(request.form.get('port', 22)),
+        username=request.form.get('username', 'root'),
+        password=request.form.get('password', ''),
+        ssh_key=request.form.get('ssh_key', ''),
+        shutdown_time=request.form.get('shutdown_time', '23:00'),
+        days=days,
+        enabled=bool(request.form.get('enabled')),
+        warn_minutes=int(request.form.get('warn_minutes', 5)),
+        action=request.form.get('action', 'shutdown'),
+    )
+    flash('Schedule added.', 'success')
+    return redirect('/shutdown_schedule')
+
+
+@app.route('/shutdown_schedule/<int:sid>/edit', methods=['POST'])
+@login_required
+def shutdown_schedule_edit(sid):
+    days = request.form.getlist('days')
+    _ss.update_schedule(sid,
+        name=request.form.get('name', ''),
+        host=request.form.get('host', ''),
+        port=int(request.form.get('port', 22)),
+        username=request.form.get('username', 'root'),
+        password=request.form.get('password') or _ss.get_schedule(sid).get('password', ''),
+        ssh_key=request.form.get('ssh_key', ''),
+        shutdown_time=request.form.get('shutdown_time', '23:00'),
+        days=days,
+        enabled=bool(request.form.get('enabled')),
+        warn_minutes=int(request.form.get('warn_minutes', 5)),
+        action=request.form.get('action', 'shutdown'),
+    )
+    flash('Schedule updated.', 'success')
+    return redirect('/shutdown_schedule')
+
+
+@app.route('/shutdown_schedule/<int:sid>/delete', methods=['POST'])
+@login_required
+def shutdown_schedule_delete(sid):
+    _ss.delete_schedule(sid)
+    flash('Schedule deleted.', 'success')
+    return redirect('/shutdown_schedule')
+
+
+@app.route('/shutdown_schedule/<int:sid>/toggle', methods=['POST'])
+@login_required
+def shutdown_schedule_toggle(sid):
+    s = _ss.get_schedule(sid)
+    if s:
+        _ss.update_schedule(sid, enabled=0 if s['enabled'] else 1)
+    return jsonify({'ok': True})
+
+
+@app.route('/shutdown_schedule/<int:sid>/run_now', methods=['POST'])
+@login_required
+def shutdown_schedule_run_now(sid):
+    s = _ss.get_schedule(sid)
+    if not s:
+        return jsonify({'ok': False, 'error': 'Schedule not found'}), 404
+    ok, msg = _ss._execute_action(s)
+    status = 'success' if ok else 'error'
+    _ss._log_run(sid, s['host'], s['action'], status, msg)
+    if ok:
+        return jsonify({'ok': True, 'message': f'Action executed on {s["host"]}'})
+    return jsonify({'ok': False, 'error': msg})
+
+
+@app.route('/api/shutdown_schedule')
+@login_required
+def api_shutdown_schedule_list():
+    return jsonify(_ss.list_schedules())
 
 
 # ─────────────────────────────────────────────────────────────────────────────
