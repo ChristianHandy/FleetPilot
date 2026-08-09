@@ -1,0 +1,339 @@
+"""
+Version Manager Module
+Handles checking for new dashboard versions from GitHub and managing update notifications.
+"""
+
+import json
+import logging
+import os
+import re
+import time
+import shutil
+import subprocess
+import requests
+from datetime import datetime, timedelta
+
+# Get logger for this module
+logger = logging.getLogger(__name__)
+
+VERSION_CHECK_FILE = "version_check.json"  # legacy fallback path (see init())
+GITHUB_REPO = "ChristianHandy/fleetpilot"
+GITHUB_API_BASE = "https://api.github.com"
+
+_DATA_DIR = None  # set via init(); see _version_check_path()
+
+
+def init(data_dir):
+    """
+    Point version_manager at the app's persistent data directory.
+
+    Called once at startup (app.py). Before this, version_check.json was
+    read/written as a bare relative path, which resolves against whatever
+    the process's current working directory happens to be — fine when
+    running `python3 app.py` from the repo root by hand, unreliable under
+    systemd/supervisord/Docker where the working directory may differ.
+    Also migrates a legacy copy of the file into place if found, so an
+    existing "update available" / dismissed-notification state isn't
+    silently lost on upgrade.
+    """
+    global _DATA_DIR
+    _DATA_DIR = data_dir
+    try:
+        legacy_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), VERSION_CHECK_FILE)
+        target_path = _version_check_path()
+        if os.path.exists(legacy_path) and legacy_path != target_path and not os.path.exists(target_path):
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+            shutil.move(legacy_path, target_path)
+    except Exception as e:
+        logger.warning(f"Could not migrate legacy version_check.json: {e}")
+
+
+def _version_check_path():
+    if _DATA_DIR:
+        return os.path.join(_DATA_DIR, VERSION_CHECK_FILE)
+    return VERSION_CHECK_FILE
+
+def load_version_data():
+    """Load version check data from file"""
+    try:
+        path = _version_check_path()
+        if os.path.exists(path):
+            with open(path, "r") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {
+        "last_check": None,
+        "current_version": None,
+        "latest_version": None,
+        "update_available": False,
+        "update_type": None,  # "release" or "commit"
+        "update_url": None,
+        "update_description": None,
+        "notification_dismissed": False,
+        "last_notified": None
+    }
+
+def save_version_data(data):
+    """Save version check data to file"""
+    with open(_version_check_path(), "w") as f:
+        json.dump(data, f, indent=2)
+
+def get_current_commit_sha():
+    """Get the current commit SHA of the local repository"""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return None
+
+def sanitize_branch_name(branch):
+    """
+    Security: Validate and sanitize git branch names to prevent command injection.
+    Only allows alphanumeric characters, hyphens, underscores, and dots in branch segments,
+    with forward slashes as path separators for hierarchical branch names.
+    Branch names must start with alphanumeric characters to prevent flag injection.
+    Branch names are limited to 255 characters.
+    """
+    if not branch or not isinstance(branch, str):
+        raise ValueError("Branch name cannot be empty or non-string")
+    
+    # Additional safety check: prevent absolute paths
+    if branch.startswith('/'):
+        raise ValueError("Branch name contains invalid characters or format")
+    
+    # Only allow safe characters for branch names with reasonable length limit
+    # Pattern requires alphanumeric start to prevent flag injection (e.g., -rf)
+    # Allows dots for version tags (e.g., release/v1.2.3) but prevents path traversal
+    if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9._-]*(?:/[a-zA-Z0-9][a-zA-Z0-9._-]*)*$', branch):
+        raise ValueError("Branch name contains invalid characters or format")
+    
+    # Additional safety check: prevent path traversal attempts
+    # Check for .. (consecutive dots), /./ patterns, and trailing dots
+    if '..' in branch or re.search(r'/\./', branch) or branch.endswith('.'):
+        raise ValueError("Branch name contains invalid path traversal patterns")
+    
+    # Additional safety check: limit total length
+    if len(branch) > 255:
+        raise ValueError("Branch name exceeds maximum length of 255 characters")
+    
+    return branch
+
+def get_current_branch():
+    """Get the current git branch"""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode == 0:
+            branch = result.stdout.strip()
+            # Sanitize the branch name before returning
+            try:
+                return sanitize_branch_name(branch)
+            except ValueError as e:
+                # Log failed sanitization for security monitoring
+                logger.warning(f"Branch name sanitization failed, falling back to 'main': {e}")
+                return "main"
+    except Exception as e:
+        logger.error(f"Error getting current branch: {e}")
+    return "main"
+
+def check_for_updates():
+    """
+    Check GitHub for new versions (releases or commits).
+    Returns updated version data.
+    """
+    data = load_version_data()
+    current_sha = get_current_commit_sha()
+    branch = get_current_branch()
+    
+    data["current_version"] = current_sha
+    data["last_check"] = datetime.now().isoformat()
+    
+    try:
+        # First, check for latest release
+        release_url = f"{GITHUB_API_BASE}/repos/{GITHUB_REPO}/releases/latest"
+        response = requests.get(release_url, timeout=10)
+        
+        if response.status_code == 200:
+            release = response.json()
+            latest_release_sha = release.get("target_commitish", "")
+            
+            # Check if release is newer than current
+            if latest_release_sha and current_sha and latest_release_sha != current_sha:
+                data["update_available"] = True
+                data["update_type"] = "release"
+                data["latest_version"] = release.get("tag_name", "Unknown")
+                data["update_url"] = release.get("html_url")
+                data["update_description"] = release.get("name", "New release available")
+                data["notification_dismissed"] = False
+                save_version_data(data)
+                return data
+        
+        # If no newer release, check for latest commit on current branch
+        commit_url = f"{GITHUB_API_BASE}/repos/{GITHUB_REPO}/commits/{branch}"
+        response = requests.get(commit_url, timeout=10)
+        
+        if response.status_code == 200:
+            commit = response.json()
+            latest_sha = commit.get("sha", "")
+            
+            if latest_sha and current_sha and latest_sha != current_sha:
+                data["update_available"] = True
+                data["update_type"] = "commit"
+                data["latest_version"] = latest_sha[:7]  # Short SHA
+                data["update_url"] = commit.get("html_url")
+                commit_msg = commit.get("commit", {}).get("message", "").split("\n")[0]
+                data["update_description"] = f"New commit: {commit_msg}"
+                data["notification_dismissed"] = False
+                save_version_data(data)
+                return data
+            else:
+                # No update available
+                data["update_available"] = False
+                data["update_type"] = None
+                
+    except Exception as e:
+        # Log error but don't crash
+        print(f"Error checking for updates: {e}")
+    
+    save_version_data(data)
+    return data
+
+def should_check_for_updates(check_interval_hours=24):
+    """
+    Determine if we should check for updates based on last check time.
+    Default: check every 24 hours.
+    """
+    data = load_version_data()
+    last_check = data.get("last_check")
+    
+    if not last_check:
+        return True
+    
+    try:
+        last_check_dt = datetime.fromisoformat(last_check)
+        if datetime.now() - last_check_dt > timedelta(hours=check_interval_hours):
+            return True
+    except Exception:
+        return True
+    
+    return False
+
+def dismiss_notification():
+    """Mark the current update notification as dismissed"""
+    data = load_version_data()
+    data["notification_dismissed"] = True
+    data["last_notified"] = datetime.now().isoformat()
+    save_version_data(data)
+
+def get_update_notification():
+    """
+    Get update notification data if an update is available and not dismissed.
+    Returns None if no notification should be shown.
+    """
+    data = load_version_data()
+    
+    if data.get("update_available") and not data.get("notification_dismissed"):
+        return {
+            "type": data.get("update_type"),
+            "version": data.get("latest_version"),
+            "description": data.get("update_description"),
+            "url": data.get("update_url")
+        }
+    
+    return None
+
+def perform_self_update(preserve_configs=True):
+    """
+    Update the dashboard to the latest version while preserving configurations.
+    Returns (success, message)
+    """
+    try:
+        repo_dir = os.path.dirname(os.path.abspath(__file__))
+        data_dir = _DATA_DIR or os.path.join(repo_dir, "data")
+        backup_dir = "/tmp/fleetpilot_update_backup_" + str(int(time.time()))
+        env_path = os.path.join(repo_dir, ".env")
+
+        if preserve_configs:
+            # Back up the whole persistent data directory — hosts, update
+            # history, every module's database (servers, disks, fan
+            # devices, ...), version_check.json. Everything mutable lives
+            # under DATA_DIR now, so backing it up as a unit (rather than
+            # an explicit filename list) stays correct as modules change.
+            #
+            # In the default setup this is redundant insurance: DATA_DIR
+            # defaults to <repo>/data, which is gitignored, so the
+            # `git reset --hard` below never touches it — reset --hard
+            # only ever affects *tracked* files. Kept anyway in case that
+            # assumption stops holding (e.g. DATA_DIR pointed somewhere
+            # unusual, or data/ ever removed from .gitignore).
+            os.makedirs(backup_dir, exist_ok=True)
+            if os.path.isdir(data_dir):
+                shutil.copytree(data_dir, os.path.join(backup_dir, "data"), dirs_exist_ok=True)
+            if os.path.exists(env_path):
+                shutil.copy2(env_path, os.path.join(backup_dir, ".env"))
+
+        # Fetch latest changes
+        result = subprocess.run(
+            ["git", "fetch", "origin"],
+            cwd=repo_dir,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        if result.returncode != 0:
+            return False, f"Failed to fetch updates: {result.stderr}"
+        
+        # Get current branch (already sanitized by get_current_branch)
+        branch = get_current_branch()
+        
+        # Pull latest changes
+        result = subprocess.run(
+            ["git", "reset", "--hard", f"origin/{branch}"],
+            cwd=repo_dir,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        if result.returncode != 0:
+            return False, f"Failed to update: {result.stderr}"
+        
+        if preserve_configs:
+            # Restore the data directory (merges the backup back in
+            # without wiping anything the reset may have added, e.g. a
+            # migration shipping new default files)
+            backed_up_data = os.path.join(backup_dir, "data")
+            if os.path.isdir(backed_up_data):
+                os.makedirs(data_dir, exist_ok=True)
+                shutil.copytree(backed_up_data, data_dir, dirs_exist_ok=True)
+            backed_up_env = os.path.join(backup_dir, ".env")
+            if os.path.exists(backed_up_env):
+                shutil.copy2(backed_up_env, env_path)
+            shutil.rmtree(backup_dir, ignore_errors=True)
+        
+        # Update version data
+        data = load_version_data()
+        data["current_version"] = get_current_commit_sha()
+        data["update_available"] = False
+        data["notification_dismissed"] = False
+        save_version_data(data)
+        
+        return True, "Dashboard updated successfully. Please restart the application."
+        
+    except Exception as e:
+        return False, f"Update failed: {str(e)}"

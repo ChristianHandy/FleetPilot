@@ -1,0 +1,966 @@
+{% extends "base.html" %}
+
+{% block title %}Home — FleetPilot{% endblock %}
+{% block page_icon %}&#x1F3E0;{% endblock %}
+{% block page_title %}{{ _('Home') }}{% endblock %}
+
+{% block head %}
+<style>
+/* ── Dashboard Customization ─────────────────────────────────────────────── */
+.dash-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+.dash-toolbar-title {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-right: auto;
+}
+.dash-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  transition: background 0.15s, color 0.15s;
+}
+.dash-edit-btn:hover { background: var(--accent-blue); color: #fff; border-color: var(--accent-blue); }
+.dash-edit-btn.active { background: var(--accent-blue); color: #fff; border-color: var(--accent-blue); }
+.dash-edit-btn.danger:hover { background: #e53e3e; color: #fff; border-color: #e53e3e; }
+
+/* Widget wrapper */
+.dash-widget {
+  position: relative;
+  transition: opacity 0.2s;
+}
+.dash-widget.hidden-widget { display: none; }
+.dash-widget.edit-mode { cursor: grab; }
+.dash-widget.edit-mode:active { cursor: grabbing; }
+.dash-widget.drag-over { outline: 2px dashed var(--accent-blue); border-radius: var(--radius-md); }
+
+/* Edit-mode overlay on each widget */
+.widget-controls {
+  display: none;
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 10;
+  gap: 0.3rem;
+}
+.edit-mode .widget-controls { display: flex; }
+.widget-ctrl-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s;
+}
+.widget-ctrl-btn:hover { transform: scale(1.15); }
+.widget-ctrl-hide { background: #e53e3e; color: #fff; }
+.widget-ctrl-drag { background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border); cursor: grab; }
+
+/* Drag handle indicator */
+.edit-mode .dash-widget::before {
+  content: '⠿';
+  position: absolute;
+  top: 0.5rem;
+  left: 0.75rem;
+  font-size: 1.1rem;
+  color: var(--accent-blue);
+  opacity: 0.6;
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* Hidden-widget panel in edit mode */
+.hidden-widgets-panel {
+  display: none;
+  background: var(--bg-elevated);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+}
+.hidden-widgets-panel.visible { display: block; }
+.hidden-widget-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.75rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.15s;
+  margin: 0.25rem;
+}
+.hidden-widget-chip:hover { background: var(--accent-blue); color: #fff; border-color: var(--accent-blue); }
+
+/* Size toggle */
+.widget-size-toggle {
+  display: none;
+  gap: 0.2rem;
+  margin-top: 0.3rem;
+}
+.edit-mode .widget-size-toggle { display: flex; }
+.size-btn {
+  padding: 0.15rem 0.5rem;
+  font-size: 0.7rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  cursor: pointer;
+  color: var(--text-muted);
+}
+.size-btn.active { background: var(--accent-blue); color: #fff; border-color: var(--accent-blue); }
+
+/* Two-column grid for half-width widgets */
+.dash-grid-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+@media (max-width: 768px) { .dash-grid-2col { grid-template-columns: 1fr; } }
+
+/* Stat grid */
+.stat-grid-v2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# Build a lookup from widget id → widget config #}
+{% set wmap = {} %}
+{% for w in dashboard_layout.widgets %}
+  {% set _ = wmap.update({w.id: w}) %}
+{% endfor %}
+
+{# Sort widgets by order #}
+{% set sorted_widgets = dashboard_layout.widgets | sort(attribute='order') %}
+
+<!-- ── Update Notification ──────────────────────────────────────────────── -->
+{% if update_notification %}
+<div class="card card-blue" style="margin-bottom:1.5rem;">
+  <div class="card-header">
+    <h3>&#x1F514; {{ _('Dashboard Update Available') }}</h3>
+    <span class="badge badge-blue">{{ update_notification.type }}</span>
+  </div>
+  <p><strong>{{ update_notification.description }}</strong><br>
+     <span class="text-muted">{{ _('Version') }} {{ update_notification.version }}</span></p>
+  <div class="btn-group">
+    {% if is_admin %}
+    <a class="btn btn-success btn-sm" href="/dashboard_version/update">&#x2B06; {{ _('Update Now') }}</a>
+    {% endif %}
+    <a class="btn btn-purple btn-sm" href="/dashboard_version/check">&#x1F504; {{ _('Check Again') }}</a>
+    {% if update_notification.url %}
+    <a class="btn btn-secondary btn-sm" href="{{ update_notification.url }}" target="_blank">&#x1F517; GitHub</a>
+    {% endif %}
+    <a class="btn btn-ghost btn-sm" href="/dashboard_version/dismiss">&#x2715; {{ _('Dismiss') }}</a>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── Customization Toolbar ─────────────────────────────────────────────── -->
+<div class="dash-toolbar" id="dashToolbar">
+  <span class="dash-toolbar-title" id="dashToolbarHint"></span>
+  <button class="dash-edit-btn" id="btnEditMode" onclick="toggleEditMode()">
+    &#x270F;&#xFE0F; {{ _('Customize') }}
+  </button>
+  <button class="dash-edit-btn danger" id="btnReset" onclick="resetLayout()" style="display:none;">
+    &#x21BA; {{ _('Reset to Default') }}
+  </button>
+  <button class="dash-edit-btn" id="btnSave" onclick="saveLayout()" style="display:none;background:var(--accent-green,#38a169);color:#fff;border-color:var(--accent-green,#38a169);">
+    &#x1F4BE; {{ _('Save Layout') }}
+  </button>
+</div>
+
+<!-- ── Hidden Widgets Panel ──────────────────────────────────────────────── -->
+<div class="hidden-widgets-panel" id="hiddenWidgetsPanel">
+  <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.5rem;">
+    &#x1F441; {{ _('Hidden widgets — click to show') }}:
+  </div>
+  <div id="hiddenWidgetChips"></div>
+</div>
+
+<!-- ── Widget Container ───────────────────────────────────────────────────── -->
+<div id="dashboardContainer">
+
+{% for w in sorted_widgets %}
+{% set wid = w.id %}
+
+{# ── STAT GRID ── #}
+{% if wid == 'stat_grid' %}
+<div class="dash-widget{% if not w.visible %} hidden-widget{% endif %}"
+     data-widget-id="stat_grid" data-widget-title="{{ _('Quick Stats') }}" data-size="{{ w.size }}">
+  <div class="widget-controls">
+    <button class="widget-ctrl-btn widget-ctrl-hide" title="{{ _('Hide') }}" onclick="hideWidget('stat_grid')">&#x2715;</button>
+  </div>
+  <div class="stat-grid-v4">
+    {% set _cards = [
+      ('total',    'blue',   ICON_SERVER,       _('Total Servers'),     '#3b82f6', host_count),
+      ('online',   'green',  ICON_ACTIVITY,     _('Online'),            '#10b981', online_count),
+      ('offline',  'red',    ICON_XCIRCLE,      _('Offline'),           '#ef4444', offline_count),
+      ('updates',  'amber',  ICON_DOWNLOAD,      _('Updates Available'), '#f59e0b', updates_needed_count),
+      ('warnings', 'purple', ICON_ALERTTRIANGLE, _('Warnings'),          '#8b5cf6', warnings_count),
+    ] %}
+    {% for key, tone, icon, label, hex, value in _cards %}
+    {% set t = stat_trends.get(key, {'direction': 'flat', 'pct_text': '0%', 'sparkline': ''}) %}
+    <div class="stat-card-v4 {{ tone }}">
+      <div class="sc4-top">
+        <div>
+          <div class="sc4-value">{{ value }}</div>
+          <div class="sc4-label">{{ label }}</div>
+        </div>
+        <div class="sc4-icon {{ tone }}">{{ icon|safe }}</div>
+      </div>
+      <div class="sc4-trend {{ t.direction }}">
+        {%- if t.direction == 'up' %}&#x2191; {{ t.pct_text }}
+        {%- elif t.direction == 'down' %}&#x2193; {{ t.pct_text }}
+        {%- else %}&#x2014; 0%{% endif %} {{ _('from last 7 days') }}
+      </div>
+      {% if t.sparkline %}
+      <svg class="sc4-sparkline" viewBox="0 0 100 32" preserveAspectRatio="none">
+        <polyline points="{{ t.sparkline }}" fill="none" stroke="{{ hex }}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{# ── VM SUMMARY ── #}
+{% if wid == 'vm_summary' %}
+<div class="dash-widget{% if not w.visible %} hidden-widget{% endif %}"
+     data-widget-id="vm_summary" data-widget-title="VM Controllers" data-size="{{ w.size }}" style="margin-bottom:1.5rem;">
+  <div class="widget-controls">
+    <button class="widget-ctrl-btn widget-ctrl-hide" title="{{ _('Hide') }}" onclick="hideWidget('vm_summary')">&#x2715;</button>
+  </div>
+  <div class="card" style="padding:1.1rem 1.25rem;height:100%;">
+    <div class="card-header" style="margin-bottom:0.75rem;">
+      <h3>&#x1F5A5; VM Controllers</h3>
+      <a class="btn btn-secondary btn-sm" href="/vm">{{ _('Manage') }}</a>
+    </div>
+    {% if vm_endpoints %}
+    <div style="display:flex;flex-direction:column;gap:0.4rem;">
+      {% for ep in vm_endpoints[:6] %}
+      <div style="display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0.6rem;background:var(--bg-elevated);border-radius:var(--radius-md);border:1px solid var(--border);">
+        <span style="font-size:0.85rem;font-weight:600;min-width:100px;">{{ ep.name }}</span>
+        <span class="badge badge-blue" style="font-size:0.65rem;">{{ ep.platform|default('proxmox') }}</span>
+        <span style="font-size:0.75rem;color:var(--text-muted);flex:1;">{{ ep.host }}</span>
+        <a href="/vm/{{ ep.id }}" class="btn btn-ghost btn-sm" style="padding:0.15rem 0.5rem;font-size:0.7rem;">&#x1F50D;</a>
+      </div>
+      {% endfor %}
+      {% if vm_endpoints|length > 6 %}
+      <a href="/vm" style="font-size:0.78rem;color:var(--accent-blue);text-align:center;padding-top:0.3rem;">
+        +{{ vm_endpoints|length - 6 }} {{ _('more') }} →
+      </a>
+      {% endif %}
+    </div>
+    {% else %}
+    <p class="text-muted" style="font-size:0.85rem;">{{ _('No VM controllers configured.') }}
+      <a href="/vm/add">{{ _('Add one') }}</a></p>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{# ── STORAGE SUMMARY ── #}
+{% if wid == 'storage_summary' %}
+<div class="dash-widget{% if not w.visible %} hidden-widget{% endif %}"
+     data-widget-id="storage_summary" data-widget-title="Storage Controllers" data-size="{{ w.size }}" style="margin-bottom:1.5rem;">
+  <div class="widget-controls">
+    <button class="widget-ctrl-btn widget-ctrl-hide" title="{{ _('Hide') }}" onclick="hideWidget('storage_summary')">&#x2715;</button>
+  </div>
+  <div class="card" style="padding:1.1rem 1.25rem;height:100%;">
+    <div class="card-header" style="margin-bottom:0.75rem;">
+      <h3>&#x1F5C4; Storage Controllers</h3>
+      <a class="btn btn-secondary btn-sm" href="/storage">{{ _('Manage') }}</a>
+    </div>
+    {% if storage_endpoints %}
+    <div style="display:flex;flex-direction:column;gap:0.4rem;">
+      {% for ep in storage_endpoints[:6] %}
+      <div style="display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0.6rem;background:var(--bg-elevated);border-radius:var(--radius-md);border:1px solid var(--border);">
+        <span style="font-size:0.85rem;font-weight:600;min-width:100px;">{{ ep.name }}</span>
+        <span class="badge badge-purple" style="font-size:0.65rem;">{{ ep.platform|default('truenas') }}</span>
+        <span style="font-size:0.75rem;color:var(--text-muted);flex:1;">{{ ep.host }}</span>
+        <a href="/storage/{{ ep.id }}" class="btn btn-ghost btn-sm" style="padding:0.15rem 0.5rem;font-size:0.7rem;">&#x1F50D;</a>
+      </div>
+      {% endfor %}
+      {% if storage_endpoints|length > 6 %}
+      <a href="/storage" style="font-size:0.78rem;color:var(--accent-blue);text-align:center;padding-top:0.3rem;">
+        +{{ storage_endpoints|length - 6 }} {{ _('more') }} →
+      </a>
+      {% endif %}
+    </div>
+    {% else %}
+    <p class="text-muted" style="font-size:0.85rem;">{{ _('No storage controllers configured.') }}
+      <a href="/storage/add">{{ _('Add one') }}</a></p>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{# ── FAN & COOLING ── #}
+{% if wid == 'fan_cooling' %}
+<div class="dash-widget{% if not w.visible %} hidden-widget{% endif %}"
+     data-widget-id="fan_cooling" data-widget-title="Fan &amp; Cooling" data-size="{{ w.size }}">
+  <div class="widget-controls">
+    <button class="widget-ctrl-btn widget-ctrl-hide" title="{{ _('Hide') }}" onclick="hideWidget('fan_cooling')">&#x2715;</button>
+  </div>
+  <div class="card-v4" style="height:100%;">
+    <div class="card-v4-header">
+      <div class="card-v4-header-title">{{ ICON_FAN|safe }} Fan &amp; Cooling</div>
+      <a class="btn btn-sm btn-outline-secondary" href="/fans" style="font-size:0.75rem;padding:0.25rem 0.65rem;">{{ _('View Details') }}</a>
+    </div>
+    <div class="card-v4-body">
+      {% if local_sensors.available %}
+        {% if local_sensors.temps %}
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-bottom:1rem;">
+          {% for t in local_sensors.temps %}
+          <div class="temp-chip-v4 {{ t.css_class }}" style="flex:1;min-width:90px;">
+            <div class="tc-icon">{{ {'CPU': ICON_CPU, 'GPU': ICON_GPU, 'NVMe': ICON_HARDDRIVE}.get(t.label, ICON_CPU)|safe }}</div>
+            <div class="tc-val">{{ t.value }}{{ t.unit }}</div>
+            <div class="tc-label">{{ t.label }} &middot; {{ t.status }}</div>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% if local_sensors.fans %}
+        <div style="overflow-x:auto;">
+          <table class="fleet-table sensor-table">
+            <thead>
+              <tr><th>{{ _('Sensor') }}</th><th>RPM</th><th>Status</th><th>{{ _('Control') }}</th></tr>
+            </thead>
+            <tbody>
+              {% for f in local_sensors.fans %}
+              <tr>
+                <td style="display:flex;align-items:center;gap:0.5rem;font-weight:600;">{{ ICON_FAN|safe }} {{ f.label }}</td>
+                <td class="ip-mono">{{ f.rpm }} RPM</td>
+                <td><span class="status-pill online">{{ f.status }}</span></td>
+                <td><span class="control-pill">{{ _('Auto') }} &#x25BE;</span></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+      {% else %}
+      <div style="text-align:center;padding:1.5rem 1rem;color:var(--text-muted);">
+        <div style="margin-bottom:0.6rem;opacity:0.6;">{{ ICON_FAN|safe }}</div>
+        <p style="font-size:0.85rem;margin-bottom:0.6rem;">{{ _('No local temperature or fan sensors detected on this machine.') }}</p>
+        <a class="btn btn-secondary btn-sm" href="/fans">{{ _('Connect a fan controller device') }} &rarr;</a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ── SMART SUMMARY ── #}
+{% if wid == 'smart_summary' %}
+<div class="dash-widget{% if not w.visible %} hidden-widget{% endif %}"
+     data-widget-id="smart_summary" data-widget-title="SMART / Disk Health" data-size="{{ w.size }}">
+  <div class="widget-controls">
+    <button class="widget-ctrl-btn widget-ctrl-hide" title="{{ _('Hide') }}" onclick="hideWidget('smart_summary')">&#x2715;</button>
+  </div>
+  <div class="card-v4" style="height:100%;">
+    <div class="card-v4-header">
+      <div class="card-v4-header-title">{{ ICON_HARDDRIVE|safe }} SMART {{ _('Disk Health') }}</div>
+      <a class="btn btn-sm btn-outline-secondary" href="/smart" style="font-size:0.75rem;padding:0.25rem 0.65rem;">{{ _('View All Disks') }} &rarr;</a>
+    </div>
+    <div class="card-v4-body" style="padding:0;">
+      {% if smart_disks %}
+      {% set _health_pct = {'GOOD': 100, 'WARNING': 60, 'CRITICAL': 25, 'FAILED': 5} %}
+      <div style="overflow-x:auto;">
+        <table class="fleet-table">
+          <thead>
+            <tr><th>{{ _('Disk') }}</th><th>{{ _('Model') }}</th><th>{{ _('Capacity') }}</th><th style="min-width:120px;">{{ _('Health') }}</th><th>{{ _('Temp') }}</th><th>{{ _('Status') }}</th></tr>
+          </thead>
+          <tbody>
+            {% for d in smart_disks[:8] %}
+            {% set h = d.health or 'UNKNOWN' %}
+            {% set pct = _health_pct.get(h, 50) %}
+            <tr>
+              <td class="ip-mono">{{ d.device }}</td>
+              <td>{{ d.model or _('Unknown') }}</td>
+              <td>{{ d.capacity_display }}</td>
+              <td>
+                <div class="health-bar-wrap">
+                  <div class="health-bar"><div class="health-bar-fill {{ h|lower }}" style="width:{{ pct }}%"></div></div>
+                  <span class="health-pct">{{ pct }}%</span>
+                </div>
+              </td>
+              <td class="ip-mono">{{ d.temp_display }}</td>
+              <td>
+                {% if h == 'GOOD' %}<span class="status-pill online">GOOD</span>
+                {% elif h == 'WARNING' %}<span class="status-pill warning">WARNING</span>
+                {% elif h in ('CRITICAL', 'FAILED') %}<span class="status-pill critical">{{ h }}</span>
+                {% else %}<span class="status-pill offline">UNKNOWN</span>{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% set _bad = (smart_summary.counts.WARNING|default(0)) + (smart_summary.counts.CRITICAL|default(0)) + (smart_summary.counts.FAILED|default(0)) %}
+      <div class="alert alert-success" style="margin:1rem;{% if _bad > 0 %}display:none;{% endif %}">
+        &#x2714; {{ _('All disks are operating within normal parameters.') }}
+      </div>
+      {% if _bad > 0 %}
+      <div class="alert alert-warning" style="margin:1rem;">
+        &#x26A0; {{ _bad }} {{ _('disk(s) need attention') }} &mdash; {{ _('check the SMART dashboard for details.') }}
+      </div>
+      {% endif %}
+      {% else %}
+      <p class="text-muted" style="font-size:0.85rem;padding:1.1rem 1.25rem;">{{ _('No SMART data available yet.') }}</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# ── FLEET OVERVIEW ── #}
+{% if wid == 'fleet_overview' and hosts %}
+<div class="dash-widget{% if not w.visible %} hidden-widget{% endif %}"
+     data-widget-id="fleet_overview" data-widget-title="{{ _('Fleet Overview') }}" data-size="{{ w.size }}" style="margin-bottom:1.5rem;">
+  <div class="widget-controls">
+    <button class="widget-ctrl-btn widget-ctrl-hide" title="{{ _('Hide') }}" onclick="hideWidget('fleet_overview')">&#x2715;</button>
+  </div>
+  <div class="card-v4">
+    <div class="card-v4-header">
+      <div class="card-v4-header-title">
+        <span style="font-size:1rem;">&#x1F5A7;</span> {{ _('Fleet Overview') }}
+      </div>
+      <a class="btn btn-sm btn-outline-secondary" href="/hosts" style="font-size:0.75rem;padding:0.25rem 0.65rem;">{{ _('View All Hosts') }} →</a>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="fleet-table" id="fleetTable">
+        <thead>
+          <tr>
+            <th>{{ _('Hostname') }}</th>
+            <th>{{ _('IP Address') }}</th>
+            <th style="min-width:130px;">CPU Usage</th>
+            <th style="min-width:130px;">RAM Usage</th>
+            <th>Status</th>
+            <th>Uptime</th>
+            <th>Load Average</th>
+            <th style="width:32px;"></th>
+          </tr>
+        </thead>
+        <tbody id="fleetTableBody">
+          {% for name, h in hosts.items() %}
+          <tr data-host="{{ name }}" data-ip="{{ h.host }}">
+            <td>
+              <div class="host-name-cell">
+                <span class="host-dot online" id="dot-{{ loop.index }}"></span>
+                <span style="display:flex;align-items:center;gap:0.4rem;">
+                  <span style="font-size:0.85rem;">&#x1F5A5;</span>
+                  <a href="/hosts" style="color:var(--text-primary);font-weight:700;text-decoration:none;">{{ name }}</a>
+                </span>
+              </div>
+            </td>
+            <td><span class="ip-mono">{{ h.host }}</span></td>
+            <td>
+              <div class="usage-bar-wrap" id="cpu-{{ loop.index }}">
+                <div class="usage-bar"><div class="usage-bar-fill low" style="width:0%"></div></div>
+                <span class="usage-pct">--</span>
+              </div>
+            </td>
+            <td>
+              <div class="usage-bar-wrap" id="ram-{{ loop.index }}">
+                <div class="usage-bar"><div class="usage-bar-fill low" style="width:0%"></div></div>
+                <span class="usage-pct">--</span>
+              </div>
+            </td>
+            <td><span class="status-pill online" id="status-{{ loop.index }}">ONLINE</span></td>
+            <td><span class="uptime-badge" id="uptime-{{ loop.index }}">--</span></td>
+            <td><span class="load-avg" id="load-{{ loop.index }}">--</span></td>
+            <td>
+              <button style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:1rem;padding:0.2rem;" title="More">&#x22EE;</button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+<script>
+// Live Fleet Metrics
+(function() {
+  var rows = document.querySelectorAll('#fleetTableBody tr[data-host]');
+  var idx = 1;
+  rows.forEach(function(row) {
+    var i = idx++;
+    var ip = row.dataset.ip;
+    if (!ip) return;
+    // Fetch live metrics via SSH (via FleetPilot API)
+    fetch('/api/host_metrics?host=' + encodeURIComponent(row.dataset.host))
+      .then(function(r){ return r.json(); })
+      .then(function(d) {
+        if (!d || d.error) {
+          var dot = document.getElementById('dot-'+i);
+          if (dot) { dot.className = 'host-dot offline'; }
+          var st = document.getElementById('status-'+i);
+          if (st) { st.className = 'status-pill offline'; st.textContent = 'OFFLINE'; }
+          return;
+        }
+        // CPU
+        var cpuEl = document.getElementById('cpu-'+i);
+        if (cpuEl && d.cpu !== undefined) {
+          var pct = Math.round(d.cpu);
+          var cls = pct >= 85 ? 'high' : pct > 60 ? 'medium' : 'low';
+          cpuEl.querySelector('.usage-bar-fill').style.width = pct + '%';
+          cpuEl.querySelector('.usage-bar-fill').className = 'usage-bar-fill ' + cls;
+          cpuEl.querySelector('.usage-pct').textContent = pct + '%';
+          if (pct >= 85) cpuEl.querySelector('.usage-pct').style.color = '#f87171';
+          else if (pct > 60) cpuEl.querySelector('.usage-pct').style.color = '#fbbf24';
+          else cpuEl.querySelector('.usage-pct').style.color = '';
+        }
+        // RAM
+        var ramEl = document.getElementById('ram-'+i);
+        if (ramEl && d.ram !== undefined) {
+          var rpct = Math.round(d.ram);
+          var rcls = rpct >= 85 ? 'high' : rpct > 60 ? 'medium' : 'low';
+          ramEl.querySelector('.usage-bar-fill').style.width = rpct + '%';
+          ramEl.querySelector('.usage-bar-fill').className = 'usage-bar-fill ' + rcls;
+          ramEl.querySelector('.usage-pct').textContent = rpct + '%';
+          if (rpct >= 85) ramEl.querySelector('.usage-pct').style.color = '#f87171';
+          else if (rpct > 60) ramEl.querySelector('.usage-pct').style.color = '#fbbf24';
+          else ramEl.querySelector('.usage-pct').style.color = '';
+        }
+        // Status
+        var stEl = document.getElementById('status-'+i);
+        if (stEl) {
+          if (d.cpu > 90 || d.ram > 90) {
+            stEl.className = 'status-pill critical'; stEl.textContent = 'CRITICAL';
+          } else {
+            stEl.className = 'status-pill online'; stEl.textContent = 'ONLINE';
+          }
+        }
+        // Uptime
+        var upEl = document.getElementById('uptime-'+i);
+        if (upEl && d.uptime) { upEl.textContent = d.uptime; }
+        // Load
+        var ldEl = document.getElementById('load-'+i);
+        if (ldEl && d.load) { ldEl.textContent = d.load; }
+      })
+      .catch(function() {
+        var dot = document.getElementById('dot-'+i);
+        if (dot) dot.className = 'host-dot offline';
+        var st = document.getElementById('status-'+i);
+        if (st) { st.className = 'status-pill offline'; st.textContent = 'OFFLINE'; }
+      });
+  });
+  // Refresh every 30s
+  setTimeout(function(){ location.reload(); }, 30000);
+})();
+</script>
+</div>
+{% endif %}
+
+{# ── ENVIRONMENT BREAKDOWN ── #}
+{% if wid == 'env_breakdown' %}
+<div class="dash-widget{% if not w.visible %} hidden-widget{% endif %}"
+     data-widget-id="env_breakdown" data-widget-title="{{ _('Environments') }}" data-size="{{ w.size }}" style="margin-bottom:1.5rem;">
+  <div class="widget-controls">
+    <button class="widget-ctrl-btn widget-ctrl-hide" title="{{ _('Hide') }}" onclick="hideWidget('env_breakdown')">&#x2715;</button>
+  </div>
+  <div class="card" style="padding:1.1rem 1.25rem;height:100%;">
+    <div class="card-header" style="margin-bottom:0.75rem;">
+      <h3>&#x1F30D; {{ _('Environments') }}</h3>
+    </div>
+    {% if env_counts %}
+    <div style="display:flex;flex-direction:column;gap:0.5rem;">
+      {% set total = host_count %}
+      {% for env, cnt in env_counts.items() %}
+      {% set env_slug = (env|lower).replace(' ','') %}
+      <div style="display:flex;align-items:center;gap:0.75rem;">
+        <span class="env-badge env-{{ env_slug }}" style="min-width:90px;justify-content:center;">{{ env }}</span>
+        <div style="flex:1;background:var(--bg-elevated);border-radius:999px;height:6px;overflow:hidden;">
+          <div style="height:100%;border-radius:999px;background:var(--accent-blue);width:{{ (cnt/total*100)|int }}%;transition:width 0.5s;"></div>
+        </div>
+        <span style="font-size:0.8rem;color:var(--text-muted);min-width:20px;text-align:right;">{{ cnt }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-muted" style="font-size:0.85rem;">{{ _('No environment data yet.') }}</p>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{# ── TAG CLOUD ── #}
+{% if wid == 'tag_cloud' %}
+<div class="dash-widget{% if not w.visible %} hidden-widget{% endif %}"
+     data-widget-id="tag_cloud" data-widget-title="{{ _('Tag Cloud') }}" data-size="{{ w.size }}" style="margin-bottom:1.5rem;">
+  <div class="widget-controls">
+    <button class="widget-ctrl-btn widget-ctrl-hide" title="{{ _('Hide') }}" onclick="hideWidget('tag_cloud')">&#x2715;</button>
+  </div>
+  <div class="card" style="padding:1.1rem 1.25rem;height:100%;">
+    <div class="card-header" style="margin-bottom:0.75rem;">
+      <h3>&#x1F3F7; {{ _('Tag Cloud') }}</h3>
+    </div>
+    {% if tag_counts %}
+    <div style="display:flex;flex-wrap:wrap;gap:0.4rem;">
+      {% for tag, cnt in (tag_counts|dictsort(by='value',reverse=true))[:15] %}
+      {% set slug = (tag|lower).replace(' ','-') %}
+      <a href="/hosts" class="tag-chip tag-chip-default tag-chip-{{ slug }}"
+         style="text-decoration:none;cursor:pointer;"
+         title="{{ cnt }} host{{ 's' if cnt != 1 else '' }}">
+        {{ tag }} <span style="opacity:0.7;font-size:0.68rem;">{{ cnt }}</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-muted" style="font-size:0.85rem;">{{ _('No tags assigned yet.') }}</p>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{# ── RECENT UPDATES ── #}
+{% if wid == 'recent_updates' %}
+<div class="dash-widget{% if not w.visible %} hidden-widget{% endif %}"
+     data-widget-id="recent_updates" data-widget-title="{{ _('Recent Updates') }}" data-size="{{ w.size }}" style="margin-bottom:1.5rem;">
+  <div class="widget-controls">
+    <button class="widget-ctrl-btn widget-ctrl-hide" title="{{ _('Hide') }}" onclick="hideWidget('recent_updates')">&#x2715;</button>
+  </div>
+  <div class="card" style="padding:1.1rem 1.25rem;height:100%;">
+    <div class="card-header" style="margin-bottom:0.75rem;">
+      <h3>&#x1F504; {{ _('Recent Updates') }}</h3>
+      <a class="btn btn-secondary btn-sm" href="/dashboard">{{ _('View All') }}</a>
+    </div>
+    {% if recent_history %}
+    <div style="display:flex;flex-direction:column;gap:0.4rem;">
+      {% for entry in recent_history %}
+      <div style="display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0.6rem;background:var(--bg-elevated);border-radius:var(--radius-md);border:1px solid var(--border);">
+        <span style="font-size:0.85rem;font-weight:600;min-width:100px;">{{ entry.host|default('?') }}</span>
+        <span class="badge {% if entry.status == 'success' %}badge-green{% else %}badge-red{% endif %}" style="font-size:0.65rem;">
+          {{ entry.status|default('?') }}
+        </span>
+        <span style="font-size:0.75rem;color:var(--text-muted);flex:1;">{{ entry.timestamp|default('') | string | truncate(16, False, '') }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-muted" style="font-size:0.85rem;">{{ _('No update history yet.') }}</p>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{# ── PLUGIN WIDGETS ── #}
+{% if wid == 'plugin_widgets' %}
+{% if addon_mgr is defined %}
+  {% set _plugin_widgets = addon_mgr.render_hooks('dashboard_widgets', hosts=hosts.values()|list, stats={}) %}
+  {% if _plugin_widgets %}
+  <div class="dash-widget{% if not w.visible %} hidden-widget{% endif %}"
+       data-widget-id="plugin_widgets" data-widget-title="{{ _('Plugin Widgets') }}" data-size="{{ w.size }}" style="margin-bottom:1.5rem;">
+    <div class="widget-controls">
+      <button class="widget-ctrl-btn widget-ctrl-hide" title="{{ _('Hide') }}" onclick="hideWidget('plugin_widgets')">&#x2715;</button>
+    </div>
+    {{ _plugin_widgets | safe }}
+  </div>
+  {% endif %}
+{% endif %}
+{% endif %}
+
+{# ── NAV CARDS ── #}
+{% if wid == 'nav_cards' %}
+<div class="dash-widget{% if not w.visible %} hidden-widget{% endif %}"
+     data-widget-id="nav_cards" data-widget-title="{{ _('Navigation Cards') }}" data-size="{{ w.size }}" style="margin-bottom:1.5rem;">
+  <div class="widget-controls">
+    <button class="widget-ctrl-btn widget-ctrl-hide" title="{{ _('Hide') }}" onclick="hideWidget('nav_cards')">&#x2715;</button>
+  </div>
+  <div class="host-grid">
+    <div class="card">
+      <div class="card-header">
+        <h3>&#x1F504; {{ _('System Update Manager') }}</h3>
+        <span class="badge badge-blue">{{ _('Core') }}</span>
+      </div>
+      <p>{{ _('Monitor and update multiple Linux computers remotely via SSH.') }}</p>
+      <div class="btn-group" style="margin-top:0.75rem;">
+        <a class="btn btn-primary btn-sm" href="/dashboard">{{ _('Open Dashboard') }}</a>
+        <a class="btn btn-success btn-sm" href="/update_settings">{{ _('Settings') }}</a>
+        <a class="btn btn-secondary btn-sm" href="/email_settings">&#x2709; {{ _('Email') }}</a>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <h3>&#x1F4BE; {{ _('Disk Management') }}</h3>
+        <span class="badge badge-purple">{{ _('Tools') }}</span>
+      </div>
+      <p>{{ _('Format, test, and validate disk drives with SMART monitoring.') }}</p>
+      <div class="btn-group" style="margin-top:0.75rem;">
+        <a class="btn btn-primary btn-sm" href="/disks">{{ _('Open Disk Tools') }}</a>
+        <a class="btn btn-secondary btn-sm" href="/smart">&#x1F4CA; SMART</a>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <h3>&#x1F5A5; VM &amp; Storage</h3>
+        <span class="badge badge-blue">{{ _('Infrastructure') }}</span>
+      </div>
+      <p>{{ _('Manage Proxmox VM controllers, TrueNAS/Unraid storage and SMART health.') }}</p>
+      <div class="btn-group" style="margin-top:0.75rem;">
+        <a class="btn btn-primary btn-sm" href="/vm">VM Controllers</a>
+        <a class="btn btn-secondary btn-sm" href="/storage">Storage</a>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <h3>&#x1F5A7; {{ _('Host Management') }}</h3>
+        <span class="badge badge-green">{{ _('Network') }}</span>
+      </div>
+      <p>{{ _('Add, edit, and remove managed hosts. Assign tags, groups, and configure SSH keys.') }}</p>
+      <div class="btn-group" style="margin-top:0.75rem;">
+        <a class="btn btn-primary btn-sm" href="/hosts">{{ _('Manage Hosts') }}</a>
+        <a class="btn btn-secondary btn-sm" href="/hosts/arp_table">{{ _('ARP Table') }}</a>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <h3>&#x1F464; {{ _('User & Profile') }}</h3>
+        <span class="badge badge-amber">{{ _('Account') }}</span>
+      </div>
+      <p>{{ _('Manage your profile, update credentials, and administer user accounts and roles.') }}</p>
+      <div class="btn-group" style="margin-top:0.75rem;">
+        <a class="btn btn-primary btn-sm" href="/users/profile">{{ _('My Profile') }}</a>
+        <a class="btn btn-secondary btn-sm" href="/users">{{ _('User Admin') }}</a>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <h3>&#x1F50D; CheckMK</h3>
+        <span class="badge badge-cyan" style="background:var(--accent-cyan,#0bc5ea);color:#fff;">{{ _('Monitoring') }}</span>
+      </div>
+      <p>{{ _('CheckMK integration for host monitoring, piggyback data, and API status.') }}</p>
+      <div class="btn-group" style="margin-top:0.75rem;">
+        <a class="btn btn-primary btn-sm" href="/checkmk">CheckMK</a>
+        <a class="btn btn-secondary btn-sm" href="/scanner">&#x1F50D; {{ _('Scanner') }}</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% endfor %}{# end sorted_widgets loop #}
+
+</div>{# end dashboardContainer #}
+
+<!-- ── Dashboard Customization Script ────────────────────────────────────── -->
+<script>
+(function() {
+  // ── State ──────────────────────────────────────────────────────────────────
+  let editMode = false;
+  let dragSrc  = null;
+
+  // Build layout state from server-rendered DOM
+  function getWidgets() {
+    return Array.from(document.querySelectorAll('#dashboardContainer .dash-widget'));
+  }
+
+  function buildLayoutFromDOM() {
+    const widgets = [];
+    getWidgets().forEach((el, idx) => {
+      widgets.push({
+        id:      el.dataset.widgetId,
+        title:   el.dataset.widgetTitle || el.dataset.widgetId,
+        visible: !el.classList.contains('hidden-widget'),
+        order:   idx,
+        size:    el.dataset.size || 'full',
+      });
+    });
+    return { widgets };
+  }
+
+  // ── Edit Mode Toggle ───────────────────────────────────────────────────────
+  window.toggleEditMode = function() {
+    editMode = !editMode;
+    const container = document.getElementById('dashboardContainer');
+    const btn       = document.getElementById('btnEditMode');
+    const btnSave   = document.getElementById('btnSave');
+    const btnReset  = document.getElementById('btnReset');
+    const hint      = document.getElementById('dashToolbarHint');
+    const panel     = document.getElementById('hiddenWidgetsPanel');
+
+    if (editMode) {
+      container.classList.add('edit-mode');
+      getWidgets().forEach(el => {
+        el.classList.add('edit-mode');
+        el.setAttribute('draggable', 'true');
+        bindDrag(el);
+      });
+      btn.classList.add('active');
+      btn.textContent = '✖ Done';
+      btnSave.style.display  = '';
+      btnReset.style.display = '';
+      hint.textContent = '⠿ Drag to reorder · ✕ to hide · 💾 to save';
+      panel.classList.add('visible');
+      refreshHiddenPanel();
+    } else {
+      container.classList.remove('edit-mode');
+      getWidgets().forEach(el => {
+        el.classList.remove('edit-mode');
+        el.removeAttribute('draggable');
+      });
+      btn.classList.remove('active');
+      btn.innerHTML = '✏️ Customize';
+      btnSave.style.display  = 'none';
+      btnReset.style.display = 'none';
+      hint.textContent = '';
+      panel.classList.remove('visible');
+    }
+  };
+
+  // ── Drag & Drop ────────────────────────────────────────────────────────────
+  function bindDrag(el) {
+    el.addEventListener('dragstart', onDragStart);
+    el.addEventListener('dragover',  onDragOver);
+    el.addEventListener('dragleave', onDragLeave);
+    el.addEventListener('drop',      onDrop);
+    el.addEventListener('dragend',   onDragEnd);
+  }
+
+  function onDragStart(e) {
+    dragSrc = this;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', this.dataset.widgetId);
+    setTimeout(() => this.style.opacity = '0.4', 0);
+  }
+  function onDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (this !== dragSrc) this.classList.add('drag-over');
+    return false;
+  }
+  function onDragLeave() { this.classList.remove('drag-over'); }
+  function onDrop(e) {
+    e.stopPropagation();
+    if (dragSrc && this !== dragSrc) {
+      const container = document.getElementById('dashboardContainer');
+      const nodes     = Array.from(container.children);
+      const srcIdx    = nodes.indexOf(dragSrc);
+      const tgtIdx    = nodes.indexOf(this);
+      if (srcIdx < tgtIdx) {
+        container.insertBefore(dragSrc, this.nextSibling);
+      } else {
+        container.insertBefore(dragSrc, this);
+      }
+    }
+    this.classList.remove('drag-over');
+    return false;
+  }
+  function onDragEnd() {
+    this.style.opacity = '';
+    getWidgets().forEach(el => el.classList.remove('drag-over'));
+  }
+
+  // ── Hide / Show Widgets ────────────────────────────────────────────────────
+  window.hideWidget = function(id) {
+    const el = document.querySelector(`[data-widget-id="${id}"]`);
+    if (el) {
+      el.classList.add('hidden-widget');
+      refreshHiddenPanel();
+    }
+  };
+
+  function showWidget(id) {
+    const el = document.querySelector(`[data-widget-id="${id}"]`);
+    if (el) {
+      el.classList.remove('hidden-widget');
+      refreshHiddenPanel();
+    }
+  }
+
+  function refreshHiddenPanel() {
+    const chips = document.getElementById('hiddenWidgetChips');
+    chips.innerHTML = '';
+    const hidden = getWidgets().filter(el => el.classList.contains('hidden-widget'));
+    if (!hidden.length) {
+      chips.innerHTML = '<span style="font-size:0.8rem;color:var(--text-muted);">All widgets are visible.</span>';
+      return;
+    }
+    hidden.forEach(el => {
+      const chip = document.createElement('span');
+      chip.className = 'hidden-widget-chip';
+      chip.textContent = '+ ' + (el.dataset.widgetTitle || el.dataset.widgetId);
+      chip.onclick = () => showWidget(el.dataset.widgetId);
+      chips.appendChild(chip);
+    });
+  }
+
+  // ── Save Layout ────────────────────────────────────────────────────────────
+  window.saveLayout = function() {
+    const layout = buildLayoutFromDOM();
+    fetch('/api/dashboard/layout', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify(layout),
+    })
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) {
+        showToast('✅ Layout saved!', 'success');
+        toggleEditMode();
+      } else {
+        showToast('❌ ' + (d.error || 'Save failed'), 'error');
+      }
+    })
+    .catch(() => showToast('❌ Network error', 'error'));
+  };
+
+  // ── Reset Layout ───────────────────────────────────────────────────────────
+  window.resetLayout = function() {
+    if (!confirm('Reset dashboard to default layout? This cannot be undone.')) return;
+    fetch('/api/dashboard/layout/reset', { method: 'POST' })
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) { location.reload(); }
+      else { showToast('❌ Reset failed', 'error'); }
+    })
+    .catch(() => showToast('❌ Network error', 'error'));
+  };
+
+  // ── Toast Notification ─────────────────────────────────────────────────────
+  function showToast(msg, type) {
+    const t = document.createElement('div');
+    t.textContent = msg;
+    t.style.cssText = `
+      position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;
+      padding:0.75rem 1.25rem;border-radius:8px;font-size:0.85rem;font-weight:500;
+      background:${type === 'success' ? '#276749' : '#822727'};color:#fff;
+      box-shadow:0 4px 12px rgba(0,0,0,0.3);transition:opacity 0.4s;
+    `;
+    document.body.appendChild(t);
+    setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 400); }, 2500);
+  }
+
+})();
+</script>
+
+{% endblock %}

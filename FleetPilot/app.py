@@ -3,7 +3,7 @@ from markupsafe import escape as html_escape
 import re, time as _time
 from collections import defaultdict
 from i18n import get_translator, SUPPORTED_LANGUAGES
-import json, threading, paramiko, os, secrets
+import json, threading, paramiko, os, secrets, shutil
 from datetime import datetime, timedelta
 from updater import run_update
 import scheduler
@@ -2232,20 +2232,24 @@ def server_update():
             return jsonify({'ok': True})
         elif action == 'reboot':
             sudo_pw = request.form.get('sudo_password', '')
-            if not sudo_pw:
+            is_root = hasattr(os, 'geteuid') and os.geteuid() == 0
+            if not sudo_pw and not is_root:
                 return jsonify({'error': 'Sudo password required for reboot'}), 400
             import subprocess, threading
             def _do_reboot():
                 import time
                 time.sleep(2)  # Give the HTTP response time to reach the browser
                 try:
-                    proc = subprocess.Popen(
-                        ['sudo', '-S', 'reboot'],
-                        stdin=subprocess.PIPE,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT
-                    )
-                    proc.communicate(input=(sudo_pw + '\n').encode(), timeout=10)
+                    if is_root:
+                        subprocess.Popen(['reboot'])
+                    else:
+                        proc = subprocess.Popen(
+                            ['sudo', '-S', 'reboot'],
+                            stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT
+                        )
+                        proc.communicate(input=(sudo_pw + '\n').encode(), timeout=10)
                 except Exception:
                     pass
             t = threading.Thread(target=_do_reboot, daemon=True)
@@ -2274,6 +2278,46 @@ _fp_update_running = False
 _fp_update_log = []
 _fp_update_lock = threading.Lock()
 _fp_restart_pending = False
+
+def _restart_fleetpilot_service():
+    """
+    Restart the FleetPilot systemd service after an update.
+
+    Adapts to how the process is actually deployed instead of assuming
+    "sudo systemctl restart" always works:
+    - Already running as root (common for containers / minimal VPS setups,
+      and the case that was actually failing here) → call systemctl
+      directly. sudo is unnecessary when already root, and plenty of
+      minimal/hardened base images don't even ship the sudo binary.
+    - Not root, sudo available → use sudo as before.
+    - Not root, no sudo → can't self-restart; say so with the exact
+      command to run by hand instead of surfacing a bare FileNotFoundError.
+    - systemctl itself missing (e.g. inside a non-systemd container) →
+      same idea, clear message instead of a cryptic failure.
+
+    Returns (started: bool, message: str).
+    """
+    import subprocess
+    if shutil.which('systemctl') is None:
+        return False, ("systemctl not found, so FleetPilot doesn't appear to be "
+                        "running as a systemd service on this host — restart it "
+                        "manually the way you normally launch it.")
+    is_root = hasattr(os, 'geteuid') and os.geteuid() == 0
+    if is_root:
+        cmd = ['systemctl', 'restart', 'fleetpilot']
+    elif shutil.which('sudo'):
+        cmd = ['sudo', 'systemctl', 'restart', 'fleetpilot']
+    else:
+        return False, ("Can't restart automatically: not running as root and 'sudo' "
+                        "isn't installed. Restart the service manually: "
+                        "systemctl restart fleetpilot")
+    try:
+        subprocess.Popen(cmd)
+        return True, f'Restart command issued ({" ".join(cmd)}).'
+    except Exception as e:
+        return False, (f"Could not restart service ({' '.join(cmd)}): {e}. "
+                        f"Restart it manually: systemctl restart fleetpilot")
+
 
 def _fp_log(msg, level='info'):
     import datetime
@@ -2378,14 +2422,19 @@ def _run_fp_update_bg(channel, do_restart):
 
     # Step 3: pip install requirements
     req_file = os.path.join(app_dir, 'requirements.txt')
+    pip_ok = True
     if os.path.exists(req_file):
         venv_pip = os.path.join(app_dir, 'venv', 'bin', 'pip')
         pip_cmd = venv_pip if os.path.exists(venv_pip) else 'pip3'
-        run([pip_cmd, 'install', '-r', req_file, '-q'], 'pip install')
+        pip_ok = run([pip_cmd, 'install', '-r', req_file, '-q'], 'pip install')
     else:
         _fp_log('No requirements.txt found — skipping pip install', 'warn')
 
-    _fp_log('✅ Code update complete!', 'success')
+    if pip_ok:
+        _fp_log('✅ Code update complete!', 'success')
+    else:
+        _fp_log('⚠️ Code updated, but installing dependencies failed (see log above) — '
+                'FleetPilot may not start correctly until this is resolved.', 'error')
 
     # Step 4: restart service
     if do_restart:
@@ -2394,10 +2443,8 @@ def _run_fp_update_bg(channel, do_restart):
         _fp_update_running = False
         import time
         time.sleep(1)
-        try:
-            subprocess.Popen(['sudo', 'systemctl', 'restart', 'fleetpilot'])
-        except Exception as e:
-            _fp_log(f'Could not restart service: {e}', 'error')
+        started, msg = _restart_fleetpilot_service()
+        _fp_log(msg, 'info' if started else 'error')
         return
     else:
         _fp_log('Skipping service restart (manual restart required).', 'warn')

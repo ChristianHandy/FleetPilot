@@ -1,0 +1,33 @@
+# Web Framework
+flask>=3.0.0
+
+# SSH Client
+paramiko>=3.4.0
+
+# Task Scheduler
+apscheduler>=3.10.4
+
+# For environment variable loading (optional but recommended)
+python-dotenv>=1.0.0
+
+# HTTP requests for version checking
+requests>=2.31.0
+
+# CSRF Protection (Security fix)
+flask-wtf>=1.2.0
+
+# Response compression — Gzip/Brotli (Performance)
+flask-compress>=1.14
+
+# Gunicorn WSGI server
+gunicorn>=21.2.0
+
+# Local hardware/temperature/fan sensor readings (system_monitor.py, home dashboard widgets)
+psutil>=5.9.0
+
+# NOTE: smartctl (used for SMART checks) is a SYSTEM package, not a Python
+# package — install it via your OS package manager, e.g.:
+#   Debian/Ubuntu: sudo apt install smartmontools
+#   Fedora/RHEL:   sudo dnf install smartmontools
+# It was previously listed here as a pip dependency, which made
+# `pip install -r requirements.txt` fail on every fresh clone.
