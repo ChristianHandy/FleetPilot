@@ -4356,6 +4356,46 @@ def api_host_metrics():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Wake-on-LAN Routes
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.route('/hosts/<name>/wol', methods=['POST'])
+@login_required
+def host_wol(name):
+    """Send Wake-on-LAN magic packet to a host."""
+    hosts = load_hosts()
+    if name not in hosts:
+        return jsonify({'ok': False, 'error': 'Host not found'}), 404
+    host = hosts[name]
+    mac = host.get('mac', '').strip()
+    if not mac:
+        return jsonify({'ok': False, 'error': 'No MAC address configured for this host. Edit the host and add the MAC address.'}), 400
+    # Validate MAC format
+    import re as _re
+    if not _re.match(r'^([0-9a-fA-F]{2}[:\-]){5}[0-9a-fA-F]{2}$', mac):
+        return jsonify({'ok': False, 'error': f'Invalid MAC address format: {mac}'}), 400
+    try:
+        # Send magic packet using raw socket
+        import socket as _socket
+        mac_bytes = bytes.fromhex(mac.replace(':', '').replace('-', ''))
+        magic = b'\xff' * 6 + mac_bytes * 16
+        with _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM) as s:
+            s.setsockopt(_socket.SOL_SOCKET, _socket.SO_BROADCAST, 1)
+            s.sendto(magic, ('255.255.255.255', 9))
+        app.logger.info(f'WOL magic packet sent to {name} ({mac})')
+        return jsonify({'ok': True, 'message': f'Magic packet sent to {name} ({mac}). Server should wake up within 30 seconds.'})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/api/hosts/<name>/wol', methods=['POST'])
+@login_required
+def api_host_wol(name):
+    """Alias for WOL via API."""
+    return host_wol(name)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Entry point — MUST be at the end so all routes are registered first
 # ─────────────────────────────────────────────────────────────────────────────
 

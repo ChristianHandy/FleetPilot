@@ -181,6 +181,9 @@
       </label>
       {% endif %}
       <a class="btn btn-primary btn-sm" href="/update/{{ name }}">&#x2B06; Update</a>
+      {% if h.mac %}
+      <button class="btn btn-sm" style="background:linear-gradient(135deg,#0d3b6e,#0d6efd);color:#fff;border:none;" onclick="wakeHost('{{ name }}', this)" title="Send Wake-on-LAN magic packet to {{ h.mac }}">&#x26A1; Wake</button>
+      {% endif %}
       {# Plugin hook: host_card_actions #}
       {% if addon_mgr is defined %}
         {{ addon_mgr.render_hooks('host_card_actions', host=h) | safe }}
@@ -228,6 +231,9 @@
     <div class="hli-actions">
       <a class="btn btn-secondary btn-sm" href="/hosts/edit/{{ name }}">&#x270F;</a>
       <a class="btn btn-primary btn-sm" href="/update/{{ name }}">&#x2B06;</a>
+      {% if h.mac %}
+      <button class="btn btn-sm" style="background:linear-gradient(135deg,#0d3b6e,#0d6efd);color:#fff;border:none;" onclick="wakeHost('{{ name }}', this)" title="Wake {{ name }}">&#x26A1;</button>
+      {% endif %}
       <form method="post" action="/hosts/delete/{{ name }}" style="margin:0;"
             onsubmit="return confirm('Delete {{ name }}?')">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -585,6 +591,28 @@ async function uploadHostImage(name, input) {
     }
   } catch(e) {
     showToast(`❌ Error: ${e.message}`, 'error');
+  }
+}
+
+// Wake-on-LAN
+async function wakeHost(name, btn) {
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '&#x23F3; Sending...';
+  try {
+    const r = await fetch(`/hosts/${encodeURIComponent(name)}/wol`, {method:'POST', headers:{'Content-Type':'application/json'}});
+    const data = await r.json();
+    if (data.ok) {
+      showToast(`⚡ ${data.message}`, 'success');
+      btn.innerHTML = '✅ Sent!';
+      setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 5000);
+    } else {
+      showToast(`❌ WOL failed: ${data.error}`, 'error');
+      btn.innerHTML = orig; btn.disabled = false;
+    }
+  } catch(e) {
+    showToast(`❌ Error: ${e.message}`, 'error');
+    btn.innerHTML = orig; btn.disabled = false;
   }
 }
 
