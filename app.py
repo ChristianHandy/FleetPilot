@@ -4402,6 +4402,103 @@ def api_host_wol(name):
     return host_wol(name)
 
 
+@app.route('/hosts/<name>/shutdown', methods=['POST'])
+@login_required
+def host_shutdown(name):
+    """Shutdown a host — Unraid via GraphQL API, Linux/Proxmox via SSH."""
+    hosts = load_hosts()
+    if name not in hosts:
+        return jsonify({'ok': False, 'error': 'Host not found'}), 404
+    host = hosts[name]
+    os_type = host.get('os_type', 'linux')
+    host_ip = host.get('host', '')
+    
+    # ── Unraid: GraphQL mutation ──────────────────────────────────────────────
+    if os_type == 'unraid':
+        api_key = host.get('unraid_api_key', '').strip()
+        api_port = host.get('unraid_api_port', 80)
+        if not api_key:
+            # Fallback to SSH shutdown if no API key
+            app.logger.info(f'Unraid {name}: no API key, falling back to SSH shutdown')
+        else:
+            try:
+                import requests as _req
+                # Unraid GraphQL shutdown mutation
+                mutation = '''
+                mutation {
+                    shutdown
+                }
+                '''
+                url = f'http://{host_ip}:{api_port}/graphql'
+                resp = _req.post(
+                    url,
+                    json={'query': mutation},
+                    headers={'x-api-key': api_key, 'Content-Type': 'application/json'},
+                    timeout=10
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if 'errors' not in data:
+                        app.logger.info(f'Unraid {name} shutdown via GraphQL API OK')
+                        return jsonify({'ok': True, 'message': f'{name} is shutting down via Unraid API.'})
+                    else:
+                        err = data['errors'][0].get('message', 'Unknown error')
+                        app.logger.warning(f'Unraid {name} GraphQL error: {err}')
+                        # Fall through to SSH
+                else:
+                    app.logger.warning(f'Unraid {name} GraphQL HTTP {resp.status_code}, falling back to SSH')
+            except Exception as e:
+                app.logger.warning(f'Unraid {name} GraphQL exception: {e}, falling back to SSH')
+    
+    # ── Linux / Proxmox / Unraid fallback: SSH shutdown ──────────────────────
+    try:
+        import paramiko as _pm
+        ssh_host = host_ip
+        ssh_port = int(host.get('port', 22))
+        ssh_user = host.get('user', 'root')
+        ssh_pass = host.get('password', '')
+        ssh_key  = host.get('ssh_key', '')
+        
+        client = _pm.SSHClient()
+        client.set_missing_host_key_policy(_pm.WarningPolicy())
+        
+        connect_kwargs = dict(hostname=ssh_host, port=ssh_port, username=ssh_user, timeout=10)
+        if ssh_key:
+            connect_kwargs['key_filename'] = ssh_key
+        elif ssh_pass:
+            connect_kwargs['password'] = ssh_pass
+        
+        client.connect(**connect_kwargs)
+        
+        # Choose shutdown command based on OS type
+        if os_type == 'windows':
+            cmd = 'shutdown /s /t 30 /c "FleetPilot shutdown"'
+        elif os_type == 'proxmox':
+            cmd = 'shutdown -h now'
+        elif os_type == 'unraid':
+            # Unraid uses /sbin/shutdown
+            cmd = '/sbin/shutdown -h now'
+        else:
+            cmd = 'shutdown -h now'
+        
+        stdin, stdout, stderr = client.exec_command(cmd, timeout=10)
+        exit_code = stdout.channel.recv_exit_status()
+        client.close()
+        
+        app.logger.info(f'SSH shutdown sent to {name} ({ssh_host}), exit_code={exit_code}')
+        return jsonify({'ok': True, 'message': f'{name} is shutting down via SSH.'})
+    except Exception as e:
+        app.logger.error(f'Shutdown failed for {name}: {e}')
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/api/hosts/<name>/shutdown', methods=['POST'])
+@login_required
+def api_host_shutdown(name):
+    """Alias for shutdown via API."""
+    return host_shutdown(name)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Scheduled Shutdown Routes
 # ─────────────────────────────────────────────────────────────────────────────

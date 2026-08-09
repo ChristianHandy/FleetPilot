@@ -184,6 +184,7 @@
       {% if h.mac %}
       <button class="btn btn-sm" style="background:linear-gradient(135deg,#0d3b6e,#0d6efd);color:#fff;border:none;" onclick="wakeHost('{{ name }}', this)" title="Send Wake-on-LAN magic packet to {{ h.mac }}">&#x26A1; Wake</button>
       {% endif %}
+      <button class="btn btn-sm" style="background:linear-gradient(135deg,#6e0d0d,#fd0d0d);color:#fff;border:none;" onclick="shutdownHost('{{ name }}', '{{ h.os_type|default('linux') }}', this)" title="Shutdown {{ name }}">&#x23FB; Shutdown</button>
       {# Plugin hook: host_card_actions #}
       {% if addon_mgr is defined %}
         {{ addon_mgr.render_hooks('host_card_actions', host=h) | safe }}
@@ -234,6 +235,7 @@
       {% if h.mac %}
       <button class="btn btn-sm" style="background:linear-gradient(135deg,#0d3b6e,#0d6efd);color:#fff;border:none;" onclick="wakeHost('{{ name }}', this)" title="Wake {{ name }}">&#x26A1;</button>
       {% endif %}
+      <button class="btn btn-sm" style="background:linear-gradient(135deg,#6e0d0d,#fd0d0d);color:#fff;border:none;" onclick="shutdownHost('{{ name }}', '{{ h.os_type|default('linux') }}', this)" title="Shutdown">&#x23FB;</button>
       <form method="post" action="/hosts/delete/{{ name }}" style="margin:0;"
             onsubmit="return confirm('Delete {{ name }}?')">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -302,6 +304,23 @@
       <div class="form-group">
         <label class="form-label">SSH Key Path <span class="text-muted">{{ _('(optional)') }}</span></label>
         <input type="text" name="ssh_key" placeholder="{{ _('~/.ssh/id_rsa') }}">
+      </div>
+    </div>
+
+    <!-- Unraid API (shown only when server type is Unraid) -->
+    <div class="form-group" id="unraid-api-section" style="display:none;">
+      <div class="form-section"><span class="form-section-title">&#x1F4BE; Unraid API</span></div>
+      <div class="form-grid-2">
+        <div class="form-group">
+          <label class="form-label">Unraid API Key <span class="text-muted">(optional)</span></label>
+          <input type="text" name="unraid_api_key" id="unraid_api_key" placeholder="e.g. 34e216836c6656be..." autocomplete="off">
+          <div class="form-hint">Found in Unraid WebGUI → Settings → Management Access → API Keys. Used for shutdown, reboot and status queries.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Unraid API Port</label>
+          <input type="number" name="unraid_api_port" id="unraid_api_port" placeholder="80" value="80" min="1" max="65535">
+          <div class="form-hint">Default: 80 (HTTP). Use 443 for HTTPS.</div>
+        </div>
       </div>
     </div>
 
@@ -614,6 +633,43 @@ async function wakeHost(name, btn) {
     showToast(`❌ Error: ${e.message}`, 'error');
     btn.innerHTML = orig; btn.disabled = false;
   }
+}
+
+// Shutdown host (Unraid via GraphQL API, Linux/Proxmox via SSH)
+async function shutdownHost(name, osType, btn) {
+  const action = osType === 'unraid' ? 'Shutdown Unraid server' : 'Shutdown';
+  if (!confirm(`Are you sure you want to shutdown "${name}"?\n\nThe server will power off. Use Wake-on-LAN to turn it back on.`)) return;
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '&#x23F3; Shutting down...';
+  try {
+    const r = await fetch(`/hosts/${encodeURIComponent(name)}/shutdown`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'}
+    });
+    const data = await r.json();
+    if (data.ok) {
+      showToast(`⏻ ${data.message}`, 'success');
+      btn.innerHTML = '✅ Shutdown sent';
+      setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 10000);
+    } else {
+      showToast(`❌ Shutdown failed: ${data.error}`, 'error');
+      btn.innerHTML = orig; btn.disabled = false;
+    }
+  } catch(e) {
+    showToast(`❌ Error: ${e.message}`, 'error');
+    btn.innerHTML = orig; btn.disabled = false;
+  }
+}
+
+// Toggle Unraid API section visibility based on OS type detection
+function checkUnraidApiSection() {
+  // Show Unraid API section if name contains 'unraid' or user manually selects
+  const nameField = document.querySelector('input[name="name"]');
+  const section = document.getElementById('unraid-api-section');
+  if (!nameField || !section) return;
+  const isUnraid = nameField.value.toLowerCase().includes('unraid');
+  section.style.display = isUnraid ? 'block' : 'none';
 }
 
 // Toast notification helper (if not already defined)
