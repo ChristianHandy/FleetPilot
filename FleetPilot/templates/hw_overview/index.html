@@ -174,11 +174,15 @@
         </div>
       </div>
       <div class="ff-body" id="body-{{ srv.server_name | replace(' ','_') }}">
+        {% if srv.collected_at %}
         <div class="ff-val muted">Loading...</div>
+        {% else %}
+        <div class="ff-val muted">Not scanned yet — click ⟳ to collect hardware info.</div>
+        {% endif %}
       </div>
       <div class="ff-footer">
         <span><span class="status-dot offline" id="dot-{{ srv.server_name | replace(' ','_') }}"></span>
-          <span id="status-{{ srv.server_name | replace(' ','_') }}">Cached</span>
+          <span id="status-{{ srv.server_name | replace(' ','_') }}">{{ 'Cached' if srv.collected_at else 'Never scanned' }}</span>
         </span>
         <span id="time-{{ srv.server_name | replace(' ','_') }}">{{ srv.collected_at[:19].replace('T',' ') if srv.collected_at else '' }}</span>
       </div>
@@ -370,6 +374,8 @@ async function loadCached(name) {
       const data = await r.json();
       renderCard(name, data);
     }
+    // 404 (never scanned) is expected — the server-rendered "Not scanned
+    // yet" placeholder already covers it, nothing to update.
   } catch(e) {}
 }
 
