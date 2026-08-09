@@ -1,0 +1,373 @@
+{% extends 'base.html' %}
+{% block title %}HW Monitor{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+/* ── HW Monitor specific styles ── */
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:22px;}
+.sum-card{background:var(--card-bg,#111827);border:1px solid var(--border-color,#1e2d45);border-radius:12px;padding:14px 16px;position:relative;overflow:hidden;transition:border-color .2s;}
+.sum-card:hover{border-color:var(--border-hover,#2a3f5f);}
+.sum-card .val{font-size:1.75rem;font-weight:800;line-height:1;letter-spacing:-1px;}
+.sum-card .lbl{font-size:.68rem;color:var(--text-muted,#64748b);margin-top:5px;text-transform:uppercase;letter-spacing:.06em;font-weight:500;}
+
+.server-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px;}
+
+.srv-card{background:var(--card-bg,#111827);border:1px solid var(--border-color,#1e2d45);border-radius:16px;overflow:hidden;transition:all .2s;position:relative;}
+.srv-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#3b82f6,transparent);opacity:0;transition:opacity .3s;}
+.srv-card:hover{border-color:var(--border-hover,#2a3f5f);transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,.4);}
+.srv-card:hover::before{opacity:1;}
+.srv-card.online{border-color:rgba(16,185,129,.2);}
+.srv-card.online::before{background:linear-gradient(90deg,transparent,#10b981,transparent);}
+.srv-card.offline{border-color:rgba(239,68,68,.2);opacity:.85;}
+.srv-card.offline::before{background:linear-gradient(90deg,transparent,#ef4444,transparent);opacity:1;}
+.srv-card.warning{border-color:rgba(245,158,11,.25);}
+.srv-card.warning::before{background:linear-gradient(90deg,transparent,#f59e0b,transparent);opacity:1;}
+.srv-card.error{border-color:rgba(239,68,68,.4);box-shadow:0 0 20px rgba(239,68,68,.3);}
+.srv-card.error::before{background:linear-gradient(90deg,transparent,#ef4444,transparent);opacity:1;animation:pulse-bar 2s infinite;}
+@keyframes pulse-bar{0%,100%{opacity:.5}50%{opacity:1}}
+
+.card-head{padding:16px 18px 12px;display:flex;align-items:flex-start;justify-content:space-between;border-bottom:1px solid var(--border-color,#1e2d45);}
+.card-head-left h2{font-size:1rem;font-weight:700;letter-spacing:-.3px;}
+.card-head-left .ip-row{display:flex;align-items:center;gap:8px;margin-top:3px;}
+.card-head-left .ip{font-size:.72rem;color:var(--text-muted,#64748b);font-family:monospace;}
+.card-head-left .uptime{font-size:.68rem;color:var(--text-muted,#64748b);background:var(--card-bg2,#1a2235);padding:1px 6px;border-radius:4px;}
+.status-badge{font-size:.68rem;padding:3px 10px;border-radius:999px;font-weight:700;letter-spacing:.03em;white-space:nowrap;}
+.badge-online{background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3);}
+.badge-offline{background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.3);}
+.badge-error{background:rgba(239,68,68,.2);color:#ef4444;border:1px solid rgba(239,68,68,.5);animation:pulse-badge 2s infinite;}
+.badge-warn{background:rgba(245,158,11,.15);color:#f59e0b;border:1px solid rgba(245,158,11,.3);}
+.badge-running{background:rgba(59,130,246,.15);color:#3b82f6;border:1px solid rgba(59,130,246,.3);}
+@keyframes pulse-badge{0%,100%{opacity:.8}50%{opacity:1}}
+
+.card-body{padding:14px 18px;}
+.metrics-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;}
+.metric{display:flex;flex-direction:column;gap:3px;}
+.metric .m-label{font-size:.65rem;color:var(--text-muted,#64748b);text-transform:uppercase;letter-spacing:.06em;font-weight:500;}
+.metric .m-val{font-size:.9rem;font-weight:700;line-height:1.2;}
+.metric .m-bar{height:3px;background:var(--border-color,#1e2d45);border-radius:2px;overflow:hidden;margin-top:3px;}
+.metric .m-fill{height:100%;border-radius:2px;transition:width .6s cubic-bezier(.4,0,.2,1);}
+.m-green{color:#10b981;}.m-yellow{color:#f59e0b;}.m-red{color:#ef4444;}.m-blue{color:#3b82f6;}
+.m-orange{color:#f97316;}.m-purple{color:#a855f7;}.m-cyan{color:#06b6d4;}.m-muted{color:#94a3b8;}
+
+.card-divider{height:1px;background:var(--border-color,#1e2d45);margin:10px 0;}
+.fans-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;}
+.fan-chip{display:inline-flex;align-items:center;gap:4px;background:var(--card-bg2,#1a2235);border:1px solid var(--border-color,#1e2d45);border-radius:6px;padding:3px 8px;font-size:.72rem;}
+.fan-chip .fan-icon{font-size:.8rem;animation:spin 3s linear infinite;}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+.fan-chip .fan-rpm{font-weight:700;color:#06b6d4;}
+
+.offline-data{background:rgba(239,68,68,.05);border:1px solid rgba(239,68,68,.15);border-radius:10px;padding:10px 12px;margin-top:10px;}
+.offline-data .od-title{font-size:.68rem;color:#ef4444;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;}
+.offline-data .od-row{display:flex;gap:16px;flex-wrap:wrap;}
+.offline-data .od-item{font-size:.78rem;color:#94a3b8;}
+.offline-data .od-item span{color:var(--text-primary,#e2e8f0);font-weight:600;}
+.offline-log{margin-top:8px;background:rgba(0,0,0,.3);border-radius:6px;padding:6px 8px;font-family:monospace;font-size:.67rem;color:#94a3b8;max-height:60px;overflow:hidden;line-height:1.5;}
+
+.error-banner{background:linear-gradient(135deg,rgba(127,29,29,.4),rgba(239,68,68,.1));border:1px solid rgba(239,68,68,.4);border-radius:10px;padding:10px 14px;margin-top:10px;display:flex;align-items:flex-start;gap:10px;}
+.error-banner .err-icon{font-size:1.1rem;flex-shrink:0;margin-top:1px;}
+.error-banner .err-text{flex:1;font-size:.78rem;color:#fca5a5;line-height:1.5;}
+.error-banner .err-msg{font-weight:600;color:#ef4444;font-size:.8rem;margin-bottom:2px;}
+.ack-btn{padding:5px 12px;border-radius:7px;border:1px solid rgba(239,68,68,.5);background:rgba(239,68,68,.15);color:#ef4444;cursor:pointer;font-size:.72rem;font-weight:600;transition:all .15s;flex-shrink:0;}
+.ack-btn:hover{background:rgba(239,68,68,.3);}
+
+.stress-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;}
+.phase-tag{font-size:.7rem;padding:2px 10px;border-radius:6px;background:rgba(59,130,246,.15);color:#3b82f6;border:1px solid rgba(59,130,246,.2);font-weight:500;}
+.running-dot{width:7px;height:7px;border-radius:50%;background:#10b981;animation:blink 1.5s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+.card-actions{padding:10px 18px;border-top:1px solid var(--border-color,#1e2d45);display:flex;gap:6px;flex-wrap:wrap;background:rgba(0,0,0,.15);}
+.act-btn{padding:5px 12px;border-radius:7px;border:none;cursor:pointer;font-size:.75rem;font-weight:600;transition:all .15s;}
+.act-btn:hover{opacity:.85;transform:translateY(-1px);}
+.ab-green{background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.25);}
+.ab-red{background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.25);}
+.ab-blue{background:rgba(59,130,246,.15);color:#3b82f6;border:1px solid rgba(59,130,246,.25);}
+.ab-orange{background:rgba(249,115,22,.15);color:#f97316;border:1px solid rgba(249,115,22,.25);}
+.ab-ghost{background:var(--card-bg2,#1a2235);color:#94a3b8;border:1px solid var(--border-color,#1e2d45);}
+
+/* HW Monitor toolbar */
+.hw-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap;}
+.hw-toolbar h1{font-size:1.3rem;font-weight:800;flex:1;}
+.cluster-pill{font-size:.72rem;padding:4px 14px;border-radius:999px;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.3);color:#3b82f6;font-weight:600;}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Toolbar -->
+<div class="hw-toolbar">
+  <h1>&#x26A1; HW Monitor</h1>
+  <span class="cluster-pill" id="clusterStatus">&#x25CF; Cluster DGW15</span>
+  <button class="btn btn-success btn-sm" onclick="startAll()">&#x25B6; Alle starten</button>
+  <button class="btn btn-danger btn-sm" onclick="stopAll()">&#x25A0; Alle stoppen</button>
+  <button class="btn btn-secondary btn-sm" onclick="openAdd()">+ Server</button>
+  <a href="/hw/setup" class="btn btn-secondary btn-sm">&#x2699; Setup</a>
+  <a href="/fans" class="btn btn-secondary btn-sm">&#x1F300; Fan Control</a>
+</div>
+
+<!-- Summary Bar -->
+<div class="summary">
+  <div class="sum-card"><div class="val" id="sTotal" style="color:#3b82f6">—</div><div class="lbl">Server</div></div>
+  <div class="sum-card"><div class="val" id="sOnline" style="color:#10b981">—</div><div class="lbl">Online</div></div>
+  <div class="sum-card"><div class="val" id="sOffline" style="color:#ef4444">—</div><div class="lbl">Offline</div></div>
+  <div class="sum-card"><div class="val" id="sRunning" style="color:#3b82f6">—</div><div class="lbl">Tests aktiv</div></div>
+  <div class="sum-card"><div class="val" id="sErrors" style="color:#ef4444">—</div><div class="lbl">Fehler</div></div>
+  <div class="sum-card"><div class="val" id="sWarn" style="color:#f59e0b">—</div><div class="lbl">Warnungen</div></div>
+  <div class="sum-card"><div class="val" id="sMaxCpu" style="color:#f97316">—</div><div class="lbl">Max CPU °C</div></div>
+  <div class="sum-card"><div class="val" id="sMaxGpu" style="color:#a855f7">—</div><div class="lbl">Max GPU °C</div></div>
+  <div class="sum-card"><div class="val" style="font-size:1rem;color:#94a3b8" id="sTime">—</div><div class="lbl">Letztes Update</div></div>
+</div>
+
+<!-- Server Grid -->
+<div class="server-grid" id="grid">
+  <div style="grid-column:1/-1;text-align:center;color:#64748b;padding:60px;font-size:.9rem">
+    <div style="font-size:2rem;margin-bottom:12px">&#x26A1;</div>Verbinde mit Servern...
+  </div>
+</div>
+
+<!-- Add Server Modal -->
+<div class="modal fade" id="addModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="background:var(--card-bg,#111827);border:1px solid var(--border-color,#1e2d45);">
+      <div class="modal-header" style="border-color:var(--border-color,#1e2d45);">
+        <h5 class="modal-title">Server hinzufügen</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <!-- Quick-Select from Registry -->
+        <div id="quickSelectSection" class="mb-3" style="display:none">
+          <label class="form-label fw-semibold small">&#x26A1; Bekannte Server (aus Update Manager)</label>
+          <div id="quickSelectBtns" class="d-flex flex-wrap gap-2"></div>
+          <hr style="border-color:rgba(255,255,255,.1);margin:12px 0 8px">
+        </div>
+        <div class="mb-3"><label class="form-label">Name</label><input class="form-control" id="fn" placeholder="pve05"></div>
+        <div class="mb-3"><label class="form-label">IP-Adresse</label><input class="form-control" id="fi" placeholder="192.168.1.x"></div>
+        <div class="mb-3"><label class="form-label">SSH-Port</label><input class="form-control" id="fp" value="22"></div>
+        <div class="mb-3"><label class="form-label">Benutzername</label><input class="form-control" id="fu" value="root"></div>
+        <div class="mb-3"><label class="form-label">Passwort</label><input class="form-control" id="fw" type="password"></div>
+      </div>
+      <div class="modal-footer" style="border-color:var(--border-color,#1e2d45);">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+        <button class="btn btn-primary" onclick="addServer()">Hinzufügen</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Acknowledge Modal -->
+<div class="modal fade" id="ackModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="background:var(--card-bg,#111827);border:1px solid var(--border-color,#1e2d45);">
+      <div class="modal-header" style="border-color:var(--border-color,#1e2d45);">
+        <h5 class="modal-title">&#x26A0; Fehler bestätigen</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted mb-3" id="ackMsg"></p>
+        <div class="mb-3"><label class="form-label">Notiz (optional)</label><input class="form-control" id="ackNote" placeholder="z.B. Untersucht, Kühler gereinigt..."></div>
+      </div>
+      <div class="modal-footer" style="border-color:var(--border-color,#1e2d45);">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+        <button class="btn btn-danger" onclick="confirmAck()">&#x2713; Fehler bestätigen</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index:9999">
+  <div id="hwToast" class="toast align-items-center border-0" role="alert">
+    <div class="d-flex">
+      <div class="toast-body" id="hwToastMsg"></div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let servers = [];
+let ackSid = null;
+let addModalBS, ackModalBS;
+
+document.addEventListener('DOMContentLoaded', function() {
+  addModalBS = new bootstrap.Modal(document.getElementById('addModal'));
+  ackModalBS = new bootstrap.Modal(document.getElementById('ackModal'));
+  // Delegated listener for the per-card "Bestätigen" (acknowledge) button —
+  // attached once here rather than re-attached on every render, and reads
+  // the server id/name from data-* attributes rather than an inline
+  // onclick="openAck(...,'${s.name}',...)" string, which broke (and was a
+  // latent injection risk) whenever a server name contained a quote.
+  document.getElementById('grid').addEventListener('click', function(e) {
+    const btn = e.target.closest('[data-ack-sid]');
+    if (btn) openAck(btn.dataset.ackSid, btn.dataset.ackName, e);
+  });
+  refresh();
+  setInterval(refresh, 8000);
+});
+
+// ── Helpers ──
+const tc = t => { if(t==null) return 'm-muted'; if(t>=90) return 'm-red'; if(t>=80) return 'm-yellow'; if(t>=70) return 'm-orange'; return 'm-green'; };
+const barColor = p => p>=90?'#ef4444':p>=70?'#f59e0b':'#3b82f6';
+const fmt = (v,u='') => v!=null?`${v}${u}`:'—';
+const fmtKB = kb => { if(kb==null) return '—'; if(kb>1024*1024) return `${(kb/1024/1024).toFixed(1)} GB/s`; if(kb>1024) return `${(kb/1024).toFixed(1)} MB/s`; return `${kb.toFixed(0)} KB/s`; };
+const fmtUp = s => { if(!s) return '—'; const d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60); return d>0?`${d}d ${h}h`:h>0?`${h}h ${m}m`:`${m}m`; };
+const fmtTime = ts => { if(!ts) return '—'; try { return new Date(ts).toLocaleString('de-DE',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}); } catch { return ts.slice(0,16); } };
+
+function statusBadge(s) {
+  if(!s.reachable) return '<span class="status-badge badge-offline">&#x25CF; OFFLINE</span>';
+  if(s.stress_failure) return '<span class="status-badge badge-error">&#x26A0; FEHLER</span>';
+  if(s.cpu_temp>=85||s.gpu_temp>=85) return '<span class="status-badge badge-warn">&#x25B2; WARNUNG</span>';
+  if(s.stress_running) return '<span class="status-badge badge-running">&#x25B6; TEST LÄUFT</span>';
+  return '<span class="status-badge badge-online">&#x25CF; ONLINE</span>';
+}
+function cardClass(s) {
+  if(!s.reachable) return 'srv-card offline'; if(s.stress_failure) return 'srv-card error';
+  if(s.cpu_temp>=85||s.gpu_temp>=85) return 'srv-card warning'; return 'srv-card online';
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+function renderCard(s) {
+  const cpuPct=s.cpu_pct??0, ramPct=s.ram_total_mb?Math.round(s.ram_used_mb/s.ram_total_mb*100):0;
+  const fans=s.fans||[];
+  const fansHtml=fans.filter(f=>f.rpm>0).map(f=>`<span class="fan-chip"><span class="fan-icon">&#x27F3;</span><span class="fan-rpm">${f.rpm}</span><span style="color:#64748b;font-size:.65rem">RPM</span></span>`).join('');
+  let offlineHtml='';
+  if(!s.reachable&&(s.last_cpu_temp||s.last_seen_ts)) {
+    const logLines=s.last_log?s.last_log.split('\n').filter(l=>l.trim()).slice(-3).join('\n'):'';
+    offlineHtml=`<div class="offline-data"><div class="od-title">&#x1F550; Letzte bekannte Daten</div><div class="od-row">${s.last_seen_ts?`<div class="od-item">Zuletzt: <span>${fmtTime(s.last_seen_ts)}</span></div>`:''} ${s.last_cpu_temp!=null?`<div class="od-item">CPU: <span class="${tc(s.last_cpu_temp)}">${s.last_cpu_temp}°C</span></div>`:''} ${s.last_gpu_temp!=null?`<div class="od-item">GPU: <span class="${tc(s.last_gpu_temp)}">${s.last_gpu_temp}°C</span></div>`:''}</div>${logLines?`<div class="offline-log">${escapeHtml(logLines)}</div>`:''}</div>`;
+  }
+  let errorHtml='';
+  if(s.stress_failure) errorHtml=`<div class="error-banner"><span class="err-icon">&#x26A0;</span><div class="err-text"><div class="err-msg">Hardware-Fehler erkannt</div>${escapeHtml(s.stress_failure)}</div><button class="ack-btn" data-ack-sid="${s.id}" data-ack-name="${escapeHtml(s.name)}">&#x2713; Bestätigen</button></div>`;
+  let stressHtml='';
+  if(s.stress_running||s.stress_phase) stressHtml=`<div class="stress-row">${s.stress_running?'<span class="running-dot"></span><span style="font-size:.75rem;color:#10b981">Läuft</span>':''}${s.stress_phase?`<span class="phase-tag">${escapeHtml(s.stress_phase)}</span>`:''}</div>`;
+  return `<div class="${cardClass(s)}" id="card-${s.id}">
+    <div class="card-head"><div class="card-head-left"><h2>${escapeHtml(s.name)}</h2><div class="ip-row"><span class="ip">${escapeHtml(s.ip)}</span>${s.uptime_s?`<span class="uptime">&#x2191; ${fmtUp(s.uptime_s)}</span>`:''}</div></div>${statusBadge(s)}</div>
+    <div class="card-body">${s.reachable?`<div class="metrics-grid">
+      <div class="metric"><span class="m-label">CPU Temp</span><span class="m-val ${tc(s.cpu_temp)}">${fmt(s.cpu_temp,'°C')}</span><div class="m-bar"><div class="m-fill" style="width:${s.cpu_temp?Math.min(100,s.cpu_temp):0}%;background:${s.cpu_temp>=90?'#ef4444':s.cpu_temp>=80?'#f59e0b':'#10b981'}"></div></div></div>
+      <div class="metric"><span class="m-label">CPU Last</span><span class="m-val m-blue">${fmt(s.cpu_pct,'%')}</span><div class="m-bar"><div class="m-fill" style="width:${cpuPct}%;background:${barColor(cpuPct)}"></div></div></div>
+      <div class="metric"><span class="m-label">RAM</span><span class="m-val m-muted">${s.ram_used_mb?`${(s.ram_used_mb/1024).toFixed(1)}/${(s.ram_total_mb/1024).toFixed(1)} GB`:'—'}</span><div class="m-bar"><div class="m-fill" style="width:${ramPct}%;background:${barColor(ramPct)}"></div></div></div>
+      <div class="metric"><span class="m-label">GPU Temp</span><span class="m-val ${tc(s.gpu_temp)}">${fmt(s.gpu_temp,'°C')}${s.gpu_on_bus===0?' <span style="color:#ef4444">&#x26A0;</span>':''}</span></div>
+      <div class="metric"><span class="m-label">Netz &#x2193;</span><span class="m-val m-cyan">${fmtKB(s.net_rx_kbps)}</span></div>
+      <div class="metric"><span class="m-label">Netz &#x2191;</span><span class="m-val m-purple">${fmtKB(s.net_tx_kbps)}</span></div>
+      <div class="metric"><span class="m-label">Disk R</span><span class="m-val m-orange">${fmtKB(s.disk_read_kbps)}</span></div>
+      <div class="metric"><span class="m-label">Disk W</span><span class="m-val m-yellow">${fmtKB(s.disk_write_kbps)}</span></div>
+    </div>${fansHtml?`<div class="card-divider"></div><div class="fans-row">${fansHtml}</div>`:''}${stressHtml}`:offlineHtml}${errorHtml}</div>
+    <div class="card-actions">
+      <button class="act-btn ab-green" onclick="act(${s.id},'start')">&#x25B6; Start</button>
+      <button class="act-btn ab-red" onclick="act(${s.id},'stop')">&#x25A0; Stop</button>
+      <button class="act-btn ab-blue" onclick="location='/hw/server/${s.id}'">&#x1F4CA; Details</button>
+      <button class="act-btn ab-orange" onclick="location='/fans?hw_sid=${s.id}'">&#x1F300; Fans</button>
+      <button class="act-btn ab-ghost" onclick="location='/hw/setup?sid=${s.id}'">&#x2699; Setup</button>
+    </div>
+  </div>`;
+}
+
+async function refresh() {
+  try {
+    const res=await fetch('/api/hw/live');
+    servers=await res.json();
+    const grid=document.getElementById('grid');
+    grid.innerHTML=servers.length?servers.map(renderCard).join(''):'<div style="grid-column:1/-1;text-align:center;color:#64748b;padding:60px">Keine Server konfiguriert. Klicke "+ Server" um einen hinzuzufügen.</div>';    const online=servers.filter(s=>s.reachable).length, offline=servers.filter(s=>!s.reachable).length;
+    document.getElementById('sTotal').textContent=servers.length;
+    document.getElementById('sOnline').textContent=online;
+    document.getElementById('sOffline').textContent=offline;
+    document.getElementById('sRunning').textContent=servers.filter(s=>s.stress_running).length;
+    document.getElementById('sErrors').textContent=servers.filter(s=>s.stress_failure).length;
+    document.getElementById('sWarn').textContent=servers.filter(s=>s.cpu_temp>=85||s.gpu_temp>=85).length;
+    const cpuTs=servers.filter(s=>s.cpu_temp).map(s=>s.cpu_temp), gpuTs=servers.filter(s=>s.gpu_temp).map(s=>s.gpu_temp);
+    document.getElementById('sMaxCpu').textContent=cpuTs.length?Math.max(...cpuTs)+'°C':'—';
+    document.getElementById('sMaxGpu').textContent=gpuTs.length?Math.max(...gpuTs)+'°C':'—';
+    document.getElementById('sTime').textContent=new Date().toLocaleTimeString('de-DE');
+    const pill=document.getElementById('clusterStatus');
+    if(offline>0){pill.style.color='#ef4444';pill.textContent=`&#x26A0; ${offline} Offline`;}
+    else{pill.style.color='#10b981';pill.textContent=`&#x25CF; Alle ${online} Online`;}
+  } catch(e){console.error(e);}
+}
+
+async function act(sid,action) {
+  showToast(`${action}...`,'info');
+  const r=await fetch(`/api/hw/server/${sid}/action`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action})});
+  const d=await r.json();
+  showToast(d.ok?`&#x2713; ${action} OK`:`&#x2717; ${d.output}`,d.ok?'success':'danger');
+  setTimeout(refresh,2500);
+}
+async function startAll(){for(const s of servers) await act(s.id,'start');}
+async function stopAll(){for(const s of servers) await act(s.id,'stop');}
+
+function openAck(sid,name,e){e.stopPropagation();ackSid=sid;document.getElementById('ackMsg').textContent=`Fehler auf Server "${name}" bestätigen und archivieren.`;document.getElementById('ackNote').value='';ackModalBS.show();}
+async function confirmAck(){
+  const note=document.getElementById('ackNote').value;
+  const r=await fetch(`/api/hw/server/${ackSid}/acknowledge`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({note})});
+  const d=await r.json();
+  ackModalBS.hide();
+  showToast(d.ok?'&#x2713; Fehler bestätigt':'&#x2717; Fehler','success');
+  setTimeout(refresh,1000);
+}
+
+async function openAdd(){
+  addModalBS.show();
+  // Load known servers from registry for quick-select
+  try {
+    const r = await fetch('/api/known_servers');
+    const known = await r.json();
+    // Filter out already-added servers
+    const existingIPs = new Set(servers.map(s => s.ip));
+    const available = (known || []).filter(s => !existingIPs.has(s.ip));
+    const section = document.getElementById('quickSelectSection');
+    const btns = document.getElementById('quickSelectBtns');
+    btns.innerHTML = '';
+    if (available.length > 0) {
+      available.forEach(s => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'btn btn-sm btn-outline-info';
+        const strong = document.createElement('strong');
+        strong.textContent = s.name || '';
+        const span = document.createElement('span');
+        span.style.opacity = '.7';
+        span.style.fontSize = '.75rem';
+        span.textContent = ' ' + (s.ip || '');
+        b.appendChild(strong);
+        b.appendChild(span);
+        // Real values passed directly — no string-building into HTML/JS
+        // attributes, so quotes/special characters in a server name can't
+        // break out of the handler (and can't inject markup either).
+        b.addEventListener('click', () => quickFill(s.name || '', s.ip || '', s.port || 22, s.user || 'root', ''));
+        btns.appendChild(b);
+      });
+      section.style.display = '';
+    } else {
+      section.style.display = 'none';
+    }
+  } catch(e) {
+    document.getElementById('quickSelectSection').style.display = 'none';
+  }
+}
+
+function quickFill(name, ip, port, user, pw) {
+  document.getElementById('fn').value = name;
+  document.getElementById('fi').value = ip;
+  document.getElementById('fp').value = port;
+  document.getElementById('fu').value = user;
+  document.getElementById('fw').value = pw;
+}
+async function addServer(){
+  const d={name:document.getElementById('fn').value,ip:document.getElementById('fi').value,port:parseInt(document.getElementById('fp').value)||22,user:document.getElementById('fu').value,password:document.getElementById('fw').value};
+  if(!d.name||!d.ip){showToast('Name und IP erforderlich','danger');return;}
+  await fetch('/api/hw/servers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+  addModalBS.hide();showToast('&#x2713; Server hinzugefügt','success');refresh();
+}
+
+function showToast(msg,type='info'){
+  const el=document.getElementById('hwToast'), msgEl=document.getElementById('hwToastMsg');
+  el.className=`toast align-items-center border-0 text-bg-${type==='info'?'secondary':type}`;
+  msgEl.innerHTML=msg;
+  bootstrap.Toast.getOrCreateInstance(el,{delay:3500}).show();
+}
+</script>
+{% endblock %}

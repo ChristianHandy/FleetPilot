@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block title %}2FA Setup — FleetPilot{% endblock %}
+{% block content %}
+<div class="container py-4" style="max-width:700px;">
+  <h2 class="mb-1"><i class="bi bi-shield-lock"></i> Two-Factor Authentication</h2>
+  <p class="text-muted mb-4">Secure your account with an additional authentication factor.</p>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="alert alert-{{ 'danger' if cat == 'error' else cat }} alert-dismissible fade show">
+        {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+  {% endwith %}
+
+  <!-- Current Status -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-4">
+      <div class="card h-100 border-{{ 'success' if methods.totp else 'secondary' }}">
+        <div class="card-body text-center">
+          <div style="font-size:2rem;">📱</div>
+          <h6 class="mt-2">Authenticator App</h6>
+          <span class="badge bg-{{ 'success' if methods.totp else 'secondary' }}">
+            {{ 'Enabled' if methods.totp else 'Disabled' }}
+          </span>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card h-100 border-{{ 'warning' if methods.yubikeys > 0 else 'secondary' }}">
+        <div class="card-body text-center">
+          <div style="font-size:2rem;">🔑</div>
+          <h6 class="mt-2">YubiKey</h6>
+          <span class="badge bg-{{ 'warning text-dark' if methods.yubikeys > 0 else 'secondary' }}">
+            {{ methods.yubikeys }} registered
+          </span>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card h-100 border-{{ 'info' if methods.backup_codes > 0 else 'secondary' }}">
+        <div class="card-body text-center">
+          <div style="font-size:2rem;">🗝️</div>
+          <h6 class="mt-2">Backup Codes</h6>
+          <span class="badge bg-{{ 'info' if methods.backup_codes > 0 else 'secondary' }}">
+            {{ methods.backup_codes }} remaining
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOTP Setup -->
+  <div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h5 class="mb-0"><i class="bi bi-phone"></i> Authenticator App (TOTP)</h5>
+      {% if methods.totp %}
+      <form method="POST" action="/2fa/totp/disable" class="d-inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is callable else '' }}">
+        <button class="btn btn-sm btn-outline-danger" onclick="return confirm('Disable TOTP?')">
+          Disable
+        </button>
+      </form>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      {% if not methods.totp %}
+        {% if totp_secret %}
+        <div class="row align-items-center">
+          <div class="col-md-4 text-center">
+            {% if qr_code %}
+            <img src="data:image/png;base64,{{ qr_code }}" class="img-fluid" style="max-width:180px;border-radius:8px;">
+            {% else %}
+            <div class="alert alert-info small">
+              <strong>Manual entry:</strong><br>
+              <code style="word-break:break-all;">{{ totp_secret }}</code>
+            </div>
+            {% endif %}
+          </div>
+          <div class="col-md-8">
+            <p class="text-muted small mb-3">
+              1. Install <strong>Google Authenticator</strong>, <strong>Authy</strong>, or any TOTP app.<br>
+              2. Scan the QR code or enter the key manually.<br>
+              3. Enter the 6-digit code to confirm.
+            </p>
+            <div class="mb-2">
+              <small class="text-muted">Secret key (manual entry):</small><br>
+              <code class="small">{{ totp_secret }}</code>
+            </div>
+            <form method="POST" action="/2fa/totp/enable" class="d-flex gap-2 mt-3">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is callable else '' }}">
+              <input type="text" name="code" class="form-control" placeholder="Enter 6-digit code"
+                     maxlength="6" pattern="[0-9]{6}" required style="font-family:monospace;letter-spacing:3px;">
+              <button type="submit" class="btn btn-success">Verify & Enable</button>
+            </form>
+          </div>
+        </div>
+        {% else %}
+        <p class="text-muted">Set up an authenticator app for time-based one-time passwords.</p>
+        <form method="POST" action="/2fa/totp/setup">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is callable else '' }}">
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-qr-code"></i> Set Up Authenticator App
+          </button>
+        </form>
+        {% endif %}
+      {% else %}
+      <div class="alert alert-success mb-0">
+        <i class="bi bi-check-circle"></i> Authenticator app is enabled.
+        <a href="/2fa/backup/regenerate" class="btn btn-sm btn-outline-secondary ms-2">Regenerate Backup Codes</a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- YubiKey Setup -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <h5 class="mb-0"><i class="bi bi-usb-symbol"></i> YubiKey</h5>
+    </div>
+    <div class="card-body">
+      {% if yubikeys %}
+      <table class="table table-sm mb-3">
+        <thead><tr><th>Label</th><th>Key ID</th><th>Last Used</th><th></th></tr></thead>
+        <tbody>
+          {% for yk in yubikeys %}
+          <tr>
+            <td>{{ yk.label }}</td>
+            <td><code>{{ yk.key_id }}</code></td>
+            <td>{{ yk.last_used or 'Never' }}</td>
+            <td>
+              <form method="POST" action="/2fa/yubikey/{{ yk.id }}/delete" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is callable else '' }}">
+                <button class="btn btn-sm btn-outline-danger" onclick="return confirm('Remove YubiKey?')">
+                  Remove
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+
+      <form method="POST" action="/2fa/yubikey/register">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is callable else '' }}">
+        <div class="row g-2 align-items-end">
+          <div class="col-md-4">
+            <label class="form-label small">Label</label>
+            <input type="text" name="label" class="form-control form-control-sm"
+                   placeholder="My YubiKey" value="YubiKey">
+          </div>
+          <div class="col-md-5">
+            <label class="form-label small">Touch your YubiKey</label>
+            <input type="text" name="otp" id="yubikey-otp" class="form-control form-control-sm"
+                   placeholder="Touch YubiKey here..." autocomplete="off"
+                   style="font-family:monospace;">
+          </div>
+          <div class="col-md-3">
+            <button type="submit" class="btn btn-warning btn-sm w-100">Register</button>
+          </div>
+        </div>
+        <div class="form-text text-muted mt-1">
+          Click in the field above and touch your YubiKey. It will auto-fill the OTP.
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Backup Codes -->
+  {% if methods.totp or methods.yubikeys > 0 %}
+  <div class="card mb-4">
+    <div class="card-header">
+      <h5 class="mb-0"><i class="bi bi-key"></i> Backup Codes</h5>
+    </div>
+    <div class="card-body">
+      {% if backup_codes_list %}
+      <div class="alert alert-warning">
+        <strong>⚠️ Save these codes now!</strong> They won't be shown again.
+      </div>
+      <div class="row g-2 mb-3">
+        {% for code in backup_codes_list %}
+        <div class="col-6 col-md-3">
+          <code class="d-block text-center p-2 bg-dark rounded">{{ code }}</code>
+        </div>
+        {% endfor %}
+      </div>
+      <button onclick="window.print()" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-printer"></i> Print
+      </button>
+      {% else %}
+      <p class="text-muted mb-2">
+        You have <strong>{{ methods.backup_codes }}</strong> backup codes remaining.
+        Use these if you lose access to your authenticator.
+      </p>
+      <form method="POST" action="/2fa/backup/regenerate">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is callable else '' }}">
+        <button type="submit" class="btn btn-sm btn-outline-warning"
+                onclick="return confirm('Regenerate backup codes? Old codes will be invalidated.')">
+          Regenerate Codes
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  <a href="/users/profile" class="btn btn-outline-secondary">← Back to Settings</a>
+</div>
+{% endblock %}

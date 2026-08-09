@@ -101,16 +101,28 @@
 <script>
 const serverName = {{ server_name | tojson }};
 
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+// Wrap deliberately-built markup (bars, temp badges) so row() below knows
+// not to escape it — everything else is escaped by default, since most
+// values here are raw strings collected from a remote host over SSH
+// (hostname, model names, driver strings, ...) and must be treated as
+// untrusted input, not as trusted HTML.
+function trusted(html) { return { __trusted: html }; }
+
 function fmtBytes(kb) {
   const v = parseInt(kb);
-  if (isNaN(v)) return kb || '?';
+  if (isNaN(v)) return escapeHtml(kb || '?');
   if (v > 1048576) return (v/1048576).toFixed(2) + ' GB';
   if (v > 1024) return (v/1024).toFixed(0) + ' MB';
   return v + ' KB';
 }
 function fmtMB(mb) {
   const v = parseInt(mb);
-  if (isNaN(v)) return mb || '?';
+  if (isNaN(v)) return escapeHtml(mb || '?');
   if (v > 1024) return (v/1024).toFixed(2) + ' GB';
   return v + ' MB';
 }
@@ -121,17 +133,18 @@ function bar(pct, width=120) {
 }
 function tempBadge(t) {
   const v = parseFloat(t);
-  if (isNaN(v)) return t;
+  if (isNaN(v)) return escapeHtml(t);
   const c = v >= 85 ? 'hot' : v >= 70 ? 'warn' : 'ok';
   return `<span class="temp-badge temp-${c}">${v.toFixed(1)}°C</span>`;
 }
 function row(key, val, valClass='') {
-  return `<div class="hw-row"><span class="hw-key">${key}</span><span class="hw-sep">│</span><span class="hw-val ${valClass}">${val}</span></div>`;
+  const valOut = (val && typeof val === 'object' && '__trusted' in val) ? val.__trusted : escapeHtml(val);
+  return `<div class="hw-row"><span class="hw-key">${escapeHtml(key)}</span><span class="hw-sep">│</span><span class="hw-val ${valClass}">${valOut}</span></div>`;
 }
 
 function render(hw) {
   if (hw.error) {
-    document.getElementById('hw-content').innerHTML = `<div style="color:var(--hw-red);padding:40px;text-align:center;">⚠ ${hw.error}</div>`;
+    document.getElementById('hw-content').innerHTML = `<div style="color:var(--hw-red);padding:40px;text-align:center;">⚠ ${escapeHtml(hw.error)}</div>`;
     return;
   }
 
@@ -163,8 +176,8 @@ function render(hw) {
     ${row('Cores / Threads', `${cpu.cores || '?'} cores / ${cpu.threads || '?'} threads`)}
     ${cpu.max_freq_mhz ? row('Max Speed', `${(cpu.max_freq_mhz/1000).toFixed(2)} GHz`) : ''}
     ${cpu.freq_mhz ? row('Current Speed', `${(cpu.freq_mhz/1000).toFixed(2)} GHz`) : ''}
-    ${cpu.temp_c ? row('Temperature', tempBadge(cpu.temp_c)) : ''}
-    ${cpu.usage_pct ? row('Utilization', bar(cpu.usage_pct)) : ''}
+    ${cpu.temp_c ? row('Temperature', trusted(tempBadge(cpu.temp_c))) : ''}
+    ${cpu.usage_pct ? row('Utilization', trusted(bar(cpu.usage_pct))) : ''}
   `;
 
   // ── Memory Section ───────────────────────────────────────────────────────
@@ -177,10 +190,10 @@ function render(hw) {
   const swapPct = swapTotal > 0 ? (swapUsed/swapTotal*100) : 0;
   let memHtml = `
     ${row('Total RAM', fmtBytes(mem.total_kb))}
-    ${row('Used', `${fmtBytes(mem.used_kb)} (${bar(memPct)})`)}
+    ${row('Used', trusted(`${fmtBytes(mem.used_kb)} (${bar(memPct)})`))}
     ${row('Available', fmtBytes(mem.free_kb))}
     ${swapTotal > 0 ? row('Swap Total', fmtBytes(mem.swap_total_kb)) : ''}
-    ${swapTotal > 0 ? row('Swap Used', `${fmtBytes(swapUsed)} (${bar(swapPct)})`) : ''}
+    ${swapTotal > 0 ? row('Swap Used', trusted(`${fmtBytes(swapUsed)} (${bar(swapPct)})`)) : ''}
   `;
   if (mem.slots_raw) {
     memHtml += `<hr class="hw-divider"><div style="color:var(--hw-muted);font-size:11px;white-space:pre-wrap;">${mem.slots_raw}</div>`;
@@ -201,7 +214,7 @@ function render(hw) {
   let gpuHtml = '';
   if (gpus.length === 0) {
     if (hw.gpus_lspci) {
-      gpuHtml = `<div style="color:var(--hw-muted);font-size:12px;white-space:pre-wrap;">${hw.gpus_lspci}</div>`;
+      gpuHtml = `<div style="color:var(--hw-muted);font-size:12px;white-space:pre-wrap;">${escapeHtml(hw.gpus_lspci)}</div>`;
     } else {
       gpuHtml = `<div class="hw-val muted">No GPU detected</div>`;
     }
@@ -213,13 +226,13 @@ function render(hw) {
       const vramPct = vramTotal > 0 ? (vramUsed/vramTotal*100) : 0;
       gpuHtml += `
         <div class="gpu-card">
-          <div class="gpu-vendor-badge gpu-vendor-${vClass}">${gpu.vendor}</div>
+          <div class="gpu-vendor-badge gpu-vendor-${vClass}">${escapeHtml(gpu.vendor)}</div>
           ${row('Name', gpu.name || '?')}
           ${gpu.driver ? row('Driver', gpu.driver) : ''}
           ${vramTotal > 0 ? row('VRAM Total', fmtMB(gpu.vram_total_mb)) : ''}
-          ${vramTotal > 0 ? row('VRAM Used', `${fmtMB(gpu.vram_used_mb)} (${bar(vramPct)})`) : ''}
-          ${gpu.temp_c ? row('Temperature', tempBadge(gpu.temp_c)) : ''}
-          ${gpu.util_pct ? row('Utilization', bar(gpu.util_pct)) : ''}
+          ${vramTotal > 0 ? row('VRAM Used', trusted(`${fmtMB(gpu.vram_used_mb)} (${bar(vramPct)})`)) : ''}
+          ${gpu.temp_c ? row('Temperature', trusted(tempBadge(gpu.temp_c))) : ''}
+          ${gpu.util_pct ? row('Utilization', trusted(bar(gpu.util_pct))) : ''}
           ${gpu.power_w ? row('Power Draw', `${gpu.power_w} W`) : ''}
           ${gpu.power_limit_w ? row('Power Limit', `${gpu.power_limit_w} W`) : ''}
           ${gpu.pcie_gen ? row('PCIe', `Gen${gpu.pcie_gen} x${gpu.pcie_width}`) : ''}
@@ -232,11 +245,11 @@ function render(hw) {
   nics.forEach(nic => {
     const stateColor = nic.state === 'up' ? 'green' : 'muted';
     netHtml += `<div class="nic-row">
-      <div class="nic-name">${nic.name} <span class="hw-val ${stateColor}" style="font-size:11px;">${nic.state || ''}</span></div>
-      ${nic.ipv4 ? `<div style="color:var(--hw-text);font-size:12px;">${nic.ipv4}</div>` : ''}
-      ${nic.ipv6 ? `<div style="color:var(--hw-muted);font-size:11px;">${nic.ipv6}</div>` : ''}
+      <div class="nic-name">${escapeHtml(nic.name)} <span class="hw-val ${stateColor}" style="font-size:11px;">${escapeHtml(nic.state || '')}</span></div>
+      ${nic.ipv4 ? `<div style="color:var(--hw-text);font-size:12px;">${escapeHtml(nic.ipv4)}</div>` : ''}
+      ${nic.ipv6 ? `<div style="color:var(--hw-muted);font-size:11px;">${escapeHtml(nic.ipv6)}</div>` : ''}
       <div style="color:var(--hw-muted);font-size:11px;">
-        ${nic.mac || ''} ${nic.speed_mbps && nic.speed_mbps !== '-1' ? '· ' + nic.speed_mbps + ' Mbps' : ''} ${nic.driver ? '· ' + nic.driver : ''}
+        ${escapeHtml(nic.mac || '')} ${nic.speed_mbps && nic.speed_mbps !== '-1' ? '· ' + escapeHtml(nic.speed_mbps) + ' Mbps' : ''} ${nic.driver ? '· ' + escapeHtml(nic.driver) : ''}
       </div>
     </div>`;
   });
@@ -250,8 +263,8 @@ function render(hw) {
     storHtml += `<div class="disk-row">
       <div class="disk-icon">${icon}</div>
       <div style="flex:1;">
-        <div class="disk-name">/dev/${disk.name} <span class="disk-type disk-${typeClass}">${disk.type || 'DISK'}</span></div>
-        <div class="disk-size">${disk.size || ''} ${disk.model ? '· ' + disk.model : ''} ${disk.serial ? '· S/N: ' + disk.serial : ''}</div>
+        <div class="disk-name">/dev/${escapeHtml(disk.name)} <span class="disk-type disk-${typeClass}">${escapeHtml(disk.type || 'DISK')}</span></div>
+        <div class="disk-size">${escapeHtml(disk.size || '')} ${disk.model ? '· ' + escapeHtml(disk.model) : ''} ${disk.serial ? '· S/N: ' + escapeHtml(disk.serial) : ''}</div>
       </div>
     </div>`;
   });
@@ -261,7 +274,7 @@ function render(hw) {
   let pcieHtml = '';
   if (hw.pcie_devices) {
     hw.pcie_devices.split('\n').forEach(line => {
-      if (line.trim()) pcieHtml += `<div style="color:var(--hw-text);font-size:12px;margin-bottom:4px;">${line.trim()}</div>`;
+      if (line.trim()) pcieHtml += `<div style="color:var(--hw-text);font-size:12px;margin-bottom:4px;">${escapeHtml(line.trim())}</div>`;
     });
   }
 
@@ -319,7 +332,7 @@ async function refresh() {
     const data = await r.json();
     render(data);
   } catch(e) {
-    document.getElementById('hw-content').innerHTML = `<div style="color:var(--hw-red);padding:40px;text-align:center;">⚠ Connection failed: ${e}</div>`;
+    document.getElementById('hw-content').innerHTML = `<div style="color:var(--hw-red);padding:40px;text-align:center;">⚠ Connection failed: ${escapeHtml(String(e))}</div>`;
   }
   btn.disabled = false;
   icon.className = '';
