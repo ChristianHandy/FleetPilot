@@ -1,0 +1,344 @@
+{% extends "base.html" %}
+{% block title %}{{ server_name }} — Hardware{% endblock %}
+{% block content %}
+<style>
+:root {
+  /* Realigned to FleetPilot's theme tokens — see hw_overview/index.html */
+  --hw-bg: #070c14; --hw-card: #0b1422; --hw-border: #1a2d45;
+  --hw-text: #e2e8f0; --hw-muted: #64748b;
+  --hw-green: #10b981; --hw-blue: #3b82f6; --hw-purple: #8b5cf6;
+  --hw-orange: #f59e0b; --hw-red: #ef4444; --hw-yellow: #eab308;
+  --hw-nvidia: #76b900; --hw-amd: #ed1c24;
+}
+.hw-page { padding: 24px; max-width: 1200px; margin: 0 auto; }
+.hw-back { color: var(--hw-blue); text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; margin-bottom: 20px; }
+.hw-back:hover { text-decoration: underline; }
+.hw-title { font-size: 28px; font-weight: 800; color: var(--hw-text); margin-bottom: 4px; }
+.hw-subtitle { color: var(--hw-muted); font-size: 14px; margin-bottom: 28px; }
+.hw-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px; }
+.hw-section {
+  background: var(--hw-card); border: 1px solid var(--hw-border);
+  border-radius: 12px; overflow: hidden;
+}
+.hw-section-header {
+  padding: 14px 18px; border-bottom: 1px solid var(--hw-border);
+  display: flex; align-items: center; gap: 10px;
+  background: linear-gradient(135deg, #161b22 0%, #0d1117 100%);
+}
+.hw-section-icon { font-size: 18px; }
+.hw-section-title { font-size: 14px; font-weight: 700; color: var(--hw-text); }
+.hw-section-body { padding: 16px 18px; font-family: 'Cascadia Code','Fira Code','Consolas',monospace; font-size: 12.5px; }
+.hw-row { display: flex; gap: 0; margin-bottom: 6px; line-height: 1.5; }
+.hw-key { min-width: 130px; color: var(--hw-blue); font-weight: 600; flex-shrink: 0; }
+.hw-sep { color: var(--hw-border); margin: 0 8px; }
+.hw-val { color: var(--hw-text); flex: 1; word-break: break-all; }
+.hw-val.muted { color: var(--hw-muted); }
+.hw-val.green { color: var(--hw-green); }
+.hw-val.red { color: var(--hw-red); }
+.hw-val.yellow { color: var(--hw-yellow); }
+.hw-val.nvidia { color: var(--hw-nvidia); }
+.hw-val.amd { color: var(--hw-amd); }
+.hw-divider { border: none; border-top: 1px solid var(--hw-border); margin: 10px 0; }
+.bar { display: inline-block; height: 8px; border-radius: 4px; background: var(--hw-border); width: 100px; vertical-align: middle; margin-right: 8px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 4px; }
+.bar-fill.green { background: var(--hw-green); }
+.bar-fill.yellow { background: var(--hw-yellow); }
+.bar-fill.red { background: var(--hw-red); }
+.temp-badge { display: inline-block; padding: 1px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+.temp-ok { background: rgba(16,185,129,0.15); color: var(--hw-green); }
+.temp-warn { background: rgba(234,179,8,0.15); color: var(--hw-yellow); }
+.temp-hot { background: rgba(239,68,68,0.15); color: var(--hw-red); }
+.gpu-card {
+  background: rgba(255,255,255,0.03); border: 1px solid var(--hw-border);
+  border-radius: 8px; padding: 12px; margin-bottom: 12px;
+}
+.gpu-card:last-child { margin-bottom: 0; }
+.gpu-vendor-badge {
+  display: inline-block; padding: 2px 10px; border-radius: 4px;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+.gpu-vendor-nvidia { background: rgba(118,185,0,0.2); color: var(--hw-nvidia); border: 1px solid rgba(118,185,0,0.3); }
+.gpu-vendor-amd { background: rgba(237,28,36,0.2); color: #ff6b6b; border: 1px solid rgba(237,28,36,0.3); }
+.gpu-vendor-other { background: rgba(59,130,246,0.15); color: var(--hw-blue); border: 1px solid rgba(59,130,246,0.3); }
+.nic-row { background: rgba(255,255,255,0.02); border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; }
+.nic-name { font-weight: 700; color: var(--hw-blue); font-size: 13px; }
+.disk-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid rgba(26,45,69,0.5); }
+.disk-row:last-child { border-bottom: none; }
+.disk-icon { font-size: 20px; }
+.disk-name { font-weight: 700; color: var(--hw-text); font-size: 13px; }
+.disk-size { color: var(--hw-muted); font-size: 12px; }
+.disk-type { padding: 1px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; }
+.disk-ssd { background: rgba(59,130,246,0.15); color: var(--hw-blue); }
+.disk-hdd { background: rgba(245,158,11,0.15); color: var(--hw-orange); }
+.disk-nvme { background: rgba(139,92,246,0.15); color: var(--hw-purple); }
+.hw-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; border: 1px solid var(--hw-border); background: var(--hw-card); color: var(--hw-text); transition: all 0.15s; }
+.hw-btn:hover { background: #21262d; border-color: var(--hw-blue); color: var(--hw-blue); }
+.spin { animation: spin 1s linear infinite; display: inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+
+<div class="hw-page">
+  <a href="/hw_overview" class="hw-back">← Back to Overview</a>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
+    <div>
+      <div class="hw-title" id="page-hostname">{{ server_name }}</div>
+      <div class="hw-subtitle" id="page-os">Loading hardware information...</div>
+    </div>
+    <button class="hw-btn" onclick="refresh()" id="refresh-btn">
+      <span id="refresh-icon">⟳</span> Refresh
+    </button>
+  </div>
+
+  <div id="hw-content">
+    <div style="text-align:center;padding:60px;color:var(--hw-muted);">
+      <div class="spin" style="font-size:32px;">⟳</div>
+      <div style="margin-top:12px;">Loading hardware info...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const serverName = {{ server_name | tojson }};
+
+function fmtBytes(kb) {
+  const v = parseInt(kb);
+  if (isNaN(v)) return kb || '?';
+  if (v > 1048576) return (v/1048576).toFixed(2) + ' GB';
+  if (v > 1024) return (v/1024).toFixed(0) + ' MB';
+  return v + ' KB';
+}
+function fmtMB(mb) {
+  const v = parseInt(mb);
+  if (isNaN(v)) return mb || '?';
+  if (v > 1024) return (v/1024).toFixed(2) + ' GB';
+  return v + ' MB';
+}
+function bar(pct, width=120) {
+  const p = Math.min(100, Math.max(0, parseFloat(pct) || 0));
+  const c = p >= 90 ? 'red' : p >= 70 ? 'yellow' : 'green';
+  return `<span class="bar" style="width:${width}px"><span class="bar-fill ${c}" style="width:${p}%"></span></span><strong>${p.toFixed(1)}%</strong>`;
+}
+function tempBadge(t) {
+  const v = parseFloat(t);
+  if (isNaN(v)) return t;
+  const c = v >= 85 ? 'hot' : v >= 70 ? 'warn' : 'ok';
+  return `<span class="temp-badge temp-${c}">${v.toFixed(1)}°C</span>`;
+}
+function row(key, val, valClass='') {
+  return `<div class="hw-row"><span class="hw-key">${key}</span><span class="hw-sep">│</span><span class="hw-val ${valClass}">${val}</span></div>`;
+}
+
+function render(hw) {
+  if (hw.error) {
+    document.getElementById('hw-content').innerHTML = `<div style="color:var(--hw-red);padding:40px;text-align:center;">⚠ ${hw.error}</div>`;
+    return;
+  }
+
+  document.getElementById('page-hostname').textContent = hw.hostname || serverName;
+  document.getElementById('page-os').textContent = `${hw.os || ''} · ${hw.kernel || ''} · ${hw.arch || ''} · Uptime: ${hw.uptime || '?'}`;
+
+  const cpu = hw.cpu || {};
+  const mem = hw.memory || {};
+  const mb = hw.motherboard || {};
+  const gpus = hw.gpus || [];
+  const nics = hw.network || [];
+  const disks = hw.disks || [];
+
+  // ── System Section ──────────────────────────────────────────────────────
+  let sysHtml = `
+    ${row('Hostname', hw.hostname || '?')}
+    ${row('OS', hw.os || '?')}
+    ${row('Kernel', hw.kernel || '?')}
+    ${row('Architecture', hw.arch || '?')}
+    ${row('Uptime', hw.uptime || '?')}
+    ${hw.virtualization ? row('Virtualization', hw.virtualization) : ''}
+    ${hw.packages ? row('Packages', hw.packages) : ''}
+    ${hw.shell ? row('Shell', hw.shell) : ''}
+  `;
+
+  // ── CPU Section ──────────────────────────────────────────────────────────
+  let cpuHtml = `
+    ${row('Model', cpu.model || '?')}
+    ${row('Cores / Threads', `${cpu.cores || '?'} cores / ${cpu.threads || '?'} threads`)}
+    ${cpu.max_freq_mhz ? row('Max Speed', `${(cpu.max_freq_mhz/1000).toFixed(2)} GHz`) : ''}
+    ${cpu.freq_mhz ? row('Current Speed', `${(cpu.freq_mhz/1000).toFixed(2)} GHz`) : ''}
+    ${cpu.temp_c ? row('Temperature', tempBadge(cpu.temp_c)) : ''}
+    ${cpu.usage_pct ? row('Utilization', bar(cpu.usage_pct)) : ''}
+  `;
+
+  // ── Memory Section ───────────────────────────────────────────────────────
+  const memTotalKb = parseInt(mem.total_kb || 0);
+  const memUsedKb = parseInt(mem.used_kb || 0);
+  const memPct = memTotalKb > 0 ? (memUsedKb/memTotalKb*100) : 0;
+  const swapTotal = parseInt(mem.swap_total_kb || 0);
+  const swapFree = parseInt(mem.swap_free_kb || 0);
+  const swapUsed = swapTotal - swapFree;
+  const swapPct = swapTotal > 0 ? (swapUsed/swapTotal*100) : 0;
+  let memHtml = `
+    ${row('Total RAM', fmtBytes(mem.total_kb))}
+    ${row('Used', `${fmtBytes(mem.used_kb)} (${bar(memPct)})`)}
+    ${row('Available', fmtBytes(mem.free_kb))}
+    ${swapTotal > 0 ? row('Swap Total', fmtBytes(mem.swap_total_kb)) : ''}
+    ${swapTotal > 0 ? row('Swap Used', `${fmtBytes(swapUsed)} (${bar(swapPct)})`) : ''}
+  `;
+  if (mem.slots_raw) {
+    memHtml += `<hr class="hw-divider"><div style="color:var(--hw-muted);font-size:11px;white-space:pre-wrap;">${mem.slots_raw}</div>`;
+  }
+
+  // ── Motherboard Section ──────────────────────────────────────────────────
+  let mbHtml = `
+    ${mb.manufacturer ? row('Manufacturer', mb.manufacturer) : ''}
+    ${mb.product ? row('Product', mb.product) : ''}
+    ${mb.version ? row('Version', mb.version) : ''}
+    <hr class="hw-divider">
+    ${mb.bios_vendor ? row('BIOS Vendor', mb.bios_vendor) : ''}
+    ${mb.bios_version ? row('BIOS Version', mb.bios_version) : ''}
+    ${mb.bios_date ? row('BIOS Date', mb.bios_date) : ''}
+  `;
+
+  // ── GPU Section ──────────────────────────────────────────────────────────
+  let gpuHtml = '';
+  if (gpus.length === 0) {
+    if (hw.gpus_lspci) {
+      gpuHtml = `<div style="color:var(--hw-muted);font-size:12px;white-space:pre-wrap;">${hw.gpus_lspci}</div>`;
+    } else {
+      gpuHtml = `<div class="hw-val muted">No GPU detected</div>`;
+    }
+  } else {
+    gpus.forEach(gpu => {
+      const vClass = gpu.vendor === 'NVIDIA' ? 'nvidia' : gpu.vendor === 'AMD' ? 'amd' : 'other';
+      const vramTotal = parseInt(gpu.vram_total_mb || 0);
+      const vramUsed = parseInt(gpu.vram_used_mb || 0);
+      const vramPct = vramTotal > 0 ? (vramUsed/vramTotal*100) : 0;
+      gpuHtml += `
+        <div class="gpu-card">
+          <div class="gpu-vendor-badge gpu-vendor-${vClass}">${gpu.vendor}</div>
+          ${row('Name', gpu.name || '?')}
+          ${gpu.driver ? row('Driver', gpu.driver) : ''}
+          ${vramTotal > 0 ? row('VRAM Total', fmtMB(gpu.vram_total_mb)) : ''}
+          ${vramTotal > 0 ? row('VRAM Used', `${fmtMB(gpu.vram_used_mb)} (${bar(vramPct)})`) : ''}
+          ${gpu.temp_c ? row('Temperature', tempBadge(gpu.temp_c)) : ''}
+          ${gpu.util_pct ? row('Utilization', bar(gpu.util_pct)) : ''}
+          ${gpu.power_w ? row('Power Draw', `${gpu.power_w} W`) : ''}
+          ${gpu.power_limit_w ? row('Power Limit', `${gpu.power_limit_w} W`) : ''}
+          ${gpu.pcie_gen ? row('PCIe', `Gen${gpu.pcie_gen} x${gpu.pcie_width}`) : ''}
+        </div>`;
+    });
+  }
+
+  // ── Network Section ──────────────────────────────────────────────────────
+  let netHtml = '';
+  nics.forEach(nic => {
+    const stateColor = nic.state === 'up' ? 'green' : 'muted';
+    netHtml += `<div class="nic-row">
+      <div class="nic-name">${nic.name} <span class="hw-val ${stateColor}" style="font-size:11px;">${nic.state || ''}</span></div>
+      ${nic.ipv4 ? `<div style="color:var(--hw-text);font-size:12px;">${nic.ipv4}</div>` : ''}
+      ${nic.ipv6 ? `<div style="color:var(--hw-muted);font-size:11px;">${nic.ipv6}</div>` : ''}
+      <div style="color:var(--hw-muted);font-size:11px;">
+        ${nic.mac || ''} ${nic.speed_mbps && nic.speed_mbps !== '-1' ? '· ' + nic.speed_mbps + ' Mbps' : ''} ${nic.driver ? '· ' + nic.driver : ''}
+      </div>
+    </div>`;
+  });
+  if (!netHtml) netHtml = `<div class="hw-val muted">No network interfaces found</div>`;
+
+  // ── Storage Section ──────────────────────────────────────────────────────
+  let storHtml = '';
+  disks.forEach(disk => {
+    const icon = disk.type === 'NVMe' ? '⚡' : disk.type === 'SSD' ? '💾' : '🖴';
+    const typeClass = disk.type === 'NVMe' ? 'nvme' : disk.type === 'SSD' ? 'ssd' : 'hdd';
+    storHtml += `<div class="disk-row">
+      <div class="disk-icon">${icon}</div>
+      <div style="flex:1;">
+        <div class="disk-name">/dev/${disk.name} <span class="disk-type disk-${typeClass}">${disk.type || 'DISK'}</span></div>
+        <div class="disk-size">${disk.size || ''} ${disk.model ? '· ' + disk.model : ''} ${disk.serial ? '· S/N: ' + disk.serial : ''}</div>
+      </div>
+    </div>`;
+  });
+  if (!storHtml) storHtml = `<div class="hw-val muted">No storage devices found</div>`;
+
+  // ── PCIe Section ─────────────────────────────────────────────────────────
+  let pcieHtml = '';
+  if (hw.pcie_devices) {
+    hw.pcie_devices.split('\n').forEach(line => {
+      if (line.trim()) pcieHtml += `<div style="color:var(--hw-text);font-size:12px;margin-bottom:4px;">${line.trim()}</div>`;
+    });
+  }
+
+  // ── Assemble ─────────────────────────────────────────────────────────────
+  document.getElementById('hw-content').innerHTML = `
+    <div class="hw-grid">
+      <div class="hw-section">
+        <div class="hw-section-header"><span class="hw-section-icon">🖥️</span><span class="hw-section-title">System</span></div>
+        <div class="hw-section-body">${sysHtml}</div>
+      </div>
+      <div class="hw-section">
+        <div class="hw-section-header"><span class="hw-section-icon">⚙️</span><span class="hw-section-title">CPU</span></div>
+        <div class="hw-section-body">${cpuHtml}</div>
+      </div>
+      <div class="hw-section">
+        <div class="hw-section-header"><span class="hw-section-icon">🧠</span><span class="hw-section-title">Memory</span></div>
+        <div class="hw-section-body">${memHtml}</div>
+      </div>
+      <div class="hw-section">
+        <div class="hw-section-header"><span class="hw-section-icon">🔌</span><span class="hw-section-title">Motherboard</span></div>
+        <div class="hw-section-body">${mbHtml}</div>
+      </div>
+      <div class="hw-section">
+        <div class="hw-section-header"><span class="hw-section-icon">🎮</span><span class="hw-section-title">GPU</span></div>
+        <div class="hw-section-body">${gpuHtml}</div>
+      </div>
+      <div class="hw-section">
+        <div class="hw-section-header"><span class="hw-section-icon">🌐</span><span class="hw-section-title">Network</span></div>
+        <div class="hw-section-body">${netHtml}</div>
+      </div>
+      <div class="hw-section" style="grid-column: 1 / -1;">
+        <div class="hw-section-header"><span class="hw-section-icon">💿</span><span class="hw-section-title">Storage</span></div>
+        <div class="hw-section-body">${storHtml}</div>
+      </div>
+      ${pcieHtml ? `<div class="hw-section" style="grid-column: 1 / -1;">
+        <div class="hw-section-header"><span class="hw-section-icon">🔗</span><span class="hw-section-title">PCIe Devices</span></div>
+        <div class="hw-section-body" style="font-size:11.5px;">${pcieHtml}</div>
+      </div>` : ''}
+    </div>
+    <div style="color:var(--hw-muted);font-size:11px;margin-top:16px;text-align:right;">
+      Last collected: ${hw._collected_at ? hw._collected_at.substring(0,19).replace('T',' ') : 'Unknown'}
+      ${hw._cached ? ' (cached)' : ' (live)'}
+    </div>
+  `;
+}
+
+async function refresh() {
+  const btn = document.getElementById('refresh-btn');
+  const icon = document.getElementById('refresh-icon');
+  btn.disabled = true;
+  icon.className = 'spin';
+  document.getElementById('hw-content').innerHTML = `<div style="text-align:center;padding:60px;color:var(--hw-muted);"><div class="spin" style="font-size:32px;">⟳</div><div style="margin-top:12px;">Collecting hardware info...</div></div>`;
+  try {
+    const r = await fetch(`/hw_overview/${encodeURIComponent(serverName)}/refresh`);
+    const data = await r.json();
+    render(data);
+  } catch(e) {
+    document.getElementById('hw-content').innerHTML = `<div style="color:var(--hw-red);padding:40px;text-align:center;">⚠ Connection failed: ${e}</div>`;
+  }
+  btn.disabled = false;
+  icon.className = '';
+  icon.textContent = '⟳';
+}
+
+// Load on page load
+document.addEventListener('DOMContentLoaded', async () => {
+  // Try cached first
+  try {
+    const r = await fetch(`/api/hw_overview/${encodeURIComponent(serverName)}`);
+    if (r.ok) {
+      const data = await r.json();
+      render(data);
+      return;
+    }
+  } catch(e) {}
+  // Auto-refresh if no cached data
+  refresh();
+});
+</script>
+{% endblock %}

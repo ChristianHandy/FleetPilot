@@ -1,0 +1,415 @@
+{% extends "base.html" %}
+{% block title %}Hardware Overview{% endblock %}
+{% block content %}
+<style>
+:root {
+  /* Realigned to FleetPilot's actual theme tokens (static/style.css) —
+     this page previously used an unrelated palette that made it look
+     like a different product. Vendor brand colors (nvidia/amd) are kept
+     authentic since they exist for brand recognition, not decoration. */
+  --hw-bg: #070c14;
+  --hw-card: #0b1422;
+  --hw-border: #1a2d45;
+  --hw-text: #e2e8f0;
+  --hw-muted: #64748b;
+  --hw-green: #10b981;
+  --hw-blue: #3b82f6;
+  --hw-purple: #8b5cf6;
+  --hw-orange: #f59e0b;
+  --hw-red: #ef4444;
+  --hw-yellow: #eab308;
+  --hw-teal: #06b6d4;
+  --hw-nvidia: #76b900;
+  --hw-amd: #ed1c24;
+}
+.hw-page { padding: 24px; max-width: 1400px; margin: 0 auto; }
+.hw-header { display: flex; align-items: center; gap: 16px; margin-bottom: 28px; }
+.hw-header h1 { font-size: 26px; font-weight: 700; color: var(--hw-text); margin: 0; }
+.hw-header .badge-count {
+  background: rgba(59,130,246,0.15); color: var(--hw-blue);
+  border: 1px solid rgba(59,130,246,0.3); border-radius: 20px;
+  padding: 3px 12px; font-size: 13px; font-weight: 600;
+}
+.hw-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: 8px; font-size: 13px;
+  font-weight: 600; cursor: pointer; text-decoration: none;
+  border: 1px solid var(--hw-border); background: var(--hw-card);
+  color: var(--hw-text); transition: all 0.15s;
+}
+.hw-btn:hover { background: #21262d; border-color: var(--hw-blue); color: var(--hw-blue); }
+.hw-btn.primary { background: var(--hw-blue); border-color: var(--hw-blue); color: #0d1117; }
+.hw-btn.primary:hover { background: #79c0ff; }
+.hw-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(520px, 1fr));
+  gap: 20px;
+}
+/* Fastfetch card */
+.ff-card {
+  background: var(--hw-card);
+  border: 1px solid var(--hw-border);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: transform 0.15s, border-color 0.15s;
+}
+.ff-card:hover { transform: translateY(-2px); border-color: #58a6ff44; }
+.ff-card-header {
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #161b22 0%, #0d1117 100%);
+  border-bottom: 1px solid var(--hw-border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.ff-hostname { font-size: 16px; font-weight: 700; color: var(--hw-blue); }
+.ff-os { font-size: 12px; color: var(--hw-muted); margin-top: 2px; }
+.ff-actions { display: flex; gap: 8px; }
+.ff-icon-btn {
+  width: 30px; height: 30px; border-radius: 6px;
+  background: rgba(255,255,255,0.05); border: 1px solid var(--hw-border);
+  color: var(--hw-muted); cursor: pointer; display: flex;
+  align-items: center; justify-content: center; font-size: 14px;
+  text-decoration: none; transition: all 0.15s;
+}
+.ff-icon-btn:hover { background: rgba(59,130,246,0.15); color: var(--hw-blue); border-color: var(--hw-blue); }
+.ff-body { padding: 16px 20px; font-family: 'Cascadia Code','Fira Code','Consolas',monospace; font-size: 12.5px; }
+.ff-row {
+  display: flex; align-items: flex-start; gap: 0;
+  margin-bottom: 5px; line-height: 1.5;
+}
+.ff-key {
+  min-width: 110px; color: var(--hw-blue); font-weight: 600;
+  flex-shrink: 0;
+}
+.ff-sep { color: var(--hw-border); margin: 0 6px; }
+.ff-val { color: var(--hw-text); flex: 1; word-break: break-word; }
+.ff-val.green { color: var(--hw-green); }
+.ff-val.orange { color: var(--hw-orange); }
+.ff-val.red { color: var(--hw-red); }
+.ff-val.muted { color: var(--hw-muted); }
+.ff-val.nvidia { color: var(--hw-nvidia); }
+.ff-val.amd { color: var(--hw-amd); }
+.ff-divider { border: none; border-top: 1px solid var(--hw-border); margin: 10px 0; }
+.ff-section-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--hw-muted); margin: 10px 0 6px;
+}
+/* Progress bar */
+.ff-bar {
+  display: inline-block; height: 6px; border-radius: 3px;
+  background: var(--hw-border); width: 80px; vertical-align: middle;
+  margin-right: 6px; overflow: hidden;
+}
+.ff-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+.ff-bar-fill.green { background: var(--hw-green); }
+.ff-bar-fill.yellow { background: var(--hw-yellow); }
+.ff-bar-fill.red { background: var(--hw-red); }
+/* Temp badge */
+.temp-badge {
+  display: inline-block; padding: 1px 7px; border-radius: 4px;
+  font-size: 11px; font-weight: 700;
+}
+.temp-ok { background: rgba(16,185,129,0.15); color: var(--hw-green); }
+.temp-warn { background: rgba(234,179,8,0.15); color: var(--hw-yellow); }
+.temp-hot { background: rgba(239,68,68,0.15); color: var(--hw-red); }
+/* Empty state */
+.hw-empty {
+  text-align: center; padding: 80px 20px; color: var(--hw-muted);
+}
+.hw-empty .icon { font-size: 64px; margin-bottom: 16px; }
+.hw-empty h2 { font-size: 20px; color: var(--hw-text); margin-bottom: 8px; }
+/* Spinner */
+.spin { animation: spin 1s linear infinite; display: inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+/* Collected time */
+.ff-footer {
+  padding: 10px 20px;
+  border-top: 1px solid var(--hw-border);
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 11px; color: var(--hw-muted);
+}
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  display: inline-block; margin-right: 6px;
+}
+.status-dot.online { background: var(--hw-green); box-shadow: 0 0 6px var(--hw-green); }
+.status-dot.offline { background: var(--hw-red); }
+</style>
+
+<div class="hw-page">
+  <div class="hw-header">
+    <div>
+      <h1>🖥️ Hardware Overview</h1>
+      <div style="color:var(--hw-muted);font-size:13px;margin-top:4px;">Fastfetch-style hardware info for all servers</div>
+    </div>
+    <span class="badge-count">{{ servers|length }} server{{ 's' if servers|length != 1 else '' }}</span>
+    <div style="margin-left:auto;display:flex;gap:10px;">
+      <button class="hw-btn" onclick="refreshAll()" id="refresh-all-btn">
+        <span id="refresh-icon">⟳</span> Refresh All
+      </button>
+      <a href="/hosts" class="hw-btn">+ Add Server</a>
+    </div>
+  </div>
+
+  {% if not servers %}
+  <div class="hw-empty">
+    <div class="icon">🔍</div>
+    <h2>No hardware data yet</h2>
+    <p>Click "Refresh All" to collect hardware info from all configured servers, or add servers first.</p>
+    <button class="hw-btn primary" onclick="refreshAll()" style="margin-top:16px;">
+      ⟳ Collect Hardware Info
+    </button>
+  </div>
+  {% else %}
+  <div class="hw-grid" id="hw-grid">
+    {% for srv in servers %}
+    <div class="ff-card" id="card-{{ srv.server_name | replace(' ','_') }}">
+      <div class="ff-card-header">
+        <div>
+          <div class="ff-hostname">{{ srv.server_name }}</div>
+          <div class="ff-os">Last collected: {{ srv.collected_at[:19].replace('T',' ') if srv.collected_at else 'Never' }}</div>
+        </div>
+        <div class="ff-actions">
+          <a href="/hw_overview/{{ srv.server_name }}" class="ff-icon-btn" title="Full Details">⊞</a>
+          <button class="ff-icon-btn" onclick="refreshServer('{{ srv.server_name }}')" title="Refresh">⟳</button>
+        </div>
+      </div>
+      <div class="ff-body" id="body-{{ srv.server_name | replace(' ','_') }}">
+        <div class="ff-val muted">Loading...</div>
+      </div>
+      <div class="ff-footer">
+        <span><span class="status-dot offline" id="dot-{{ srv.server_name | replace(' ','_') }}"></span>
+          <span id="status-{{ srv.server_name | replace(' ','_') }}">Cached</span>
+        </span>
+        <span id="time-{{ srv.server_name | replace(' ','_') }}">{{ srv.collected_at[:19].replace('T',' ') if srv.collected_at else '' }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+<script>
+const servers = {{ servers | tojson }};
+
+function tempClass(t) {
+  const v = parseFloat(t);
+  if (isNaN(v)) return '';
+  if (v >= 85) return 'hot';
+  if (v >= 70) return 'warn';
+  return 'ok';
+}
+
+function barColor(pct) {
+  if (pct >= 90) return 'red';
+  if (pct >= 70) return 'yellow';
+  return 'green';
+}
+
+function bar(pct) {
+  const p = Math.min(100, Math.max(0, parseFloat(pct) || 0));
+  const c = barColor(p);
+  return `<span class="ff-bar"><span class="ff-bar-fill ${c}" style="width:${p}%"></span></span>${p.toFixed(0)}%`;
+}
+
+function fmtBytes(kb) {
+  const v = parseInt(kb);
+  if (isNaN(v)) return kb || '?';
+  if (v > 1048576) return (v/1048576).toFixed(1) + ' GB';
+  if (v > 1024) return (v/1024).toFixed(0) + ' MB';
+  return v + ' KB';
+}
+
+function fmtMB(mb) {
+  const v = parseInt(mb);
+  if (isNaN(v)) return mb || '?';
+  if (v > 1024) return (v/1024).toFixed(1) + ' GB';
+  return v + ' MB';
+}
+
+function renderCard(name, hw) {
+  const id = name.replace(/ /g,'_');
+  const body = document.getElementById('body-' + id);
+  const dot = document.getElementById('dot-' + id);
+  const status = document.getElementById('status-' + id);
+  const timeEl = document.getElementById('time-' + id);
+  if (!body) return;
+
+  if (hw.error) {
+    body.innerHTML = `<div class="ff-val red">⚠ ${hw.error}</div>`;
+    dot.className = 'status-dot offline';
+    status.textContent = 'Error';
+    return;
+  }
+
+  dot.className = 'status-dot online';
+  status.textContent = hw._cached ? 'Cached' : 'Live';
+  if (hw._collected_at) timeEl.textContent = hw._collected_at.substring(0,19).replace('T',' ');
+
+  let rows = [];
+
+  // OS
+  if (hw.hostname) rows.push(['Host', hw.hostname]);
+  if (hw.os) rows.push(['OS', hw.os]);
+  if (hw.kernel) rows.push(['Kernel', hw.kernel]);
+  if (hw.arch) rows.push(['Arch', hw.arch]);
+  if (hw.uptime) rows.push(['Uptime', hw.uptime]);
+  if (hw.virtualization && hw.virtualization !== 'none') rows.push(['Virt', hw.virtualization]);
+  if (hw.packages) rows.push(['Packages', hw.packages]);
+
+  rows.push(['──────', '']);
+
+  // CPU
+  const cpu = hw.cpu || {};
+  if (cpu.model) rows.push(['CPU', cpu.model]);
+  if (cpu.cores || cpu.threads) rows.push(['Cores', `${cpu.cores || '?'} cores / ${cpu.threads || '?'} threads`]);
+  if (cpu.freq_mhz) {
+    const freq = cpu.max_freq_mhz ? `${(cpu.max_freq_mhz/1000).toFixed(2)} GHz (max)` : `${(cpu.freq_mhz/1000).toFixed(2)} GHz`;
+    rows.push(['Speed', freq]);
+  }
+  if (cpu.temp_c) {
+    const tc = tempClass(cpu.temp_c);
+    rows.push(['CPU Temp', `<span class="temp-badge temp-${tc}">${cpu.temp_c}°C</span>`]);
+  }
+  if (cpu.usage_pct) rows.push(['CPU Load', bar(cpu.usage_pct)]);
+
+  rows.push(['──────', '']);
+
+  // RAM
+  const mem = hw.memory || {};
+  if (mem.total_kb) {
+    const pct = mem.used_pct || 0;
+    rows.push(['RAM', `${bar(pct)} of ${fmtBytes(mem.total_kb)}`]);
+  }
+  if (mem.swap_total_kb && parseInt(mem.swap_total_kb) > 0) {
+    const st = parseInt(mem.swap_total_kb);
+    const sf = parseInt(mem.swap_free_kb || 0);
+    const sp = st > 0 ? ((st-sf)/st*100).toFixed(0) : 0;
+    rows.push(['Swap', `${bar(sp)} of ${fmtBytes(st)}`]);
+  }
+
+  rows.push(['──────', '']);
+
+  // Motherboard
+  const mb = hw.motherboard || {};
+  if (mb.manufacturer || mb.product) {
+    rows.push(['Board', `${mb.manufacturer || ''} ${mb.product || ''}`.trim()]);
+  }
+  if (mb.bios_version) rows.push(['BIOS', `${mb.bios_vendor || ''} ${mb.bios_version || ''} (${mb.bios_date || ''})`.trim()]);
+
+  // GPUs
+  const gpus = hw.gpus || [];
+  if (gpus.length > 0) {
+    rows.push(['──────', '']);
+    gpus.forEach((gpu, i) => {
+      const cls = gpu.vendor === 'NVIDIA' ? 'nvidia' : 'amd';
+      let gpuStr = `<span class="${cls}">[${gpu.vendor}]</span> ${gpu.name}`;
+      if (gpu.driver) gpuStr += ` <span style="color:var(--hw-muted)">drv:${gpu.driver}</span>`;
+      rows.push([`GPU ${i+1}`, gpuStr]);
+      if (gpu.vram_total_mb) {
+        const vp = gpu.vram_used_mb && gpu.vram_total_mb ?
+          (parseInt(gpu.vram_used_mb)/parseInt(gpu.vram_total_mb)*100).toFixed(0) : 0;
+        rows.push(['VRAM', `${bar(vp)} of ${fmtMB(gpu.vram_total_mb)}`]);
+      }
+      if (gpu.temp_c) {
+        const tc = tempClass(gpu.temp_c);
+        rows.push(['GPU Temp', `<span class="temp-badge temp-${tc}">${gpu.temp_c}°C</span>`]);
+      }
+      if (gpu.util_pct) rows.push(['GPU Load', bar(gpu.util_pct)]);
+      if (gpu.power_w && gpu.power_limit_w) rows.push(['Power', `${gpu.power_w}W / ${gpu.power_limit_w}W`]);
+      if (gpu.pcie_gen) rows.push(['PCIe', `Gen${gpu.pcie_gen} x${gpu.pcie_width}`]);
+    });
+  } else if (hw.gpus_lspci) {
+    rows.push(['──────', '']);
+    hw.gpus_lspci.split('\n').slice(0,3).forEach(line => {
+      if (line.trim()) rows.push(['GPU', line.trim()]);
+    });
+  }
+
+  // Network
+  const nics = (hw.network || []).filter(n => n.state === 'up' || n.ipv4);
+  if (nics.length > 0) {
+    rows.push(['──────', '']);
+    nics.slice(0,4).forEach(nic => {
+      const speed = nic.speed_mbps && nic.speed_mbps !== '-1' ? ` ${nic.speed_mbps}Mbps` : '';
+      const ip = nic.ipv4 ? nic.ipv4.split('\n')[0] : '';
+      rows.push([nic.name, `${ip}${speed} <span style="color:var(--hw-muted)">${nic.driver||''}</span>`]);
+    });
+  }
+
+  // Disks
+  const disks = hw.disks || [];
+  if (disks.length > 0) {
+    rows.push(['──────', '']);
+    disks.slice(0,6).forEach(disk => {
+      const type = disk.type ? `[${disk.type}]` : '';
+      const model = disk.model ? disk.model : '';
+      rows.push([disk.name, `${disk.size} ${type} ${model}`.trim()]);
+    });
+  }
+
+  // Build HTML
+  let html = '';
+  rows.forEach(([k, v]) => {
+    if (k === '──────') {
+      html += '<hr class="ff-divider">';
+      return;
+    }
+    html += `<div class="ff-row">
+      <span class="ff-key">${k}</span>
+      <span class="ff-sep">│</span>
+      <span class="ff-val">${v}</span>
+    </div>`;
+  });
+  body.innerHTML = html;
+}
+
+async function loadCached(name) {
+  try {
+    const r = await fetch(`/api/hw_overview/${encodeURIComponent(name)}`);
+    if (r.ok) {
+      const data = await r.json();
+      renderCard(name, data);
+    }
+  } catch(e) {}
+}
+
+async function refreshServer(name) {
+  const id = name.replace(/ /g,'_');
+  const body = document.getElementById('body-' + id);
+  if (body) body.innerHTML = '<div class="ff-val muted"><span class="spin">⟳</span> Collecting hardware info...</div>';
+  try {
+    const r = await fetch(`/hw_overview/${encodeURIComponent(name)}/refresh`);
+    const data = await r.json();
+    renderCard(name, data);
+  } catch(e) {
+    if (body) body.innerHTML = `<div class="ff-val red">⚠ Connection failed</div>`;
+  }
+}
+
+async function refreshAll() {
+  const btn = document.getElementById('refresh-all-btn');
+  const icon = document.getElementById('refresh-icon');
+  btn.disabled = true;
+  icon.className = 'spin';
+  icon.textContent = '⟳';
+
+  // First load all cached data
+  for (const srv of servers) {
+    await loadCached(srv.server_name);
+  }
+
+  // Then refresh all in parallel
+  const promises = servers.map(srv => refreshServer(srv.server_name));
+  await Promise.allSettled(promises);
+
+  btn.disabled = false;
+  icon.className = '';
+  icon.textContent = '⟳';
+}
+
+// Load cached data on page load
+document.addEventListener('DOMContentLoaded', () => {
+  servers.forEach(srv => loadCached(srv.server_name));
+});
+</script>
+{% endblock %}
