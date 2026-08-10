@@ -22,5 +22,12 @@ flask-compress>=1.14
 # Gunicorn WSGI server
 gunicorn>=21.2.0
 
-#smartctl for smart checks
-smartmontools
+# 2FA / TOTP support
+pyotp>=2.9.0
+
+# YubiKey support (optional)
+yubico-client>=1.11
+
+# USB HID (for Arctic Fan Controller and other USB devices)
+# Note: on Raspberry Pi install via: sudo apt install python3-hid
+# hid>=1.0.4
