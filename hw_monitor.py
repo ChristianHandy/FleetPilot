@@ -11,7 +11,8 @@ New in this version:
 - Correct CPU temp: prefer Tdie/Tctl over generic max
 """
 
-import paramiko, threading, time, json, os, re, sqlite3, datetime, uuid
+import paramiko
+import ssh_helper, threading, time, json, os, re, sqlite3, datetime, uuid
 
 # ─── Database ────────────────────────────────────────────────────────────────
 

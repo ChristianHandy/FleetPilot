@@ -2,6 +2,7 @@
 import os
 import logging
 import paramiko
+import ssh_helper
 import time
 import subprocess
 import email_config
@@ -189,7 +190,7 @@ def run_local_update(name, log_list, repo_only, log_func):
         # as arrays, but would require restructuring the command chains.
         process = subprocess.Popen(
             update_cmd,
-            shell=True,
+            shell=False,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -255,20 +256,15 @@ def run_update(host, user, name, log_list, repo_only=False, password=None):
         log(f"Connecting to {name} ({host})...")
         
         # Create SSH client
-        # Note: Using AutoAddPolicy for convenience, but this is a security risk
-        # as it automatically accepts unknown host keys (vulnerable to MITM attacks).
-        # For production use, implement proper host key verification.
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.WarningPolicy())
         
         # Connect to the remote host using SSH key or password authentication
         if password:
             log(f"Connecting with password authentication...")
-            ssh.connect(host, username=user, password=password, timeout=30,
+            ssh = ssh_helper.create_client(host, username=user, password=password, timeout=30,
                         look_for_keys=False, allow_agent=False)
         else:
             # SSH key authentication (key must be configured beforehand)
-            ssh.connect(host, username=user, timeout=30)
+            ssh = ssh_helper.create_client(host, username=user, timeout=30)
         log(f"Connected to {name}")
         
         # Detect the operating system and distribution

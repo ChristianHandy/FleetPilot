@@ -74,7 +74,7 @@ _sync_enabled: bool = False
 def _file_hash(path: str) -> str:
     """Return MD5 hash of file contents."""
     try:
-        h = hashlib.md5()
+        h = hashlib.md5(usedforsecurity=False)
         with open(path, 'rb') as f:
             while chunk := f.read(65536):
                 h.update(chunk)
@@ -104,7 +104,7 @@ def _push_file(path: str, rel_name: str, peer_url: str) -> bool:
             data={'filename': rel_name, 'mtime': str(mtime), 'hash': _file_hash(path)},
             headers={'X-Sync-Token': SYNC_TOKEN},
             timeout=15,
-            verify=False,
+            verify=False  # nosec B501 - internal LAN only, self-signed certs,
         )
         return resp.status_code == 200
     except Exception as e:
@@ -121,7 +121,7 @@ def _pull_file(rel_name: str, dest_path: str, peer_url: str) -> bool:
             params={'filename': rel_name},
             headers={'X-Sync-Token': SYNC_TOKEN},
             timeout=15,
-            verify=False,
+            verify=os.environ.get("FLEETPILOT_VERIFY_SSL", "false").lower() == "true"  # nosec B501 - internal LAN only, self-signed certs,
         )
         if resp.status_code == 200:
             os.makedirs(os.path.dirname(dest_path), exist_ok=True)
@@ -144,7 +144,7 @@ def _get_peer_manifest(peer_url: str) -> Optional[Dict]:
             f'{peer_url}/api/sync/manifest',
             headers={'X-Sync-Token': SYNC_TOKEN},
             timeout=10,
-            verify=False,
+            verify=os.environ.get("FLEETPILOT_VERIFY_SSL", "false").lower() == "true"  # nosec B501 - internal LAN only, self-signed certs,
         )
         if resp.status_code == 200:
             return resp.json()

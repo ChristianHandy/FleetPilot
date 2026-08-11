@@ -20,6 +20,7 @@ import re
 from datetime import datetime
 from typing import Optional, Dict, List, Any
 import paramiko
+import ssh_helper
 
 logger = logging.getLogger(__name__)
 
@@ -310,8 +311,6 @@ class HwInfoCollector:
                 password: str = '', ssh_key: str = '',
                 server_name: str = '') -> Dict:
         """Collect hardware info from a remote server via SSH."""
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.WarningPolicy())
         try:
             connect_kwargs = dict(
                 hostname=host, port=port, username=user,
@@ -321,7 +320,7 @@ class HwInfoCollector:
                 connect_kwargs['key_filename'] = ssh_key
             elif password:
                 connect_kwargs['password'] = password
-            client.connect(**connect_kwargs)
+            client = ssh_helper.create_client(**connect_kwargs)
 
             # Upload and run the collection script
             sftp = client.open_sftp()

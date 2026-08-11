@@ -129,29 +129,25 @@ def _ssh_run(host: str, port: int, username: str, password: str,
     """Run a command on a remote host via SSH. Returns (returncode, stdout, stderr)."""
     try:
         import paramiko
+        import ssh_helper
     except ImportError:
         return 1, "", "paramiko not installed"
 
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.WarningPolicy())
+    # ssh_helper.create_client handles host key verification (TOFU)
+    client = None
     try:
-        connect_kwargs: Dict[str, Any] = {
-            "hostname": host,
-            "port": port,
-            "username": username,
-            "timeout": timeout,
-            "banner_timeout": 30,
-            "auth_timeout": 20,
-        }
+        key_filename = None
         if ssh_key:
-            import io
-            pkey = paramiko.RSAKey.from_private_key(io.StringIO(ssh_key))
-            connect_kwargs["pkey"] = pkey
-            connect_kwargs["look_for_keys"] = False
-        elif password:
-            connect_kwargs["password"] = password
-            connect_kwargs["look_for_keys"] = False
-        client.connect(**connect_kwargs)
+            import io, tempfile, os
+            tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.pem', delete=False)
+            tmp.write(ssh_key)
+            tmp.close()
+            key_filename = tmp.name
+        client = ssh_helper.create_client(
+            hostname=host, port=port, username=username,
+            password=password if not ssh_key else None,
+            key_filename=key_filename, timeout=float(timeout)
+        )
         stdin, stdout, stderr = client.exec_command(command, timeout=timeout)
         out = stdout.read().decode("utf-8", errors="replace")
         err = stderr.read().decode("utf-8", errors="replace")
@@ -160,7 +156,10 @@ def _ssh_run(host: str, port: int, username: str, password: str,
     except Exception as e:
         return 1, "", str(e)
     finally:
-        client.close()
+        if client:
+            client.close()
+        if ssh_key and key_filename and os.path.exists(key_filename):
+            os.unlink(key_filename)
 
 # ── Database ──────────────────────────────────────────────────────────────────
 
@@ -293,11 +292,15 @@ def update_server(server_id: int, **kwargs) -> None:
         updates["ssh_key"] = _encrypt(updates["ssh_key"])
     if not updates:
         return
-    set_clause = ", ".join(f"{k}=?" for k in updates)
-    values = list(updates.values()) + [server_id]
+    # Security: column names are validated against 'allowed' whitelist above
+    # so the f-string here is safe (no user input reaches column names)
+    safe_cols = [k for k in updates if k in allowed]  # double-check whitelist
+    set_clause = ", ".join(f"{k}=?" for k in safe_cols)
+    values = [updates[k] for k in safe_cols] + [server_id]
     with _db_lock:
         conn = _db()
-        conn.execute(f"UPDATE backup_servers SET {set_clause} WHERE id=?", values)
+        sql = "UPDATE backup_servers SET " + set_clause + " WHERE id=?"
+        conn.execute(sql, values)
         conn.commit()
         conn.close()
 

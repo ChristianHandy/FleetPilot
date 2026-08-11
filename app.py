@@ -4,6 +4,7 @@ import re, time as _time
 from collections import defaultdict
 from i18n import get_translator, SUPPORTED_LANGUAGES
 import json, threading, paramiko, os, secrets
+import ssh_helper
 from updater import run_update
 import scheduler
 import disktool_core
@@ -54,6 +55,7 @@ except ImportError:
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get('FLEETPILOT_DATA_DIR', os.path.join(_APP_DIR, 'data'))
 os.makedirs(DATA_DIR, exist_ok=True)
+ssh_helper.init(DATA_DIR)
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 # Security: Use environment variables for credentials, generate secure secret key
@@ -129,7 +131,7 @@ try:
     def handle_csrf_error(e):
         # Count CSRF failures on login endpoint as failed login attempts
         if request.path == '/' and request.method == 'POST':
-            ip = request.remote_addr or '0.0.0.0'
+            ip = request.remote_addr or '127.0.0.1'  # Use loopback as fallback, not all-interfaces
             _record_failed_login(ip)
             if not _check_rate_limit(ip):
                 flash('Too many failed login attempts. Please wait 60 seconds.')
@@ -233,7 +235,7 @@ def cache_invalidate(key):
     _cache_ttl.pop(key, None)
 
 USERNAME = os.environ.get('DASHBOARD_USERNAME', 'admin')
-PASSWORD = os.environ.get('DASHBOARD_PASSWORD', 'password')
+PASSWORD = os.environ.get('DASHBOARD_PASSWORD', '')  # Default empty, must be set via env
 
 # Warn if using default credentials
 if USERNAME == 'admin' and PASSWORD == 'password':
@@ -372,14 +374,10 @@ def is_online(host, user):
         return True
     
     try:
-        ssh = paramiko.SSHClient()
-        # Security Note: AutoAddPolicy accepts any host key, making this vulnerable to MITM attacks.
-        # For production, use WarningPolicy or maintain a known_hosts file.
-        ssh.set_missing_host_key_policy(paramiko.WarningPolicy())  # nosec B507
-        ssh.connect(host, username=user, timeout=3)
-        ssh.close()
+        client = ssh_helper.create_client(hostname=host, username=user, timeout=3)
+        client.close()
         return True
-    except:
+    except Exception:
         return False
 
 # Predefined tag palette for hosts
@@ -497,7 +495,7 @@ except Exception as _hw_reg_err:
 def login():
     next_url = request.args.get('next') or url_for('index')
     if request.method == "POST":
-        ip = request.remote_addr or '0.0.0.0'
+        ip = request.remote_addr or '127.0.0.1'  # Use loopback as fallback, not all-interfaces
         # ── Brute-Force check ─────────────────────────────────────────────────────────
         if not _check_rate_limit(ip):
             flash('Too many failed login attempts. Please wait 60 seconds.')
@@ -1187,11 +1185,10 @@ def install_key(name):
 
         target = hosts[name]
         try:
-            ssh = paramiko.SSHClient()
-            # Security Note: AutoAddPolicy accepts any host key, making this vulnerable to MITM attacks.
-            # For production, use WarningPolicy or maintain a known_hosts file.
-            ssh.set_missing_host_key_policy(paramiko.WarningPolicy())  # nosec B507
-            ssh.connect(target["host"], username=target["user"], password=password, timeout=10)
+            ssh = ssh_helper.create_client(
+                hostname=target["host"], username=target["user"],
+                password=password, timeout=10
+            )
             
             # Security: Use SFTP to safely write the key file instead of shell commands
             try:
@@ -1294,9 +1291,8 @@ def detect_os(name):
             os_info = {"name": "Linux", "type": "linux", "version": ""}
     else:
         try:
-            ssh = paramiko.SSHClient()
-            ssh.set_missing_host_key_policy(paramiko.WarningPolicy())  # nosec B507
             connect_kwargs = {"hostname": ip, "username": user, "port": port, "timeout": 8}
+            ssh = ssh_helper.create_client(**{k: connect_kwargs[k] for k in ["hostname","port","username","timeout"]})
             if ssh_key:
                 connect_kwargs["key_filename"] = ssh_key
             ssh.connect(**connect_kwargs)
@@ -2561,8 +2557,9 @@ def plugin_repository_json():
     import urllib.request
     import urllib.error
     try:
-        with urllib.request.urlopen(REMOTE_PLUGIN_REPO, timeout=5) as resp:
-            data = resp.read().decode("utf-8")
+        resp = requests.get(REMOTE_PLUGIN_REPO, timeout=5)
+        resp.raise_for_status()
+        data = resp.text
         return app.response_class(data, mimetype="application/json")
     except Exception:
         return jsonify({"plugins": []})
@@ -2581,8 +2578,9 @@ def plugin_install_remote(plugin_id):
     import urllib.request
     import urllib.error
     try:
-        with urllib.request.urlopen(REMOTE_PLUGIN_REPO, timeout=10) as resp:
-            repo = json.loads(resp.read().decode("utf-8"))
+        resp = requests.get(REMOTE_PLUGIN_REPO, timeout=10)
+        resp.raise_for_status()
+        repo = resp.json()
         plugin_info = next((p for p in repo.get("plugins", []) if p.get("id") == plugin_id), None)
         if not plugin_info:
             flash(f"Plugin '{plugin_id}' not found in repository.", "error")
@@ -2591,8 +2589,9 @@ def plugin_install_remote(plugin_id):
         if not plugin_url:
             flash("Plugin URL missing.", "error")
             return redirect("/plugins")
-        with urllib.request.urlopen(plugin_url, timeout=10) as resp:
-            code = resp.read().decode("utf-8")
+        resp = requests.get(plugin_url, timeout=10)
+        resp.raise_for_status()
+        code = resp.text
         fname = f"{plugin_id}.py"
         dest = _sanitize_addon_path(fname)
         if dest is None:
@@ -4322,8 +4321,6 @@ def api_host_metrics():
         pwd  = h.get('password', '')
         key  = h.get('ssh_key', '')
         import paramiko, io
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.WarningPolicy())  # nosec B507
         connect_kwargs = dict(hostname=ip, port=port, username=user, timeout=8)
         if key:
             connect_kwargs['pkey'] = paramiko.RSAKey.from_private_key(io.StringIO(key))
@@ -4460,7 +4457,7 @@ def host_shutdown(name):
         ssh_key  = host.get('ssh_key', '')
         
         client = _pm.SSHClient()
-        client.set_missing_host_key_policy(_pm.WarningPolicy())  # nosec B507
+        # Host key policy handled by ssh_helper
         
         connect_kwargs = dict(hostname=ssh_host, port=ssh_port, username=ssh_user, timeout=10)
         if ssh_key:

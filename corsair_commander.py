@@ -170,8 +170,6 @@ def delete_device(dev_id: int):
 def _ssh_connect(dev: Dict):
     """Open a paramiko SSH connection to the device's host."""
     import paramiko
-    ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.WarningPolicy())
     kwargs = dict(
         hostname=dev["host"],
         port=dev.get("port", 22),
@@ -186,7 +184,7 @@ def _ssh_connect(dev: Dict):
         kwargs["password"] = pw
         kwargs["look_for_keys"] = False
         kwargs["allow_agent"] = False
-    ssh.connect(**kwargs)
+    ssh = ssh_helper.create_client(**kwargs)
     return ssh
 
 

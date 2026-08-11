@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Optional, List, Dict
 
 import paramiko
+import ssh_helper
 
 logger = logging.getLogger(__name__)
 
@@ -150,15 +151,13 @@ def _execute_action(schedule: Dict) -> tuple:
     }
     cmd = cmd_map.get(action, 'shutdown -h now')
 
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.WarningPolicy())  # nosec B507
     try:
         connect_kwargs = dict(hostname=host, port=port, username=user, timeout=15)
         if key:
             connect_kwargs['key_filename'] = key
         elif pwd:
             connect_kwargs['password'] = pwd
-        client.connect(**connect_kwargs)
+        client = ssh_helper.create_client(**connect_kwargs)
         _, stdout, stderr = client.exec_command(cmd, timeout=10)
         out = stdout.read().decode().strip()
         err = stderr.read().decode().strip()

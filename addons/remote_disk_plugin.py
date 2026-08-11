@@ -9,6 +9,9 @@
 #  - View SMART data from remote systems
 
 import paramiko
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import ssh_helper
 import json
 import re
 import disktool_core
@@ -75,11 +78,7 @@ def execute_remote_command(host, port, username, command):
     a known_hosts file.
     """
     try:
-        ssh = paramiko.SSHClient()
-        # Security Note: AutoAddPolicy accepts any host key, making this vulnerable to MITM attacks.
-        # For production, use WarningPolicy or maintain a known_hosts file.
-        ssh.set_missing_host_key_policy(paramiko.WarningPolicy())
-        ssh.connect(host, port=port, username=username, timeout=10)
+        ssh = ssh_helper.create_client(host, port=port, username=username, timeout=10)
         
         stdin, stdout, stderr = ssh.exec_command(command)
         output = stdout.read().decode('utf-8')
