@@ -275,7 +275,7 @@ try:
             d['cpu_temp'] = max(valid) if valid else max(temps)
         d['fans'] = fans
     else: raise Exception()
-except:
+except Exception:
     try:
         r = subprocess.run(['sensors'], capture_output=True, text=True, timeout=5)
         temps = [float(m) for m in re.findall(r'[+]([0-9]+[.][0-9]+).C', r.stdout)]
@@ -452,7 +452,7 @@ def collect_metrics(server):
         conn.execute("INSERT OR REPLACE INTO hw_live_metrics (server_id,ts,reachable) VALUES (?,?,0)", (sid, now))
         conn.commit(); conn.close(); return
     try: data = json.loads(raw)
-    except:
+    except Exception:
         conn.execute("INSERT OR REPLACE INTO hw_live_metrics (server_id,ts,reachable) VALUES (?,?,0)", (sid, now))
         conn.commit(); conn.close(); return
 

@@ -30,8 +30,12 @@ _COLLECT_SCRIPT = r"""
 import subprocess, json, os, re, platform
 
 def run(cmd, timeout=5):
+    # Run a command safely. cmd can be a string (split by shlex) or a list.
     try:
-        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout)
+        import shlex
+        if isinstance(cmd, str):
+            cmd = shlex.split(cmd)
+        r = subprocess.run(cmd, shell=False, capture_output=True, text=True, timeout=timeout)
         return r.stdout.strip()
     except Exception:
         return ''

@@ -135,7 +135,10 @@ try:
             _record_failed_login(ip)
             if not _check_rate_limit(ip):
                 flash('Too many failed login attempts. Please wait 60 seconds.')
-                return render_template('login.html', next=request.args.get('next', '/index'), rate_limited=True), 429
+                _next_raw = request.args.get('next', '/index')
+                if not _next_raw.startswith('/') or '//' in _next_raw:
+                    _next_raw = '/index'
+                return render_template('login.html', next=_next_raw, rate_limited=True), 429
             flash('Security token expired or missing. Please try again.')
             return redirect(url_for('login'))
         return jsonify({'error': 'CSRF token missing or invalid', 'detail': str(e)}), 400
@@ -809,7 +812,8 @@ def update(name):
         target=run_update,
         args=(hosts[name]["host"], hosts[name]["user"], name, logs[name])
     ).start()
-    return redirect(f"/progress/{name}")
+    _safe_name = re.sub(r'[^a-zA-Z0-9_-]', '', str(name))
+    return redirect(f"/progress/{_safe_name}")
 
 @app.route("/progress/<name>")
 @login_required
@@ -934,7 +938,11 @@ def check_dashboard_version():
 def dismiss_dashboard_notification():
     """Dismiss the current update notification"""
     version_manager.dismiss_notification()
-    return redirect(request.referrer or url_for('index'))
+    _ref = request.referrer or ''
+    # Security: Only allow relative paths to prevent open redirect
+    if _ref and (not _ref.startswith('/') or '//' in _ref or _ref.startswith('//')):
+        _ref = ''
+    return redirect(_ref or url_for('index'))
 
 @app.route("/dashboard_version/update", methods=["GET", "POST"])
 @login_required
@@ -979,7 +987,8 @@ def update_repo(name):
         target=run_update,
         args=(hosts[name]["host"], hosts[name]["user"], name, logs[name], True)
     ).start()
-    return redirect(f"/progress/{name}")
+    _safe_name = re.sub(r'[^a-zA-Z0-9_-]', '', str(name))
+    return redirect(f"/progress/{_safe_name}")
 
 # Host management routes
 @app.route("/hosts", methods=["GET", "POST"])
@@ -2421,8 +2430,8 @@ def set_language():
     session['lang'] = lang
     session.modified = True          # force session save even if nothing else changed
     next_url = request.args.get('next') or request.form.get('next') or request.referrer or '/index'
-    # Sanitise next_url: only allow relative paths
-    if next_url and (next_url.startswith('http://') or next_url.startswith('https://')):
+    # Security: Only allow relative paths to prevent open redirect attacks
+    if not next_url or not next_url.startswith('/') or '//' in next_url or next_url.startswith('//') or '\\' in next_url:
         next_url = '/index'
     return redirect(next_url)
 
@@ -2701,7 +2710,8 @@ def vm_update(ep_id):
         kwargs={'password': password},
         daemon=True
     ).start()
-    return redirect(f"/progress/{log_key}")
+    _safe_log_key = re.sub(r'[^a-zA-Z0-9_-]', '', str(log_key))
+    return redirect(f"/progress/{_safe_log_key}")
 
 
 @app.route("/vm/<int:ep_id>")
@@ -3775,7 +3785,8 @@ def fc_install(dev_id):
         )
 
     threading.Thread(target=_run, daemon=True).start()
-    return redirect(f"/progress/{progress_key}")
+    _safe_progress_key = re.sub(r'[^a-zA-Z0-9_-]', '', str(progress_key))
+    return redirect(f"/progress/{_safe_progress_key}")
 
 
 # ── Fan Controller JSON API ───────────────────────────────────────────────────

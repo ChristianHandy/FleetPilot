@@ -219,7 +219,7 @@ def register(app, core):
             if 'admin' in user_roles:
                 return True
             return any(role in user_roles for role in roles)
-        except:
+        except Exception:
             return False
     
     # Helper to get username from session
