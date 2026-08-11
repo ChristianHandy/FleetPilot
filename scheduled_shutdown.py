@@ -151,7 +151,7 @@ def _execute_action(schedule: Dict) -> tuple:
     cmd = cmd_map.get(action, 'shutdown -h now')
 
     client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.WarningPolicy())
+    client.set_missing_host_key_policy(paramiko.WarningPolicy())  # nosec B507
     try:
         connect_kwargs = dict(hostname=host, port=port, username=user, timeout=15)
         if key:

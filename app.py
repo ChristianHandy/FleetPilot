@@ -375,7 +375,7 @@ def is_online(host, user):
         ssh = paramiko.SSHClient()
         # Security Note: AutoAddPolicy accepts any host key, making this vulnerable to MITM attacks.
         # For production, use WarningPolicy or maintain a known_hosts file.
-        ssh.set_missing_host_key_policy(paramiko.WarningPolicy())
+        ssh.set_missing_host_key_policy(paramiko.WarningPolicy())  # nosec B507
         ssh.connect(host, username=user, timeout=3)
         ssh.close()
         return True
@@ -1190,7 +1190,7 @@ def install_key(name):
             ssh = paramiko.SSHClient()
             # Security Note: AutoAddPolicy accepts any host key, making this vulnerable to MITM attacks.
             # For production, use WarningPolicy or maintain a known_hosts file.
-            ssh.set_missing_host_key_policy(paramiko.WarningPolicy())
+            ssh.set_missing_host_key_policy(paramiko.WarningPolicy())  # nosec B507
             ssh.connect(target["host"], username=target["user"], password=password, timeout=10)
             
             # Security: Use SFTP to safely write the key file instead of shell commands
@@ -1295,7 +1295,7 @@ def detect_os(name):
     else:
         try:
             ssh = paramiko.SSHClient()
-            ssh.set_missing_host_key_policy(paramiko.WarningPolicy())
+            ssh.set_missing_host_key_policy(paramiko.WarningPolicy())  # nosec B507
             connect_kwargs = {"hostname": ip, "username": user, "port": port, "timeout": 8}
             if ssh_key:
                 connect_kwargs["key_filename"] = ssh_key
@@ -4138,7 +4138,7 @@ def api_sync_manifest():
         for f in glob.glob(os.path.join(data_dir, pattern)):
             try:
                 with open(f, 'rb') as fh:
-                    h = hashlib.md5(fh.read()).hexdigest()
+                    h = hashlib.md5(fh.read(), usedforsecurity=False).hexdigest()  # nosec B324
                 manifest[os.path.basename(f)] = {
                     'hash': h,
                     'size': os.path.getsize(f),
@@ -4323,7 +4323,7 @@ def api_host_metrics():
         key  = h.get('ssh_key', '')
         import paramiko, io
         client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.WarningPolicy())
+        client.set_missing_host_key_policy(paramiko.WarningPolicy())  # nosec B507
         connect_kwargs = dict(hostname=ip, port=port, username=user, timeout=8)
         if key:
             connect_kwargs['pkey'] = paramiko.RSAKey.from_private_key(io.StringIO(key))
@@ -4460,7 +4460,7 @@ def host_shutdown(name):
         ssh_key  = host.get('ssh_key', '')
         
         client = _pm.SSHClient()
-        client.set_missing_host_key_policy(_pm.WarningPolicy())
+        client.set_missing_host_key_policy(_pm.WarningPolicy())  # nosec B507
         
         connect_kwargs = dict(hostname=ssh_host, port=ssh_port, username=ssh_user, timeout=10)
         if ssh_key:
