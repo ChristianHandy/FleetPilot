@@ -72,9 +72,8 @@ def execute_remote_command(host, port, username, command):
     Execute a command on a remote host via SSH.
     Returns the output as a string or None if failed.
     
-    Security Note: Uses AutoAddPolicy which accepts any host key, making this 
+    Security Note: Uses ssh_helper with TOFU host key verification.
     vulnerable to MITM attacks. This is consistent with the existing implementation
-    in app.py. For production use, consider using WarningPolicy and maintaining 
     a known_hosts file.
     """
     try:

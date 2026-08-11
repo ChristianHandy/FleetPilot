@@ -6,7 +6,7 @@ Integrates the HW Monitor as a sub-application into FleetPilot.
 New in this version:
 - AMD GPU support (via rocm-smi / amdgpu sysfs)
 - Task Manager: parallel operations with live log streaming
-- Security fix: WarningPolicy instead of AutoAddPolicy for SSH
+- Security fix: TOFU host key verification via ssh_helper (no WarningPolicy)
 - Sensor fix: k10temp/amdgpu report millidegrees — divide by 1000
 - Correct CPU temp: prefer Tdie/Tctl over generic max
 """
@@ -146,24 +146,13 @@ def init_db(data_dir):
     # Auto-import servers from hosts.json (central registry)
     _auto_import_from_hosts(data_dir)
 
-# ─── SSH Helpers (Security: WarningPolicy instead of AutoAddPolicy) ───────────
-
-class _StrictishPolicy(paramiko.MissingHostKeyPolicy):
-    """Log a warning but allow connection — safer than AutoAddPolicy for internal networks."""
-    def missing_host_key(self, client, hostname, key):
-        import warnings
-        warnings.warn(f"[HW Monitor] Unknown host key for {hostname} — accepting (internal network)")
-
-def _ssh_client():
-    c = paramiko.SSHClient()
-    c.set_missing_host_key_policy(_StrictishPolicy())
-    return c
+# ─── SSH Helpers (uses ssh_helper for TOFU host key verification) ─────────────
 
 def ssh_run(ip, port, user, pw, cmd, timeout=12):
     try:
-        c = _ssh_client()
-        c.connect(ip, port=port, username=user, password=pw,
-                  timeout=8, allow_agent=False, look_for_keys=False)
+        c = ssh_helper.create_client(
+            hostname=ip, port=int(port), username=user, password=pw, timeout=8
+        )
         _, stdout, _ = c.exec_command(cmd, timeout=timeout)
         out = stdout.read().decode("utf-8", errors="replace").strip()
         c.close()
@@ -174,8 +163,8 @@ def ssh_run(ip, port, user, pw, cmd, timeout=12):
 def ssh_run_script(ip, port, user, pw, script_content, timeout=15):
     remote_path = f"/tmp/_hw_{abs(hash(script_content[:50]))}.py"
     try:
-        c = _ssh_client()
-        c.connect(ip, port=port, username=user, password=pw,
+        c = ssh_helper.create_client(
+            hostname=ip, port=port, username=user, password=pw,
                   timeout=8, allow_agent=False, look_for_keys=False)
         sftp = c.open_sftp()
         with sftp.open(remote_path, 'w') as f:

@@ -493,7 +493,11 @@ except Exception as _hw_reg_err:
 
 @app.route("/", methods=["GET", "POST"])
 def login():
-    next_url = request.args.get('next') or url_for('index')
+    _raw_next = request.args.get('next', '')
+    # Security: Only allow relative paths to prevent open redirect attacks
+    if _raw_next and (not _raw_next.startswith('/') or '//' in _raw_next or _raw_next.startswith('//') or '\\' in _raw_next):
+        _raw_next = ''
+    next_url = _raw_next or url_for('index')
     if request.method == "POST":
         ip = request.remote_addr or '127.0.0.1'  # Use loopback as fallback, not all-interfaces
         # ── Brute-Force check ─────────────────────────────────────────────────────────
@@ -1373,9 +1377,16 @@ def upload_host_image(name):
     img_dir = os.path.join(_APP_DIR, "static", "host_images")
     os.makedirs(img_dir, exist_ok=True)
     safe_name = "".join(c for c in name if c.isalnum() or c in "_-")
+    if not safe_name:
+        return json.dumps({"ok": False, "error": "Invalid host name"}), 400, {"Content-Type": "application/json"}
     filename = f"{safe_name}{ext}"
     filepath = os.path.join(img_dir, filename)
-    f.save(filepath)
+    # Security: Ensure resolved path stays within img_dir (prevent path traversal)
+    real_img_dir = os.path.realpath(img_dir)
+    real_filepath = os.path.realpath(filepath)
+    if not real_filepath.startswith(real_img_dir + os.sep):
+        return json.dumps({"ok": False, "error": "Invalid path"}), 400, {"Content-Type": "application/json"}
+    f.save(real_filepath)
     # Update host record
     hosts[name]["custom_image"] = f"/static/host_images/{filename}"
     save_hosts(hosts)
@@ -4154,10 +4165,15 @@ def api_sync_pull(filename):
     if not re.match(r'^[\w.-]+$', filename):
         return jsonify({'error': 'Invalid filename'}), 400
     filepath = os.path.join(DATA_DIR, filename)
-    if not os.path.exists(filepath):
+    # Security: Ensure resolved path stays within DATA_DIR (prevent path traversal)
+    real_data_dir = os.path.realpath(DATA_DIR)
+    real_filepath = os.path.realpath(filepath)
+    if not real_filepath.startswith(real_data_dir + os.sep):
+        return jsonify({'error': 'Access denied'}), 403
+    if not os.path.exists(real_filepath):
         return jsonify({'error': 'File not found'}), 404
     from flask import send_file
-    return send_file(filepath)
+    return send_file(real_filepath)
 
 
 

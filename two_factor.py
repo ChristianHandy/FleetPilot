@@ -152,7 +152,7 @@ def _totp_fallback(secret: str, digits: int = 6, period: int = 30) -> str:
     key = base64.b32decode(secret.upper().replace(' ', ''))
     counter = int(time.time()) // period
     msg = struct.pack('>Q', counter)
-    h = hmac.new(key, msg, hashlib.sha1).digest()
+    h = hmac.new(key, msg, hashlib.sha1).digest()  # SHA1 required by RFC 6238 TOTP/HOTP standard
     offset = h[-1] & 0x0F
     code = struct.unpack('>I', h[offset:offset+4])[0] & 0x7FFFFFFF
     return str(code % (10 ** digits)).zfill(digits)
@@ -205,7 +205,7 @@ def verify_totp(secret: str, code: str, window: int = 1) -> bool:
         counter = int(time.time()) // period + offset
         key = base64.b32decode(secret.upper().replace(' ', ''))
         msg = struct.pack('>Q', counter)
-        h = hmac.new(key, msg, hashlib.sha1).digest()
+        h = hmac.new(key, msg, hashlib.sha1).digest()  # SHA1 required by RFC 6238 TOTP/HOTP standard
         off = h[-1] & 0x0F
         expected = str(struct.unpack('>I', h[off:off+4])[0] & 0x7FFFFFFF % 1000000).zfill(6)
         if hmac.compare_digest(code, expected):

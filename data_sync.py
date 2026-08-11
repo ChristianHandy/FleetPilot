@@ -158,6 +158,9 @@ def _get_local_manifest() -> Dict:
     manifest = {}
     for fname in SYNC_FILES:
         path = os.path.join(_data_dir, fname)
+        # Security: Ensure path stays within data dir
+        if not os.path.realpath(path).startswith(os.path.realpath(_data_dir) + os.sep):
+            continue
         if os.path.exists(path):
             manifest[fname] = {
                 'hash': _file_hash(path),
@@ -166,6 +169,9 @@ def _get_local_manifest() -> Dict:
             }
     for fname in SYNC_APP_FILES:
         path = os.path.join(_app_dir, fname)
+        # Security: Ensure path stays within app dir
+        if not os.path.realpath(path).startswith(os.path.realpath(_app_dir) + os.sep):
+            continue
         if os.path.exists(path):
             manifest[fname] = {
                 'hash': _file_hash(path),
