@@ -56,6 +56,18 @@ info = {}
 os_name = run('cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d \'"\'')
 if not os_name:
     os_name = platform.system() + ' ' + platform.release()
+
+# Proxmox VE runs on Debian, but its management platform is more useful to show
+# in a server dashboard. `pveversion` exists only on genuine Proxmox hosts.
+pve_version_raw = run('pveversion 2>/dev/null | head -1')
+if pve_version_raw.startswith('pve-manager/'):
+    pve_version = pve_version_raw.split('/', 2)[1]
+    info['platform'] = 'proxmox'
+    info['proxmox_version'] = pve_version
+    os_name = f'Proxmox VE {pve_version} ({os_name})'
+else:
+    info['platform'] = 'linux'
+
 info['os'] = os_name
 info['kernel'] = run('uname -r')
 info['hostname'] = run('hostname -f') or run('hostname')
