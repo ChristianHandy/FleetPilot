@@ -319,9 +319,10 @@ class HwInfoCollector:
                 server_name: str = '') -> Dict:
         """Collect hardware info from a remote server via SSH."""
         try:
+            # ssh_helper centrally enforces TOFU host-key validation and SSH
+            # authentication policy; pass only its documented connection options.
             connect_kwargs = dict(
-                hostname=host, port=port, username=user,
-                timeout=15, allow_agent=False, look_for_keys=False
+                hostname=host, port=port, username=user, timeout=15
             )
             if ssh_key and os.path.exists(ssh_key):
                 connect_kwargs['key_filename'] = ssh_key
