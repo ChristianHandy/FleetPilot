@@ -110,6 +110,9 @@
     <input type="hidden" name="ipmi_pass" id="f_ipmi_pass">
     <input type="hidden" name="vendor" id="f_vendor">
     <input type="hidden" name="use_direct" id="f_use_direct">
+    <input type="hidden" name="gpio_pin" id="f_gpio_pin">
+    <input type="hidden" name="min_off_temp_c" id="f_min_off_temp_c">
+    <input type="hidden" name="manual_gpio_control" id="f_manual_gpio_control">
 
     <div class="card mb-3">
       <div class="card-header fw-semibold">Device Details</div>
@@ -322,6 +325,10 @@ function selectSuggestion(idx, host, port, user, pass, key, suggestions) {
   document.getElementById('f_ipmi_pass').value  = extra.ipmi_pass  || '';
   document.getElementById('f_vendor').value     = extra.vendor     || 'generic';
   document.getElementById('f_use_direct').value = extra.use_direct ? '1' : '0';
+  document.getElementById('f_gpio_pin').value = extra.gpio_pin ?? '14';
+  document.getElementById('f_min_off_temp_c').value = extra.min_off_temp_c ?? '55';
+  document.getElementById('f_manual_gpio_control').value = extra.manual_gpio_control ? '1' : '0';
+  updateTypeUI();
 
   // Suggest a name
   const nameField = document.getElementById('f_name');
@@ -431,6 +438,32 @@ function updateTypeUI() {
         <strong>nbfc-linux</strong> must be installed on the target laptop.<br>
         Use the <strong>Install Packages</strong> button on the device detail page to attempt automatic installation.
       </div>`;
+  } else if (key === 'rpi_gpio_fan') {
+    const pin = document.getElementById('f_gpio_pin').value || '14';
+    const minOff = document.getElementById('f_min_off_temp_c').value || '55';
+    const manual = document.getElementById('f_manual_gpio_control').value === '1';
+    ef.innerHTML = `
+      <div class="alert alert-info mb-3">
+        <strong>Raspberry Pi GPIO fan</strong> supports a two-wire fan through a transistor/driver circuit: <strong>OFF</strong> or <strong>100%</strong> only. GPIO pins must not power a fan directly.
+      </div>
+      <div class="row g-2 mb-3">
+        <div class="col-sm-6">
+          <label class="form-label">BCM GPIO Pin</label>
+          <input type="number" min="0" max="27" name="gpio_pin" class="form-control" value="${escHtml(pin)}"
+                 oninput="document.getElementById('f_gpio_pin').value=this.value">
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label">Minimum temperature before OFF (°C)</label>
+          <input type="number" min="35" max="85" step="1" name="min_off_temp_c" class="form-control" value="${escHtml(minOff)}"
+                 oninput="document.getElementById('f_min_off_temp_c').value=this.value">
+        </div>
+      </div>
+      <div class="form-check mb-2">
+        <input class="form-check-input" type="checkbox" name="manual_gpio_control" value="1" id="manualGpioControl" ${manual ? 'checked' : ''}
+               onchange="document.getElementById('f_manual_gpio_control').value=this.checked?'1':'0'">
+        <label class="form-check-label" for="manualGpioControl">Enable manual GPIO control after confirming the fan wiring and pin</label>
+      </div>
+      <div class="form-text">For autonomous protection, configure the Linux <code>gpio-fan</code> overlay separately. FleetPilot will refuse an OFF command at or above the safety temperature.</div>`;
   } else if (key === 'arctic_usb') {
     ef.innerHTML = `
       <div class="alert alert-info mb-2">

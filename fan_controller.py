@@ -113,6 +113,16 @@ CONTROLLER_TYPES = {
         "check_cmd": "ls /sys/class/hwmon/ 2>&1",
         "detect_cmd": "for h in /sys/class/hwmon/hwmon*; do echo \"=== $h ===\"; cat $h/name 2>/dev/null; ls $h/pwm* 2>/dev/null; done",
     },
+    "rpi_gpio_fan": {
+        "label": "Raspberry Pi GPIO Fan (binary)",
+        "description": "Raspberry Pi 2-wire GPIO fan: reads Pi CPU temperature and controls a transistor-driven fan as OFF or 100%. Use a configured gpio-fan overlay for autonomous thermal protection; manual control is disabled until explicitly enabled.",
+        "icon": "🍓",
+        "packages_apt": [],
+        "packages_pip": [],
+        "check_cmd": "tr -d '\\0' </proc/device-tree/model 2>/dev/null",
+        "detect_cmd": "tr -d '\\0' </proc/device-tree/model 2>/dev/null; grep -Rni gpio-fan /boot/firmware/config.txt /boot/config.txt 2>/dev/null",
+        "install_note": "Requires a physically connected 2-wire fan and transistor/driver circuit. GPIO pins cannot power a fan directly. For automatic safety, configure the Linux gpio-fan overlay; manual mode is intentionally opt-in.",
+    },
 }
 
 # ── Module state ──────────────────────────────────────────────────────────────
@@ -433,6 +443,7 @@ def fetch_status(dev: Dict) -> Dict:
         "liquidctl":   _fetch_liquidctl,
         "pwm_sysfs":   _fetch_pwm_sysfs,
         "arctic_usb":  _fetch_arctic_usb,
+        "rpi_gpio_fan": _fetch_rpi_gpio_fan,
     }
     fn = fetchers.get(ctype, _fetch_lm_sensors)
     return fn(dev)
@@ -846,6 +857,85 @@ done
     return result
 
 
+# ── Raspberry Pi GPIO Fan ─────────────────────────────────────────────────────
+
+def _rpi_gpio_settings(dev: Dict) -> Tuple[Optional[int], float, bool, Optional[str]]:
+    """Validate Raspberry Pi GPIO fan settings before using them in a command."""
+    config = dev.get("extra_config") or {}
+    try:
+        pin = int(config.get("gpio_pin", 14))
+    except (TypeError, ValueError):
+        return None, 55.0, False, "GPIO pin must be an integer between 0 and 27."
+    if pin < 0 or pin > 27:
+        return None, 55.0, False, "GPIO pin must be between 0 and 27."
+    try:
+        min_off_temp = float(config.get("min_off_temp_c", 55))
+    except (TypeError, ValueError):
+        min_off_temp = 55.0
+    min_off_temp = max(35.0, min(85.0, min_off_temp))
+    manual = str(config.get("manual_gpio_control", "")).lower() in {"1", "true", "yes", "on"}
+    return pin, min_off_temp, manual, None
+
+
+def _fetch_rpi_gpio_fan(dev: Dict) -> Dict:
+    """Read Raspberry Pi CPU temperature and the configured GPIO fan pin state."""
+    result = _base_result(dev)
+    ssh = None
+    try:
+        pin, min_off_temp, manual, error = _rpi_gpio_settings(dev)
+        if error:
+            result["error"] = error
+            return result
+        ssh = _ssh_connect(dev)
+        # `pin` is validated as a 0-27 integer before interpolation.
+        command = f"""
+model=$(tr -d '\\0' </proc/device-tree/model 2>/dev/null || true)
+temp=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null || true)
+state=$(pinctrl get {pin} 2>/dev/null || true)
+overlay=$(grep -Rni '^[[:space:]]*dtoverlay=gpio-fan' /boot/firmware/config.txt /boot/config.txt 2>/dev/null || true)
+printf 'MODEL|%s\\nTEMP|%s\\nGPIO|%s\\nOVERLAY|%s\\n' "$model" "$temp" "$state" "$overlay"
+"""
+        out, err, _ = _run_remote(ssh, command, timeout=10)
+        result["raw"] = out or err
+        values = {}
+        for line in (out or "").splitlines():
+            if "|" in line:
+                key, value = line.split("|", 1)
+                values[key] = value.strip()
+        model = values.get("MODEL", "")
+        if "Raspberry Pi" not in model:
+            result["error"] = "Target is not detected as a Raspberry Pi."
+            return result
+        try:
+            temp_c = round(int(values.get("TEMP", "")) / 1000, 1)
+            result["temperatures"].append({"label": "Raspberry Pi CPU", "value": temp_c, "unit": "°C"})
+        except (TypeError, ValueError):
+            temp_c = None
+        gpio_state = values.get("GPIO", "")
+        fan_on = " dh" in f" {gpio_state}" or gpio_state.rstrip().endswith("dh")
+        result["fans"].append({
+            "label": f"GPIO {pin} fan (binary)",
+            "rpm": None,
+            "percent": 100 if fan_on else 0,
+            "state": "ON" if fan_on else "OFF / input",
+        })
+        result["gpio_pin"] = pin
+        result["manual_gpio_control"] = manual
+        result["min_off_temp_c"] = min_off_temp
+        result["gpio_fan_overlay"] = bool(values.get("OVERLAY"))
+        result["ok"] = True
+    except Exception as exc:
+        result["error"] = str(exc)
+        logger.warning("[fan_controller] rpi_gpio_fan fetch error for %s: %s", dev.get("name"), exc)
+    finally:
+        if ssh:
+            try:
+                ssh.close()
+            except Exception:
+                pass
+    return result
+
+
 # ── Arctic USB Fan Controller ─────────────────────────────────────────────────
 # Arctic ACFAN00351A — USB HID, VID 0x3904, PID 0xF001
 # Protocol (from kernel driver docs):
@@ -1148,6 +1238,7 @@ def set_fan_speed(dev: Dict, channel: str, speed, extra: dict = None) -> Dict:
         "liquidctl":   _set_fan_liquidctl,
         "pwm_sysfs":   _set_fan_pwm_sysfs,
         "arctic_usb":  _set_fan_arctic_usb,
+        "rpi_gpio_fan": _set_fan_rpi_gpio_fan,
     }
     fn = setters.get(ctype, _set_fan_lm_sensors)
     return fn(dev, channel, speed, extra or {})
@@ -1372,6 +1463,62 @@ def _set_fan_pwm_sysfs(dev: Dict, channel: str, speed, extra: dict) -> Dict:
     return result
 
 
+# ── Raspberry Pi GPIO binary fan control ──────────────────────────────────────
+
+def _set_fan_rpi_gpio_fan(dev: Dict, channel: str, speed, extra: dict) -> Dict:
+    """Set a validated Raspberry Pi GPIO fan OFF or ON with thermal protection."""
+    result = {"ok": False, "message": ""}
+    ssh = None
+    try:
+        pin, min_off_temp, manual, error = _rpi_gpio_settings(dev)
+        if error:
+            result["message"] = error
+            return result
+        if not manual:
+            result["message"] = (
+                "Manual GPIO control is disabled. Enable it explicitly in the Raspberry Pi fan device "
+                "configuration only after confirming the physical fan wiring and GPIO pin."
+            )
+            return result
+        try:
+            requested = float(speed)
+        except (TypeError, ValueError):
+            result["message"] = "Raspberry Pi GPIO fans accept a numeric speed of 0 (OFF) or above 0 (ON)."
+            return result
+        target_on = requested > 0
+        ssh = _ssh_connect(dev)
+        # The validated integer pin is the only interpolated value. Before an OFF
+        # command, protect the Pi by refusing it while CPU temperature is elevated.
+        if not target_on:
+            temp_out, _, _ = _run_remote(ssh, "cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null", timeout=5)
+            try:
+                current_temp = int(temp_out.strip()) / 1000
+            except (TypeError, ValueError):
+                current_temp = None
+            if current_temp is not None and current_temp >= min_off_temp:
+                result["message"] = (
+                    f"Refused to turn GPIO {pin} fan off: CPU is {current_temp:.1f} °C, "
+                    f"at or above the {min_off_temp:.1f} °C safety threshold."
+                )
+                return result
+        level = "dh" if target_on else "dl"
+        out, err, code = _run_remote(ssh, f"pinctrl set {pin} op {level}", timeout=8)
+        result["ok"] = code == 0
+        result["message"] = (
+            f"GPIO {pin} fan set to {'ON (100%)' if target_on else 'OFF'}; "
+            f"binary GPIO fans do not support intermediate speeds. {out or err}".strip()
+        )
+    except Exception as exc:
+        result["message"] = str(exc)
+    finally:
+        if ssh:
+            try:
+                ssh.close()
+            except Exception:
+                pass
+    return result
+
+
 # ── Connection test ───────────────────────────────────────────────────────────
 
 def test_connection(dev_id: int) -> Dict:
@@ -1573,6 +1720,33 @@ def detect_controllers(host: str, port: int = 22, username: str = "root",
 
         # ── Check each tool ───────────────────────────────────────────────────
         suggestions = []
+
+        # 0. Raspberry Pi GPIO fan support. Detect the board and any configured
+        # gpio-fan overlay without changing pin state or boot configuration.
+        pi_model, _, pi_code = _r("tr -d '\\0' </proc/device-tree/model 2>/dev/null")
+        if pi_code == 0 and "Raspberry Pi" in pi_model:
+            overlay_out, _, _ = _r(
+                "grep -Rni '^[[:space:]]*dtoverlay=gpio-fan' /boot/firmware/config.txt /boot/config.txt 2>/dev/null || true"
+            )
+            pin_match = re.search(r"gpiopin=([0-9]{1,2})", overlay_out)
+            gpio_pin = int(pin_match.group(1)) if pin_match else 14
+            suggestions.insert(0, {
+                "controller_type": "rpi_gpio_fan",
+                "label": CONTROLLER_TYPES["rpi_gpio_fan"]["label"],
+                "icon": CONTROLLER_TYPES["rpi_gpio_fan"]["icon"],
+                "confidence": "high" if overlay_out else "medium",
+                "reason": (
+                    f"{pi_model}: gpio-fan overlay detected on GPIO {gpio_pin}."
+                    if overlay_out else
+                    f"{pi_model}: no GPIO fan overlay is configured. Add this device after confirming the fan wiring and GPIO pin."
+                ),
+                "detected_devices": overlay_out[:300] if overlay_out else "No gpio-fan overlay found; no pin was changed.",
+                "extra_config": {
+                    "gpio_pin": gpio_pin,
+                    "manual_gpio_control": False,
+                    "min_off_temp_c": 55,
+                },
+            })
 
         # 1. liquidctl
         lc_ver, _, lc_code = _r("liquidctl --version 2>&1 | head -1")

@@ -162,6 +162,26 @@ function updateTypeUI() {
           <option value="supermicro" ${EXTRA.vendor==='supermicro'?'selected':''}>Supermicro</option>
         </select>
       </div>`;
+  } else if (key === 'rpi_gpio_fan') {
+    const pin = Math.max(0, Math.min(27, Number(EXTRA.gpio_pin ?? 14) || 14));
+    const minOff = Math.max(35, Math.min(85, Number(EXTRA.min_off_temp_c ?? 55) || 55));
+    ef.innerHTML = `
+      <div class="alert alert-info mb-3"><strong>Raspberry Pi GPIO fan:</strong> a two-wire fan is binary only (OFF / 100%) and requires a transistor or dedicated driver. A GPIO pin must never power a fan directly.</div>
+      <div class="row g-2 mb-3">
+        <div class="col-sm-6">
+          <label class="form-label">BCM GPIO Pin</label>
+          <input type="number" min="0" max="27" name="gpio_pin" class="form-control" value="${pin}">
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label">Minimum temperature before OFF (°C)</label>
+          <input type="number" min="35" max="85" step="1" name="min_off_temp_c" class="form-control" value="${minOff}">
+        </div>
+      </div>
+      <div class="form-check mb-2">
+        <input class="form-check-input" type="checkbox" name="manual_gpio_control" value="1" id="manualGpioControl" ${EXTRA.manual_gpio_control ? 'checked' : ''}>
+        <label class="form-check-label" for="manualGpioControl">Enable manual GPIO control after confirming the fan wiring and GPIO pin</label>
+      </div>
+      <div class="form-text">FleetPilot refuses an OFF command at or above the configured safety temperature. Configure the Linux <code>gpio-fan</code> overlay separately for autonomous thermal protection.</div>`;
   } else {
     ef.innerHTML = '<div class="text-muted small">No additional options for this controller type.</div>';
   }

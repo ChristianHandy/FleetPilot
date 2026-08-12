@@ -3590,12 +3590,14 @@ def fc_add():
         notes = request.form.get('notes', '').strip()
 
         extra = {}
-        for key in ['match_str', 'ipmi_host', 'ipmi_user', 'ipmi_pass', 'vendor', 'zone']:
+        for key in ['match_str', 'ipmi_host', 'ipmi_user', 'ipmi_pass', 'vendor', 'zone', 'gpio_pin', 'min_off_temp_c']:
             val = request.form.get(key, '').strip()
             if val:
                 extra[key] = val
         if request.form.get('use_direct') == '1':
             extra['use_direct'] = True
+        if ctype == 'rpi_gpio_fan':
+            extra['manual_gpio_control'] = request.form.get('manual_gpio_control') == '1'
         # Parse pump_channels for arctic_usb (comma-separated channel numbers)
         pump_channels_str = request.form.get('pump_channels', '').strip() or request.form.get('pump_channels_str', '').strip()
         if pump_channels_str and ctype == 'arctic_usb':
@@ -3673,12 +3675,14 @@ def fc_edit(dev_id):
             fields['enabled'] = 1 if fields['enabled'] == '1' else 0
 
         extra = {}
-        for key in ['match_str', 'ipmi_host', 'ipmi_user', 'ipmi_pass', 'vendor', 'zone']:
+        for key in ['match_str', 'ipmi_host', 'ipmi_user', 'ipmi_pass', 'vendor', 'zone', 'gpio_pin', 'min_off_temp_c']:
             val = request.form.get(key, '').strip()
             if val:
                 extra[key] = val
         if request.form.get('use_direct') == '1':
             extra['use_direct'] = True
+        if fields.get('controller_type') == 'rpi_gpio_fan':
+            extra['manual_gpio_control'] = request.form.get('manual_gpio_control') == '1'
         fields['extra_config'] = extra
 
         _fc.update_device(dev_id, **fields)
