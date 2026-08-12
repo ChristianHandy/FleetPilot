@@ -110,11 +110,14 @@
           <div class="card h-100">
             <div class="card-body py-2 text-center">
               <div class="small text-muted mb-1">💨 {{ fan.label.split('/')[-1].strip() }}</div>
-              {% if fan.rpm is defined and fan.rpm > 0 %}
+              {% if fan.rpm is defined and fan.rpm is not none and fan.rpm > 0 %}
                 <div class="fs-4 fw-bold text-info">{{ fan.rpm }} <span class="small">RPM</span></div>
               {% endif %}
               {% if fan.percent is defined %}
                 <div class="fs-5 fw-bold text-primary">{{ fan.percent | int }}%</div>
+              {% endif %}
+              {% if fan.state is defined %}
+                <div class="small text-muted">{{ fan.state }}</div>
               {% endif %}
               {% if fan.target_percent is defined %}
                 <div class="small text-muted">Target: {{ fan.target_percent | int }}%</div>
