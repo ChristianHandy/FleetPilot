@@ -7,6 +7,9 @@ paramiko>=3.4.0
 # Task Scheduler
 apscheduler>=3.10.4
 
+# System Monitor — CPU, RAM, disk, network and temperature metrics
+psutil>=5.9.0
+
 # For environment variable loading (optional but recommended)
 python-dotenv>=1.0.0
 
