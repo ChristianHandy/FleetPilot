@@ -29,13 +29,16 @@ logger = logging.getLogger(__name__)
 _COLLECT_SCRIPT = r"""
 import subprocess, json, os, re, platform
 
-def run(cmd, timeout=5):
-    # Run a command safely. cmd can be a string (split by shlex) or a list.
+def run(command, timeout=5):
+    # `command` is a fixed literal defined in this collector script; it is never
+    # received from FleetPilot, HTTP, SSH, or an end user.  The inner POSIX shell
+    # is intentionally needed for fixed pipelines, redirects, glob expansion,
+    # and awk expressions. The parent process itself always uses shell=False.
     try:
-        import shlex
-        if isinstance(cmd, str):
-            cmd = shlex.split(cmd)
-        r = subprocess.run(cmd, shell=False, capture_output=True, text=True, timeout=timeout)
+        if not isinstance(command, str) or len(command) > 2048:
+            return ''
+        r = subprocess.run(['/bin/sh', '-c', command], shell=False,
+                           capture_output=True, text=True, timeout=timeout)
         return r.stdout.strip()
     except Exception:
         return ''
