@@ -319,6 +319,22 @@
           </div>
         </div>
 
+      {% elif dev.controller_type == 'rpi_gpio_fan' %}
+        <!-- Raspberry Pi: kernel-managed three-wire PWM fan -->
+        <div class="alert alert-info mb-0 d-flex flex-wrap align-items-center justify-content-between gap-2">
+          <div>
+            <strong><i class="bi bi-cpu me-1"></i>Automatic kernel PWM control is active.</strong><br>
+            <span class="small">The Linux thermal driver adjusts the blue-wire PWM signal. Manual static GPIO control is intentionally disabled.</span>
+          </div>
+          {% if latest and latest.fans %}
+            {% for fan in latest.fans %}
+              <span class="badge bg-primary fs-6">{{ fan.percent | int }}% PWM · {{ fan.state }}</span>
+            {% endfor %}
+          {% else %}
+            <span class="badge bg-secondary">Waiting for a live sample</span>
+          {% endif %}
+        </div>
+
       {% else %}
         <!-- lm_sensors / pwm_sysfs: generic -->
         <div class="row g-3 align-items-end">
@@ -476,19 +492,20 @@ function renderSensorChips(data) {
     );
   });
 
-  // Fans
-  (data.fans || []).filter(f => f.rpm > 0).forEach(f => {
+  // Fans — include PWM-only fans that intentionally have no RPM sensor.
+  (data.fans || []).filter(f => (f.rpm != null && f.rpm > 0) || f.percent != null).forEach(f => {
     const label = f.label.split('/').pop().trim();
     const isPump = f.is_pump;
+    const hasRpm = f.rpm != null && f.rpm > 0;
     const icon = isPump ? '&#x1F4A7;' : '&#x1F300;';
-    const color = isPump ? 'var(--accent-blue)' : 'var(--accent-cyan)';
-    const rpmColor = f.rpm < 200 ? 'var(--accent-red)' : 'var(--accent-cyan)';
+    const rpmColor = isPump ? 'var(--accent-blue)' : (hasRpm && f.rpm < 200 ? 'var(--accent-red)' : 'var(--accent-cyan)');
+    const value = hasRpm ? `${f.rpm} RPM` : `${Math.round(Number(f.percent) || 0)}% PWM`;
     parts.push(
       `<span style="display:inline-flex;align-items:center;gap:5px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;padding:4px 10px;font-size:.78rem;${isPump?'border-color:rgba(59,130,246,.3);background:rgba(59,130,246,.05);':''}">`+
-      `<span style="font-size:.9rem;animation:${isPump?'none':'fp-spin 3s linear infinite'}">${icon}</span>`+
+      `<span style="font-size:.9rem;animation:${isPump || !hasRpm?'none':'fp-spin 3s linear infinite'}">${icon}</span>`+
       `<span style="color:var(--text-secondary)">${label}</span>`+
-      `<span style="font-weight:800;color:${rpmColor}">${f.rpm} RPM</span>`+
-      (f.percent != null ? `<span style="font-size:.68rem;color:var(--text-muted)">${f.percent}%</span>` : '')+
+      `<span style="font-weight:800;color:${rpmColor}">${value}</span>`+
+      (hasRpm && f.percent != null ? `<span style="font-size:.68rem;color:var(--text-muted)">${f.percent}%</span>` : '')+
       `</span>`
     );
   });
