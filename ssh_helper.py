@@ -78,6 +78,8 @@ def create_client(
     key_filename: Optional[str] = None,
     timeout: float = 10.0,
     known_hosts_path: Optional[str] = None,
+    allow_agent: bool = False,
+    look_for_keys: Optional[bool] = None,
 ) -> paramiko.SSHClient:
     """Create and return a connected, authenticated SSHClient.
 
@@ -93,6 +95,9 @@ def create_client(
         key_filename:     Path to SSH private key file (optional).
         timeout:          Connection timeout in seconds.
         known_hosts_path: Override the known_hosts file path.
+        allow_agent:      Whether to allow the local SSH agent (disabled by default).
+        look_for_keys:    Whether to search default private keys. If omitted,
+                          enabled only when no explicit key file is supplied.
 
     Returns:
         A connected and authenticated paramiko.SSHClient.
@@ -125,8 +130,8 @@ def create_client(
         "port": port,
         "username": username,
         "timeout": timeout,
-        "allow_agent": False,
-        "look_for_keys": key_filename is None,
+        "allow_agent": bool(allow_agent),
+        "look_for_keys": (key_filename is None) if look_for_keys is None else bool(look_for_keys),
     }
     if password:
         connect_kwargs["password"] = password
