@@ -221,12 +221,7 @@ def register(app, core):
             return any(role in user_roles for role in roles)
         except Exception:
             return False
-    
-    # Helper to get username from session
-    def get_username():
-        """Get username from session, default to 'root'"""
-        return session.get('username', 'root')
-    
+
     # Helper to get remote by ID
     def get_remote_by_id(remote_id):
         """Get remote configuration by ID, returns None if not found"""
@@ -247,8 +242,8 @@ def register(app, core):
             flash('Remote system not found')
             return redirect(url_for('disks_index'))
         
-        # Get username using helper
-        username = get_username()
+        # Use the SSH account configured for this remote, never the web-login account.
+        username = remote['ssh_user'] or 'root'
         
         # List disks on remote
         disks, error = list_remote_disks(remote['host'], remote['port'], username)
@@ -285,7 +280,7 @@ def register(app, core):
             flash('Remote system not found')
             return redirect(url_for('disks_index'))
         
-        username = get_username()
+        username = remote['ssh_user'] or 'root'
         
         # Get SMART data
         smart_data, error = get_remote_smart(remote['host'], remote['port'], username, device)
@@ -317,7 +312,7 @@ def register(app, core):
         
         if request.method == 'POST':
             fs_type = request.form.get('fs', 'ext4')
-            username = get_username()
+            username = remote['ssh_user'] or 'root'
             
             success, message = format_remote_disk(remote['host'], remote['port'], 
                                                   username, device, fs_type)
@@ -349,7 +344,7 @@ def register(app, core):
             flash('Remote system not found')
             return redirect(url_for('disks_index'))
         
-        username = get_username()
+        username = remote['ssh_user'] or 'root'
         
         success, message = start_remote_smart_test(remote['host'], remote['port'],
                                                    username, device, mode)

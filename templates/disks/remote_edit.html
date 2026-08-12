@@ -1,0 +1,46 @@
+{% extends 'disks/base.html' %}
+{% block title %}Edit Remote Disk System{% endblock %}
+{% block content %}
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h2>{{ _('Edit Remote Disk System') }}</h2>
+      <p class="text-muted mb-0">{{ _('Configure the SSH connection used only for this remote host.') }}</p>
+    </div>
+    <a href="{{ url_for('remotes') }}" class="btn btn-secondary">← {{ _('Back to Remote Management') }}</a>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <form method="post" action="{{ url_for('remotes_edit', rid=remote['id']) }}" class="row g-3">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="col-md-6">
+          <label class="form-label">{{ _('Name') }}</label>
+          <input name="name" class="form-control" value="{{ remote['name'] }}" required maxlength="64">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">{{ _('Host') }}</label>
+          <input name="host" class="form-control" value="{{ remote['host'] }}" required maxlength="253">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">{{ _('Port') }}</label>
+          <input name="port" class="form-control" value="{{ remote['port'] }}" type="number" min="1" max="65535" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">{{ _('SSH User') }}</label>
+          <input name="ssh_user" class="form-control" value="{{ remote['ssh_user'] or 'root' }}" required pattern="[A-Za-z_][A-Za-z0-9_-]{0,31}">
+          <div class="form-text">For Proxmox hosts, use <code>root</code>.</div>
+        </div>
+        <div class="col-md-4 d-flex align-items-end">
+          <button type="submit" class="btn btn-primary w-100">{{ _('Save Remote') }}</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="alert alert-info mt-3 mb-0">
+    <strong>{{ _('Connection note:') }}</strong>
+    {{ _('FleetPilot uses the configured SSH user and its local SSH key. Disk operations require that account to have the necessary privileges on the remote system.') }}
+  </div>
+</div>
+{% endblock %}

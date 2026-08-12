@@ -1649,14 +1649,51 @@ def remotes():
             flash('You need operator or admin role to add remotes.')
             return redirect(url_for('remotes'))
         
-        name = request.form.get('name')
-        host = request.form.get('host')
-        port = int(request.form.get('port', 22))
-        disktool_core.add_remote(name, host, port)
-        flash('Remote added')
+        name = sanitize_input(request.form.get('name', ''), max_len=64)
+        raw_host = sanitize_input(request.form.get('host', ''), max_len=253)
+        try:
+            host = validate_host_address(raw_host)
+            port = max(1, min(65535, int(request.form.get('port', 22) or 22)))
+            ssh_user = disktool_core.validate_ssh_user(request.form.get('ssh_user', 'root'))
+        except (ValueError, TypeError) as exc:
+            flash(f'Invalid remote configuration: {exc}', 'error')
+            return redirect(url_for('remotes'))
+        if not name or not host:
+            flash('Remote name and host are required.', 'error')
+            return redirect(url_for('remotes'))
+        disktool_core.add_remote(name, host, port, ssh_user=ssh_user)
+        flash(f'Remote {name} added with SSH user {ssh_user}.')
         return redirect(url_for('remotes'))
     rems = disktool_core.list_remotes()
     return render_template('disks/remotes.html', remotes=rems)
+
+@app.route("/disks/remotes/edit/<int:rid>", methods=['GET', 'POST'])
+@login_required
+def remotes_edit(rid):
+    if session.get("user_id") and not current_user_has_role('operator', 'admin'):
+        flash('You need operator or admin role to edit remotes.')
+        return redirect(url_for('remotes'))
+    remote = disktool_core.get_remote(rid)
+    if not remote:
+        flash('Remote not found.', 'error')
+        return redirect(url_for('remotes'))
+    if request.method == 'POST':
+        name = sanitize_input(request.form.get('name', ''), max_len=64)
+        raw_host = sanitize_input(request.form.get('host', ''), max_len=253)
+        try:
+            host = validate_host_address(raw_host)
+            port = max(1, min(65535, int(request.form.get('port', 22) or 22)))
+            ssh_user = disktool_core.validate_ssh_user(request.form.get('ssh_user', 'root'))
+        except (ValueError, TypeError) as exc:
+            flash(f'Invalid remote configuration: {exc}', 'error')
+            return redirect(url_for('remotes_edit', rid=rid))
+        if not name or not host:
+            flash('Remote name and host are required.', 'error')
+            return redirect(url_for('remotes_edit', rid=rid))
+        disktool_core.update_remote(rid, name, host, port, ssh_user)
+        flash(f'Remote {name} updated.')
+        return redirect(url_for('remotes'))
+    return render_template('disks/remote_edit.html', remote=remote)
 
 @app.route("/disks/remotes/delete/<int:rid>")
 @login_required

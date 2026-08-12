@@ -61,6 +61,7 @@ def init_db():
           name TEXT,
           host TEXT,
           port INTEGER DEFAULT 22,
+          ssh_user TEXT NOT NULL DEFAULT 'root',
           enabled INTEGER DEFAULT 1,
           added_ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
@@ -72,6 +73,9 @@ def init_db():
                 db.execute("ALTER TABLE disks ADD COLUMN serial TEXT")
             except Exception:
                 pass
+        remote_cols = {c[1] for c in db.execute("PRAGMA table_info(remotes)")}
+        if 'ssh_user' not in remote_cols:
+            db.execute("ALTER TABLE remotes ADD COLUMN ssh_user TEXT NOT NULL DEFAULT 'root'")
 
 def run(cmd):
     """Führt einen Shell-Befehl aus und gibt den gesamten Output zurück."""
@@ -368,14 +372,42 @@ def import_smart_data(file_storage, device='UNKNOWN'):
                    (device, None, temp, health))
 
 # --- Remote management helpers ---
-def add_remote(name, host, port=22, enabled=1):
+_SSH_USER_RE = re.compile(r'^[a-z_][a-z0-9_-]{0,31}$', re.IGNORECASE)
+
+
+def validate_ssh_user(username):
+    """Validate an SSH account name used for remote disk operations."""
+    username = (username or 'root').strip()
+    if not _SSH_USER_RE.fullmatch(username):
+        raise ValueError('SSH user must contain only letters, numbers, underscores, or hyphens.')
+    return username
+
+
+def add_remote(name, host, port=22, ssh_user='root', enabled=1):
+    ssh_user = validate_ssh_user(ssh_user)
     with get_db() as db:
-        db.execute("INSERT INTO remotes(name, host, port, enabled) VALUES (?, ?, ?, ?)",
-                   (name, host, port, enabled))
+        db.execute("INSERT INTO remotes(name, host, port, ssh_user, enabled) VALUES (?, ?, ?, ?, ?)",
+                   (name, host, port, ssh_user, enabled))
+
 
 def list_remotes():
     with get_db() as db:
         return db.execute("SELECT * FROM remotes ORDER BY added_ts DESC").fetchall()
+
+
+def get_remote(remote_id):
+    with get_db() as db:
+        return db.execute("SELECT * FROM remotes WHERE id=?", (remote_id,)).fetchone()
+
+
+def update_remote(remote_id, name, host, port=22, ssh_user='root'):
+    ssh_user = validate_ssh_user(ssh_user)
+    with get_db() as db:
+        db.execute(
+            "UPDATE remotes SET name=?, host=?, port=?, ssh_user=? WHERE id=?",
+            (name, host, port, ssh_user, remote_id),
+        )
+
 
 def remove_remote(remote_id):
     with get_db() as db:

@@ -21,7 +21,11 @@
     </div>
     <div class="col-md-2">
       <label class="form-label">{{ _('Port') }}</label>
-      <input name="port" class="form-control" value="22" type="number" />
+      <input name="port" class="form-control" value="22" type="number" min="1" max="65535" />
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">{{ _('SSH User') }}</label>
+      <input name="ssh_user" class="form-control" value="root" required pattern="[A-Za-z_][A-Za-z0-9_-]{0,31}" />
     </div>
     <div class="col-md-2 align-self-end">
       <button type="submit" class="btn btn-primary w-100">{{ _('Add Remote') }}</button>
@@ -35,6 +39,7 @@
         <th>{{ _('Name') }}</th>
         <th>{{ _('Host') }}</th>
         <th>{{ _('Port') }}</th>
+        <th>{{ _('SSH User') }}</th>
         <th>{{ _('Actions') }}</th>
       </tr>
     </thead>
@@ -45,8 +50,10 @@
         <td>{{ r['name'] }}</td>
         <td>{{ r['host'] }}</td>
         <td>{{ r['port'] }}</td>
+        <td><code>{{ r['ssh_user'] or 'root' }}</code></td>
         <td>
           <a href="{{ url_for('remote_disk_list', remote_id=r['id']) }}" class="btn btn-sm btn-primary">{{ _('View Disks') }}</a>
+          <a href="{{ url_for('remotes_edit', rid=r['id']) }}" class="btn btn-sm btn-outline-secondary">{{ _('Edit') }}</a>
           <a href="{{ url_for('remotes_delete', rid=r['id']) }}" class="btn btn-sm btn-danger">{{ _('Delete') }}</a>
         </td>
       </tr>
@@ -61,8 +68,8 @@
     <div class="card-body">
       <h6>{{ _('To manage disks on remote systems, you need to:') }}</h6>
       <ol>
-        <li><strong>{{ _('Add a remote system') }}</strong> using the form above with hostname/IP and SSH port</li>
-        <li><strong>{{ _('Configure SSH key authentication') }}</strong> - Use password authentication to install your SSH key on the remote system via the Hosts page</li>
+        <li><strong>{{ _('Add a remote system') }}</strong> using the form above with hostname/IP, SSH port, and the SSH account used on that host.</li>
+        <li><strong>{{ _('Configure SSH key authentication') }}</strong> - Use the configured remote SSH account. For Proxmox, this is normally <code>root</code>.</li>
         <li><strong>{{ _('Ensure sudo privileges') }}</strong> - The remote user needs passwordless sudo access for disk commands:
           <pre class="bg-light p-2 mt-2"><code># Add to /etc/sudoers.d/disk-tools on remote system
 username ALL=(ALL) NOPASSWD: /usr/bin/lsblk, /usr/sbin/smartctl, /usr/sbin/wipefs, /sbin/mkfs.*, /usr/bin/dd</code></pre>
