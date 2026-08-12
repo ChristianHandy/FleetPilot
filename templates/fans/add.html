@@ -440,30 +440,25 @@ function updateTypeUI() {
       </div>`;
   } else if (key === 'rpi_gpio_fan') {
     const pin = document.getElementById('f_gpio_pin').value || '14';
-    const minOff = document.getElementById('f_min_off_temp_c').value || '55';
-    const manual = document.getElementById('f_manual_gpio_control').value === '1';
+    const startTemp = document.getElementById('f_min_off_temp_c').value || '45';
+    document.getElementById('f_manual_gpio_control').value = '0';
     ef.innerHTML = `
       <div class="alert alert-info mb-3">
-        <strong>Raspberry Pi GPIO fan</strong> supports a two-wire fan through a transistor/driver circuit: <strong>OFF</strong> or <strong>100%</strong> only. GPIO pins must not power a fan directly.
+        <strong>Raspberry Pi three-wire PWM fan.</strong> Connect <strong>red → 5 V</strong>, <strong>black → GND</strong>, and <strong>blue → the selected GPIO PWM signal</strong>. The Linux <code>pwm-gpio-fan</code> driver owns the PWM waveform and supplies persistent thermal protection.
       </div>
       <div class="row g-2 mb-3">
         <div class="col-sm-6">
-          <label class="form-label">BCM GPIO Pin</label>
+          <label class="form-label">BCM GPIO PWM pin</label>
           <input type="number" min="0" max="27" name="gpio_pin" class="form-control" value="${escHtml(pin)}"
                  oninput="document.getElementById('f_gpio_pin').value=this.value">
         </div>
         <div class="col-sm-6">
-          <label class="form-label">Minimum temperature before OFF (°C)</label>
-          <input type="number" min="35" max="85" step="1" name="min_off_temp_c" class="form-control" value="${escHtml(minOff)}"
+          <label class="form-label">Fan-start temperature (°C)</label>
+          <input type="number" min="35" max="85" step="1" name="min_off_temp_c" class="form-control" value="${escHtml(startTemp)}"
                  oninput="document.getElementById('f_min_off_temp_c').value=this.value">
         </div>
       </div>
-      <div class="form-check mb-2">
-        <input class="form-check-input" type="checkbox" name="manual_gpio_control" value="1" id="manualGpioControl" ${manual ? 'checked' : ''}
-               onchange="document.getElementById('f_manual_gpio_control').value=this.checked?'1':'0'">
-        <label class="form-check-label" for="manualGpioControl">Enable manual GPIO control after confirming the fan wiring and pin</label>
-      </div>
-      <div class="form-text">For autonomous protection, configure the Linux <code>gpio-fan</code> overlay separately. FleetPilot will refuse an OFF command at or above the safety temperature.</div>`;
+      <div class="form-text">FleetPilot reports the kernel PWM cooling state. Direct static GPIO control is intentionally unavailable because it would interrupt the PWM waveform. For the GeeekPi case fan, use BCM GPIO 14 (physical header pin 8).</div>`;
   } else if (key === 'arctic_usb') {
     ef.innerHTML = `
       <div class="alert alert-info mb-2">
