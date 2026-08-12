@@ -23,6 +23,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
+import ssh_helper
 
 logger = logging.getLogger("fleetpilot.smart_manager")
 

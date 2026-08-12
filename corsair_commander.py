@@ -24,6 +24,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Dict, List, Optional
+import ssh_helper
 
 logger = logging.getLogger(__name__)
 
