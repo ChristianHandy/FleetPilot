@@ -892,14 +892,13 @@ def _fetch_rpi_gpio_fan(dev: Dict) -> Dict:
         command = f"""
 model=$(tr -d '\\0' </proc/device-tree/model 2>/dev/null || true)
 temp=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null || true)
-gpio=$(pinctrl get {pin} 2>/dev/null || true)
 overlay=$(grep -Rni '^[[:space:]]*dtoverlay=pwm-gpio-fan' /boot/firmware/config.txt /boot/config.txt 2>/dev/null || true)
 for d in /sys/class/thermal/cooling_device*; do
   [ "$(cat "$d/type" 2>/dev/null)" = "pwm-fan" ] || continue
   printf 'PWMSTATE|%s|%s\\n' "$(cat "$d/cur_state" 2>/dev/null || echo 0)" "$(cat "$d/max_state" 2>/dev/null || echo 0)"
   break
 done
-printf 'MODEL|%s\\nTEMP|%s\\nGPIO|%s\\nOVERLAY|%s\\n' "$model" "$temp" "$gpio" "$overlay"
+printf 'MODEL|%s\\nTEMP|%s\\nOVERLAY|%s\\n' "$model" "$temp" "$overlay"
 """
         out, err, _ = _run_remote(ssh, command, timeout=10)
         result["raw"] = out or err
