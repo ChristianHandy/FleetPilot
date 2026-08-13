@@ -35,8 +35,16 @@ done
 if lsblk -nr -o MOUNTPOINT "$DEV" | grep -q '[^[:space:]]'; then
   fail "$DEV or one of its partitions is mounted"
 fi
-
+# Verify the requested filesystem tool before changing any disk metadata.
+case "$FILESYSTEM" in
+  ext4) FORMAT_TOOL=mkfs.ext4 ;;
+  xfs) FORMAT_TOOL=mkfs.xfs ;;
+  fat32) FORMAT_TOOL=mkfs.vfat ;;
+esac
+command -v "$FORMAT_TOOL" >/dev/null 2>&1 || \
+  fail "Required formatter $FORMAT_TOOL is not installed; no disk changes were made"
 echo "Validated target: $DEV"
+
 echo "Mode: $MODE; filesystem: $FILESYSTEM"
 
 # Remove all recognised filesystem and partition signatures first.
