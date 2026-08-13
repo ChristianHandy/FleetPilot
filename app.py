@@ -1544,8 +1544,11 @@ def validate_route(device):
     except ValueError as e:
         flash(f'Invalid device name: {e}')
         return redirect(url_for('disks_index'))
-    blocks, bad = disktool_core.validate_blocks(device)
-    return render_template('disks/validate.html', device=device, blocks=blocks, bad_blocks=bad)
+    blocks, bad, summary = disktool_core.validate_blocks(device)
+    return render_template(
+        'disks/validate.html', device=device, blocks=blocks,
+        bad_blocks=bad, summary=summary,
+    )
 
 @app.route("/disks/tasks")
 @login_required

@@ -1,9 +1,56 @@
-{% extends 'disks/base.html' %}{% block title %}Validate{% endblock %}
+{% extends 'disks/base.html' %}
+{% block title %}Disk Validation{% endblock %}
 {% block content %}
-<h2>Block Validation for {{ device }}</h2>
-<p><a href="{{ url_for('disks_index') }}" class="btn btn-secondary">← Back to Disk Overview</a></p>
-<div>{% for b in blocks %}
-  <span class="block {% if b in bad_blocks %}bad{% else %}good{% endif %}"></span>
-  {% if loop.index % 50 == 0 %}<br>{% endif %}
-{% endfor %}</div>
+<style>
+  .validation-card { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.25rem; margin-bottom: 1rem; }
+  .validation-status { display:flex; align-items:center; gap:.75rem; font-size:1.1rem; font-weight:700; }
+  .validation-status.good { color: var(--accent-green, #31c48d); }
+  .validation-status.bad { color: var(--accent-red, #f05252); }
+  .validation-meta { color: var(--text-secondary); margin:.65rem 0 0; }
+  .validation-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(13px, 1fr)); gap:5px; padding:.9rem 0; }
+  .validation-sample { width:13px; height:13px; border-radius:3px; background:#31c48d; box-shadow:0 0 5px rgba(49,196,141,.35); }
+  .validation-sample.bad { background:#f05252; box-shadow:0 0 5px rgba(240,82,82,.45); }
+  .validation-legend { display:flex; gap:1rem; flex-wrap:wrap; color:var(--text-secondary); font-size:.9rem; }
+  .legend-dot { display:inline-block; width:11px; height:11px; border-radius:3px; margin-right:.35rem; vertical-align:-1px; }
+  .legend-good { background:#31c48d; } .legend-bad { background:#f05252; }
+</style>
+
+<div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+  <div>
+    <h2 class="mb-1">Read-only Disk Validation</h2>
+    <p class="text-muted mb-0">Target: <code>/dev/{{ device }}</code> — no data was written or changed.</p>
+  </div>
+  <a href="{{ url_for('disks_index') }}" class="btn btn-secondary">← Back to Disk Overview</a>
+</div>
+
+<div class="validation-card">
+  {% if summary.bad_count == 0 %}
+  <div class="validation-status good">✓ No read errors found in the sampled blocks</div>
+  {% else %}
+  <div class="validation-status bad">⚠ {{ summary.bad_count }} sampled block{{ 's' if summary.bad_count != 1 else '' }} could not be read</div>
+  {% endif %}
+  <div class="validation-meta">
+    {{ summary.sample_count }} × 4 KiB direct read samples were taken evenly across the whole device
+    ({{ '%.1f'|format(summary.sample_bytes / 1024 / 1024) }} MiB read in total).
+  </div>
+</div>
+
+<div class="validation-card">
+  <h5 class="mb-2">Sample map</h5>
+  <div class="validation-grid" aria-label="Validation sample results">
+    {% for block in blocks %}
+      <span class="validation-sample {% if block in bad_blocks %}bad{% endif %}"
+            title="Sample {{ loop.index }}: {% if block in bad_blocks %}read error{% else %}read OK{% endif %}"></span>
+    {% endfor %}
+  </div>
+  <div class="validation-legend">
+    <span><i class="legend-dot legend-good"></i>Read OK</span>
+    <span><i class="legend-dot legend-bad"></i>Read error</span>
+  </div>
+</div>
+
+<div class="alert alert-info">
+  <strong>What this means:</strong> this is a fast, non-destructive spot check, not a full media scan.
+  For a comprehensive surface test, use the disk's <strong>SMART extended test</strong> and review its SMART report.
+</div>
 {% endblock %}

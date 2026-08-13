@@ -348,37 +348,53 @@ def view_smart(device):
                    (device, None, temp, health))
     return out
 
-def validate_blocks(device):
-    """Prüft die ersten Blöcke eines Geräts mit direkten Leseversuchen und markiert fehlerhafte Blöcke."""
-    device = sanitize_device_name(device)
-    # Versuche, die ersten N Blöcke (z.B. 256) zu lesen und sammle fehlerhafte Indices
-    max_blocks = 256
-    bad_blocks = []
-    blocks = []
-    # Bestimme Gerätgröße in Bytes
-    try:
-        size_out = run(['blockdev', '--getsize64', f'/dev/{device}']).strip()
-        size = int(size_out)
-    except Exception:
-        size = None
-    if size:
-        count = size // 4096
-        blocks = list(range(min(count, max_blocks)))
-    else:
-        blocks = list(range(max_blocks))
+def validate_blocks(device, sample_count=256):
+    """Run a bounded, read-only spot check across a whole disk.
 
-    for b in blocks:
-        # Lese einen Block an Position b (offset = b*4096) mittels dd with count=1
-        offset = b * 4096
+    The validator reads 4 KiB samples evenly distributed across the entire
+    device. It never writes data. A full media surface scan belongs in SMART
+    extended testing and is intentionally not started by this UI action.
+    """
+    device = sanitize_device_name(device)
+    sample_count = max(1, min(int(sample_count), 512))
+    block_size = 4096
+    try:
+        size = int(run(['blockdev', '--getsize64', f'/dev/{device}']).strip())
+    except Exception:
+        size = 0
+
+    total_blocks = max(1, size // block_size)
+    actual_count = min(sample_count, total_blocks)
+    offsets = [0] if actual_count == 1 else [
+        (index * (total_blocks - 1)) // (actual_count - 1)
+        for index in range(actual_count)
+    ]
+
+    bad_blocks = []
+    blocks = list(range(actual_count))
+    for sample_index, disk_block in enumerate(offsets):
         try:
-            # dd will return non-zero on read errors; capture output
-            res = subprocess.run(['dd', 'if=' + f'/dev/{device}', 'bs=4096', 'count=1', 'skip=' + str(b)],
-                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            if res.returncode != 0:
-                bad_blocks.append(b)
-        except Exception:
-            bad_blocks.append(b)
-    return blocks, bad_blocks
+            result = subprocess.run(
+                ['dd', f'if=/dev/{device}', f'bs={block_size}', 'count=1',
+                 f'skip={disk_block}', 'iflag=direct', 'status=none'],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                timeout=10,
+                check=False,
+            )
+            if result.returncode != 0:
+                bad_blocks.append(sample_index)
+        except (OSError, subprocess.TimeoutExpired):
+            bad_blocks.append(sample_index)
+
+    summary = {
+        'device_size_bytes': size,
+        'sample_count': actual_count,
+        'sample_bytes': actual_count * block_size,
+        'bad_count': len(bad_blocks),
+        'method': 'Read-only 4 KiB samples evenly distributed across the device',
+    }
+    return blocks, bad_blocks, summary
 
 # --- Hilfsfunktionen für UI/DB-Abfragen (für Flask-Routen) ---
 def _parse_df_usage():
