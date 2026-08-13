@@ -46,6 +46,7 @@ def init_db():
           action TEXT,
           status TEXT,
           progress INTEGER,
+          details TEXT,
           ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE IF NOT EXISTS smart_history(
@@ -76,6 +77,9 @@ def init_db():
         remote_cols = {c[1] for c in db.execute("PRAGMA table_info(remotes)")}
         if 'ssh_user' not in remote_cols:
             db.execute("ALTER TABLE remotes ADD COLUMN ssh_user TEXT NOT NULL DEFAULT 'root'")
+        operation_cols = {c[1] for c in db.execute("PRAGMA table_info(operations)")}
+        if 'details' not in operation_cols:
+            db.execute("ALTER TABLE operations ADD COLUMN details TEXT")
 
 def run(cmd):
     """Führt einen Shell-Befehl aus und gibt den gesamten Output zurück."""
@@ -178,39 +182,99 @@ def log_op(device, action):
                          (device, action, 'RUNNING'))
         return cur.lastrowid
 
-def update_op(op_id, status=None, progress=None):
-    """Aktualisiert Status/Progress eines laufenden Operations-Eintrags."""
+def update_op(op_id, status=None, progress=None, details=None):
+    """Update Disk Tools task state and optional diagnostic details."""
     sets = []
     vals = []
     if status:
         sets.append('status=?'); vals.append(status)
     if progress is not None:
         sets.append('progress=?'); vals.append(progress)
+    if details is not None:
+        sets.append('details=?'); vals.append(str(details)[:2000])
     if not sets:
-        return  # nichts zu updaten
+        return
     vals.append(op_id)
     with get_db() as db:
         db.execute(f"UPDATE operations SET {','.join(sets)} WHERE id=?", vals)
 
-# --- Langlaufende Tasks (Formatierung, SMART-Test) ---
-def format_worker(device, fs, op_id):
-    """Führt die Formatierung eines Geräts aus (Hintergrund-Thread)."""
-    try:
-        device = sanitize_device_name(device)
-        path = f'/dev/{device}'
-        run(['wipefs', '-a', path])
-        cmd_map = {'ext4': ['mkfs.ext4', '-F'], 'xfs': ['mkfs.xfs', '-f'], 'fat32': ['mkfs.vfat', '-F', '32']}
-        if fs not in cmd_map:
-            raise ValueError('Unknown fs')
-        run(cmd_map[fs] + [path])
-        update_op(op_id, status='OK', progress=100)
-    except Exception:
-        update_op(op_id, status='FAIL', progress=0)
 
-def start_format(device, fs):
-    """Startet einen Formatierungsthread für device mit Dateisystem fs."""
-    op_id = log_op(device, f'FORMAT_{fs}')
-    threading.Thread(target=format_worker, args=(device, fs, op_id), daemon=True).start()
+# --- Destructive local-disk actions ---
+FORMAT_FILESYSTEMS = {'ext4', 'xfs', 'fat32'}
+WIPE_MODES = {'quick', 'full'}
+DISK_ACTION_HELPER = '/usr/local/lib/fleetpilot/disk-action'
+
+
+def _command_output(cmd):
+    """Run a fixed local inspection command and raise on failure."""
+    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            text=True, shell=False, timeout=15)
+    if result.returncode != 0:
+        raise RuntimeError(result.stdout.strip() or f'Command failed: {cmd[0]}')
+    return result.stdout.strip()
+
+
+def protected_system_disks():
+    """Return physical disks backing active local mounts; they must never be formatted."""
+    protected = set()
+    for mountpoint in ('/', '/boot', '/boot/firmware'):
+        try:
+            source = _command_output(['findmnt', '-n', '-o', 'SOURCE', '--target', mountpoint])
+            if not source.startswith('/dev/'):
+                continue
+            name = os.path.basename(source)
+            parent = _command_output(['lsblk', '-no', 'PKNAME', f'/dev/{name}'])
+            protected.add(parent or name)
+        except Exception:
+            continue
+    return protected
+
+
+def validate_format_target(device):
+    """Allow only a present, whole, non-system disk to enter the destructive workflow."""
+    device = sanitize_device_name(device)
+    if device in protected_system_disks():
+        raise ValueError(f'/dev/{device} contains an active system mount and is protected')
+    disk_type = _command_output(['lsblk', '-dn', '-o', 'TYPE', f'/dev/{device}'])
+    if disk_type != 'disk':
+        raise ValueError(f'/dev/{device} is not a whole physical disk')
+    return device
+
+
+def format_worker(device, fs, wipe_mode, op_id):
+    """Run the privileged, validated disk helper in a background thread."""
+    try:
+        device = validate_format_target(device)
+        if fs not in FORMAT_FILESYSTEMS:
+            raise ValueError('Unsupported filesystem type')
+        if wipe_mode not in WIPE_MODES:
+            raise ValueError('Unsupported wipe mode')
+        update_op(op_id, progress=5, details=f'Validating /dev/{device} for a {wipe_mode} wipe')
+        result = subprocess.run(
+            ['sudo', '-n', DISK_ACTION_HELPER, wipe_mode, fs, device],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            shell=False,
+            timeout=None,
+        )
+        output = (result.stdout or '').strip()
+        if result.returncode != 0:
+            raise RuntimeError(output or 'Privileged disk action failed')
+        update_op(op_id, status='OK', progress=100, details=output or 'Format completed successfully')
+    except Exception as exc:
+        update_op(op_id, status='FAIL', progress=0, details=str(exc))
+
+
+def start_format(device, fs, wipe_mode):
+    """Start a protected quick or full wipe plus filesystem creation task."""
+    device = validate_format_target(device)
+    if fs not in FORMAT_FILESYSTEMS:
+        raise ValueError('Unsupported filesystem type')
+    if wipe_mode not in WIPE_MODES:
+        raise ValueError('Unsupported wipe mode')
+    op_id = log_op(device, f'{wipe_mode.upper()}_WIPE_FORMAT_{fs.upper()}')
+    threading.Thread(target=format_worker, args=(device, fs, wipe_mode, op_id), daemon=True).start()
     return op_id
 
 def start_smart(device, mode):
@@ -416,8 +480,8 @@ def remove_remote(remote_id):
 # Task helpers (existing): get_task_status, get_task_action, stop_task, auto_mode_worker
 
 def get_task_status(op_id):
-    row = get_db().execute("SELECT status, progress FROM operations WHERE id=?", (op_id,)).fetchone()
-    return (row['status'], row['progress']) if row else (None, None)
+    row = get_db().execute("SELECT status, progress, details FROM operations WHERE id=?", (op_id,)).fetchone()
+    return (row['status'], row['progress'], row['details']) if row else (None, None, None)
 
 def get_task_action(op_id):
     row = get_db().execute("SELECT action FROM operations WHERE id=?", (op_id,)).fetchone()

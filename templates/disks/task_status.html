@@ -3,6 +3,7 @@
 <h2>Task {{ op_id }}: {{ action }}</h2>
 <div class="progress" style="height:30px"><div id="bar" class="progress-bar" style="width:0%">0%</div></div>
 <p id="status" class="mt-2">{{ _('Status: RUNNING') }}</p>
+<pre id="details" class="alert alert-secondary small" style="white-space:pre-wrap; display:none"></pre>
 <a href="{{ url_for('disk_history') }}" class="btn btn-secondary mt-3">{{ _('Back') }}</a>
 <script>
 async function poll() {
@@ -12,6 +13,12 @@ async function poll() {
   bar.style.width = d.progress + '%';
   bar.innerText = d.progress + '%';
   document.getElementById('status').innerText = 'Status: ' + d.status;
+  const details = document.getElementById('details');
+  if (d.details) {
+    details.textContent = d.details;
+    details.style.display = 'block';
+    details.className = d.status === 'FAIL' ? 'alert alert-danger small' : 'alert alert-secondary small';
+  }
   if (d.status === 'RUNNING') setTimeout(poll, 1000);
 }
 window.addEventListener('load', poll);

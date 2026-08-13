@@ -1,16 +1,83 @@
-{% extends 'disks/base.html' %}{% block title %}Format{% endblock %}
+{% extends 'disks/base.html' %}
+{% block title %}Format /dev/{{ device }}{% endblock %}
 {% block content %}
-<h1>Format /dev/{{ device }}</h1>
-<p><a href="{{ url_for('disks_index') }}" class="btn btn-secondary">← Back to Disk Overview</a></p>
-<form method="post" class="row g-3">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <div class="col-auto">
-    <select name="fs" class="form-select">
-      <option value="ext4">ext4</option>
-      <option value="xfs">xfs</option>
-      <option value="fat32">fat32</option>
-    </select>
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h1>Format <code>/dev/{{ device }}</code></h1>
+      <p class="text-muted mb-0">Choose the erase depth before creating a new filesystem.</p>
+    </div>
+    <a href="{{ url_for('disks_index') }}" class="btn btn-secondary">← Back to Disk Overview</a>
   </div>
-  <div class="col-auto"><button class="btn btn-danger">{{ _('Start') }}</button></div>
-</form>
+
+  <div class="alert alert-danger" role="alert">
+    <strong>Destructive action.</strong> This permanently removes all partitions and data on <code>/dev/{{ device }}</code>.
+    System disks and disks backing active mounts are blocked automatically.
+  </div>
+
+  <form method="post" class="row g-4" id="format-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="col-12">
+      <label class="form-label fw-semibold">Erase mode</label>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="card h-100 border-primary cursor-pointer">
+            <div class="card-body">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="wipe_mode" id="quick" value="quick" checked>
+                <span class="form-check-label fw-semibold">Quick wipe</span>
+              </div>
+              <p class="small text-muted mt-2 mb-0">Removes filesystem, partition, and signature metadata. It is fast but does not overwrite every data block.</p>
+            </div>
+          </label>
+        </div>
+        <div class="col-md-6">
+          <label class="card h-100 border-danger cursor-pointer">
+            <div class="card-body">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="wipe_mode" id="full" value="full">
+                <span class="form-check-label fw-semibold text-danger">Full zero wipe</span>
+              </div>
+              <p class="small text-muted mt-2 mb-0">Overwrites the entire disk with zeros before formatting. This can take many hours and cannot be undone.</p>
+            </div>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <label class="form-label fw-semibold" for="fs">Filesystem</label>
+      <select id="fs" name="fs" class="form-select">
+        <option value="ext4">ext4</option>
+        <option value="xfs">xfs</option>
+        <option value="fat32">fat32</option>
+      </select>
+    </div>
+
+    <div class="col-md-8">
+      <label class="form-label fw-semibold" for="confirmation">Type confirmation</label>
+      <input id="confirmation" name="confirmation" class="form-control" autocomplete="off" placeholder="ERASE /dev/{{ device }}" required>
+      <div class="form-text">Type exactly <code>ERASE /dev/{{ device }}</code> to unlock the action.</div>
+    </div>
+
+    <div class="col-12 d-flex gap-2">
+      <button id="format-submit" class="btn btn-danger" type="submit" disabled>
+        <i class="bi bi-exclamation-triangle"></i> Start destructive format
+      </button>
+      <a href="{{ url_for('disks_index') }}" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+
+<script>
+(() => {
+  const required = 'ERASE /dev/{{ device }}';
+  const confirmation = document.getElementById('confirmation');
+  const submit = document.getElementById('format-submit');
+  confirmation.addEventListener('input', () => {
+    submit.disabled = confirmation.value.trim() !== required;
+  });
+})();
+</script>
 {% endblock %}

@@ -79,6 +79,9 @@ apt-get install -y -qq \
     openssh-client \
     sshpass \
     smartmontools \
+    e2fsprogs \
+    xfsprogs \
+    dosfstools \
     lm-sensors \
     fancontrol \
     ipmitool \
@@ -136,7 +139,20 @@ mkdir -p "$INSTALL_DIR/data"
 mkdir -p "$INSTALL_DIR/logs"
 chown -R "$FP_USER:$FP_USER" "$INSTALL_DIR"
 
-# Step 9: Create .env file if not exists
+# Step 9: Install the restricted local Disk Tools helper and its sudo rule.
+# The helper is root-owned, validates mode/filesystem/device, and blocks mounted system disks.
+info "Installing protected Disk Tools helper..."
+install -d -o root -g root -m 0755 /usr/local/lib/fleetpilot
+install -o root -g root -m 0750 "$INSTALL_DIR/scripts/fleetpilot-disk-action" /usr/local/lib/fleetpilot/disk-action
+cat > /etc/sudoers.d/fleetpilot-disk-action << EOF
+# FleetPilot may invoke only the root-owned, argument-validating disk helper.
+$FP_USER ALL=(root) NOPASSWD: /usr/local/lib/fleetpilot/disk-action *
+EOF
+chmod 0440 /etc/sudoers.d/fleetpilot-disk-action
+visudo -cf /etc/sudoers.d/fleetpilot-disk-action >/dev/null || error "Invalid Disk Tools sudo rule"
+success "Protected Disk Tools helper installed"
+
+# Step 10: Create .env file if not exists
 if [ ! -f "$INSTALL_DIR/.env" ]; then
     cat > "$INSTALL_DIR/.env" << EOF
 # FleetPilot Configuration
@@ -148,7 +164,7 @@ EOF
     success "Created .env configuration"
 fi
 
-# Step 10: Create systemd service
+# Step 11: Create systemd service
 info "Creating systemd service..."
 cat > /etc/systemd/system/${SERVICE_NAME}.service << EOF
 [Unit]
@@ -176,7 +192,7 @@ SupplementaryGroups=plugdev input
 WantedBy=multi-user.target
 EOF
 
-# Step 11: Add udev rules for USB HID (Arctic Fan Controller etc.)
+# Step 12: Add udev rules for USB HID (Arctic Fan Controller etc.)
 info "Adding USB HID udev rules..."
 cat > /etc/udev/rules.d/99-fleetpilot-hid.rules << 'EOF'
 # Arctic Fan Controller (ACFAN00351A)
@@ -190,21 +206,21 @@ udevadm control --reload-rules 2>/dev/null || true
 usermod -aG plugdev "$FP_USER" 2>/dev/null || true
 success "USB HID rules added"
 
-# Step 12: Enable and start service
+# Step 13: Enable and start service
 info "Enabling and starting FleetPilot service..."
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME"
 systemctl restart "$SERVICE_NAME"
 sleep 3
 
-# Step 13: Check if running
+# Step 14: Check if running
 if systemctl is-active --quiet "$SERVICE_NAME"; then
     success "FleetPilot is running!"
 else
     warn "FleetPilot may not have started. Check: journalctl -u fleetpilot -n 20"
 fi
 
-# Step 14: Get IP address
+# Step 15: Get IP address
 PI_IP=$(hostname -I | awk '{print $1}')
 
 echo ""

@@ -1,0 +1,59 @@
+#!/bin/sh
+# Restricted FleetPilot disk action helper.
+# Invoked through sudo with exactly: MODE FILESYSTEM DEVICE_NAME
+# Never accepts a path or arbitrary command.
+set -eu
+
+fail() {
+  echo "ERROR: $*" >&2
+  exit 1
+}
+
+[ "$#" -eq 3 ] || fail "Expected MODE FILESYSTEM DEVICE_NAME"
+MODE=$1
+FILESYSTEM=$2
+DEVICE=$3
+
+case "$MODE" in quick|full) ;; *) fail "Unsupported wipe mode" ;; esac
+case "$FILESYSTEM" in ext4|xfs|fat32) ;; *) fail "Unsupported filesystem" ;; esac
+case "$DEVICE" in ''|*[!A-Za-z0-9_-]*) fail "Invalid device name" ;; esac
+
+DEV="/dev/$DEVICE"
+[ -b "$DEV" ] || fail "$DEV is not a block device"
+[ "$(lsblk -dn -o TYPE "$DEV")" = "disk" ] || fail "$DEV is not a whole physical disk"
+
+# Refuse disks that contain the operating system or another active mount.
+for MOUNT in / /boot /boot/firmware; do
+  SOURCE=$(findmnt -n -o SOURCE --target "$MOUNT" 2>/dev/null || true)
+  case "$SOURCE" in /dev/*)
+    PARENT=$(lsblk -no PKNAME "$SOURCE" 2>/dev/null || true)
+    [ -n "$PARENT" ] || PARENT=$(basename "$SOURCE")
+    [ "$PARENT" != "$DEVICE" ] || fail "$DEV backs $MOUNT and is protected"
+    ;;
+  esac
+done
+if lsblk -nr -o MOUNTPOINT "$DEV" | grep -q '[^[:space:]]'; then
+  fail "$DEV or one of its partitions is mounted"
+fi
+
+echo "Validated target: $DEV"
+echo "Mode: $MODE; filesystem: $FILESYSTEM"
+
+# Remove all recognised filesystem and partition signatures first.
+wipefs -a -f "$DEV"
+
+if [ "$MODE" = "full" ]; then
+  echo "Starting full zero wipe. This may take a long time."
+  dd if=/dev/zero of="$DEV" bs=16M status=progress conv=fsync
+  sync
+else
+  echo "Quick wipe completed: signatures and partition metadata removed."
+fi
+
+case "$FILESYSTEM" in
+  ext4) mkfs.ext4 -F "$DEV" ;;
+  xfs) mkfs.xfs -f "$DEV" ;;
+  fat32) mkfs.vfat -F 32 "$DEV" ;;
+esac
+
+echo "SUCCESS: $DEV formatted as $FILESYSTEM after $MODE wipe"

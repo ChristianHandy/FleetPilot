@@ -1482,12 +1482,25 @@ def format_route(device):
             flash('You need operator or admin role to format disks.')
             return redirect(url_for('disks_index'))
         
-        fs = request.form.get('fs','ext4')
-        if fs not in {'ext4', 'xfs', 'fat32'}:
-            flash('Invalid filesystem type')
+        fs = request.form.get('fs', 'ext4')
+        wipe_mode = request.form.get('wipe_mode', 'quick')
+        expected_confirmation = f'ERASE /dev/{device}'
+        confirmation = request.form.get('confirmation', '').strip()
+        if fs not in disktool_core.FORMAT_FILESYSTEMS:
+            flash('Invalid filesystem type', 'error')
+            return redirect(url_for('format_route', device=device))
+        if wipe_mode not in disktool_core.WIPE_MODES:
+            flash('Invalid wipe mode', 'error')
+            return redirect(url_for('format_route', device=device))
+        if confirmation != expected_confirmation:
+            flash(f'Confirmation must exactly match: {expected_confirmation}', 'error')
+            return redirect(url_for('format_route', device=device))
+        try:
+            op_id = disktool_core.start_format(device, fs, wipe_mode)
+        except (ValueError, RuntimeError) as exc:
+            flash(f'Format was blocked: {exc}', 'error')
             return redirect(url_for('disks_index'))
-        op_id = disktool_core.start_format(device, fs)
-        flash(f'Format task {op_id} started for {device}')
+        flash(f'{wipe_mode.title()} wipe and {fs} format task {op_id} started for {device}')
         return redirect(url_for('task_status', op_id=op_id))
     return render_template('disks/format.html', device=device)
 
@@ -1582,8 +1595,8 @@ def import_smart():
 @app.route("/disks/task/status/api/<int:op_id>")
 @login_required
 def task_status_api(op_id):
-    status, progress = disktool_core.get_task_status(op_id)
-    return jsonify(status=status, progress=progress)
+    status, progress, details = disktool_core.get_task_status(op_id)
+    return jsonify(status=status, progress=progress, details=details or '')
 
 @app.route("/disks/task/status/<int:op_id>")
 @login_required
