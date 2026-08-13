@@ -137,6 +137,10 @@
           <span class="sidebar-icon">&#x2709;&#xFE0F;</span> {{ _('Email Config') }}
         </a>
         {% if is_admin is defined and is_admin %}
+        <a class="sidebar-link {% if request.path.startswith('/system/production') %}active{% endif %}" href="/system/production">
+          <span class="sidebar-icon">&#x1F6E1;</span> Production Status
+          <span class="badge badge-blue" style="margin-left:auto;font-size:0.6rem;padding:0.1rem 0.35rem;">Admin</span>
+        </a>
         <a class="sidebar-link {% if request.path.startswith('/system/audit') %}active{% endif %}" href="/system/audit">
           <span class="sidebar-icon">&#x1F4CB;</span> Audit Trail
           <span class="badge badge-blue" style="margin-left:auto;font-size:0.6rem;padding:0.1rem 0.35rem;">Admin</span>
