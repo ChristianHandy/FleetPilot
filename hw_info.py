@@ -438,13 +438,43 @@ def register_routes(app, login_required, csrf=None):
     """Register /hw_overview routes on the Flask app."""
     from flask import render_template, request, jsonify, redirect, url_for
 
+    def _overview_inventory():
+        """Return every configured server, enriched with cached hardware metadata.
+
+        Hardware Overview must not hide a configured server merely because it has
+        not completed its first collection yet.  This makes new hosts, including
+        Unraid, visible with a ``Never`` collection timestamp and lets the UI
+        refresh them directly.
+        """
+        cached = _collector.list_cached() if _collector else []
+        by_name = {row.get('server_name'): dict(row) for row in cached
+                   if row.get('server_name')}
+        try:
+            from flask import current_app
+            import server_registry as _reg_mod
+            registry = _reg_mod.get_registry(current_app.config.get('DATA_DIR', '.'))
+            for server in registry.list_servers():
+                name = str(server.get('name') or '').strip()
+                if not name:
+                    continue
+                if name not in by_name:
+                    by_name[name] = {
+                        'server_name': name,
+                        'host': server.get('host') or '',
+                        'collected_at': None,
+                    }
+        except Exception as exc:
+            logger.warning('[HwInfo] Could not merge configured server inventory: %s', exc)
+        return sorted(by_name.values(), key=lambda row: row['server_name'].lower())
+
     @app.route('/hw_overview')
+
     @login_required
     def hw_overview():
         if not _collector:
             return "HwInfo not initialized", 503
-        cached = _collector.list_cached()
-        return render_template('hw_overview/index.html', servers=cached)
+        servers = _overview_inventory()
+        return render_template('hw_overview/index.html', servers=servers)
 
     @app.route('/hw_overview/<server_name>')
     @login_required
@@ -492,7 +522,7 @@ def register_routes(app, login_required, csrf=None):
     def api_hw_overview_servers():
         if not _collector:
             return jsonify([])
-        return jsonify(_collector.list_cached())
+        return jsonify(_overview_inventory())
 
     @app.route('/api/hw_overview/<server_name>')
     @login_required
