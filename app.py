@@ -408,7 +408,7 @@ def record_mutating_request_audit(response):
 
 
 @app.route('/storage/workspace')
-@login_required
+@user_management.login_required
 def storage_workspace():
     """Unified Storage workspace: inventory, health, durable jobs, and safe actions."""
     try:
@@ -436,7 +436,7 @@ def storage_workspace():
 
 
 @app.route('/system/audit')
-@login_required
+@user_management.login_required
 def system_audit():
     if not current_user_has_role('admin'):
         flash('Administrator role required to view the audit trail.', 'error')
@@ -445,7 +445,7 @@ def system_audit():
 
 
 @app.route('/system/production')
-@login_required
+@user_management.login_required
 def production_status():
     if not current_user_has_role('admin'):
         flash('Administrator role required to view production status.', 'error')
