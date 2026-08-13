@@ -50,10 +50,26 @@ else
   echo "Quick wipe completed: signatures and partition metadata removed."
 fi
 
+# Use GPT plus one data partition.  This is required for robust handling of
+# large disks and avoids creating filesystems directly on a raw whole disk.
+printf 'label: gpt\n, , L\n' | sfdisk --wipe always "$DEV"
+partprobe "$DEV" 2>/dev/null || true
+udevadm settle
+case "$DEVICE" in
+  *[0-9]) PART="${DEV}p1" ;;
+  *) PART="${DEV}1" ;;
+esac
+for _ in $(seq 1 10); do
+  [ -b "$PART" ] && break
+  sleep 1
+done
+[ -b "$PART" ] || fail "Data partition was not created: $PART"
+echo "Created GPT data partition: $PART"
+
 case "$FILESYSTEM" in
-  ext4) mkfs.ext4 -F "$DEV" ;;
-  xfs) mkfs.xfs -f "$DEV" ;;
-  fat32) mkfs.vfat -F 32 "$DEV" ;;
+  ext4) mkfs.ext4 -F -O 64bit "$PART" ;;
+  xfs) mkfs.xfs -f "$PART" ;;
+  fat32) mkfs.vfat -F 32 "$PART" ;;
 esac
 
-echo "SUCCESS: $DEV formatted as $FILESYSTEM after $MODE wipe"
+echo "SUCCESS: $PART formatted as $FILESYSTEM after $MODE wipe"
