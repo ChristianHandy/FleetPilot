@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+{% block title %}Storage Workspace — FleetPilot{% endblock %}
+{% block page_title %}Storage Workspace{% endblock %}
+{% block content %}
+<style>
+.storage-hero {display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1.25rem;}
+.storage-hero h1 {margin:0;font-size:1.55rem;letter-spacing:-.02em;}
+.storage-hero p {margin:.35rem 0 0;color:var(--text-muted);max-width:760px;line-height:1.5;}
+.storage-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.85rem;margin-bottom:1.25rem;}
+.storage-stat {padding:1rem 1.1rem;border:1px solid var(--border);background:var(--bg-card);border-radius:var(--radius-md);}
+.storage-stat .label {font-size:.73rem;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);font-weight:700;}
+.storage-stat .value {font-size:1.55rem;font-weight:800;margin-top:.3rem;}
+.workspace-card {border:1px solid var(--border);background:var(--bg-card);border-radius:var(--radius-md);margin-bottom:1.15rem;overflow:hidden;}
+.workspace-card-header {display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:1rem 1.15rem;border-bottom:1px solid var(--border);}
+.workspace-card-header h2 {font-size:1rem;margin:0;}
+.workspace-card-body {padding:1rem 1.15rem;}
+.workspace-table {width:100%;border-collapse:collapse;font-size:.84rem;}
+.workspace-table th,.workspace-table td {padding:.65rem .45rem;border-bottom:1px solid var(--border);text-align:left;vertical-align:middle;}
+.workspace-table th {font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);}
+.workspace-table tr:last-child td {border-bottom:0;}
+.workspace-actions {display:flex;gap:.35rem;flex-wrap:wrap;justify-content:flex-end;}
+.workspace-muted {color:var(--text-muted);font-size:.86rem;}
+.workspace-notice {padding:.85rem 1rem;border-left:3px solid var(--accent-amber);background:rgba(245,158,11,.08);border-radius:0 var(--radius-sm) var(--radius-sm) 0;color:var(--text-secondary);font-size:.83rem;line-height:1.5;}
+@media(max-width:720px){.workspace-table thead{display:none}.workspace-table tr{display:block;padding:.6rem 0;border-bottom:1px solid var(--border)}.workspace-table td{display:flex;justify-content:space-between;border:0;padding:.28rem .15rem}.workspace-table td:before{content:attr(data-label);font-size:.68rem;text-transform:uppercase;color:var(--text-muted);font-weight:700}.workspace-actions{justify-content:flex-start}}
+</style>
+
+<div class="storage-hero">
+  <div>
+    <h1>Storage Workspace</h1>
+    <p>Central inventory for disks, SMART health, durable storage jobs, remote systems, and protected maintenance actions.</p>
+  </div>
+  <div class="btn-group">
+    <a class="btn btn-secondary btn-sm" href="/disks/remotes">Remote Disks</a>
+    <a class="btn btn-secondary btn-sm" href="/smart">SMART Dashboard</a>
+    <a class="btn btn-secondary btn-sm" href="/disks/tasks">All Tasks</a>
+  </div>
+</div>
+
+<div class="storage-grid">
+  <div class="storage-stat"><div class="label">Local drives</div><div class="value">{{ disks|length }}</div></div>
+  <div class="storage-stat"><div class="label">Storage systems</div><div class="value">{{ storage_endpoints|length }}</div></div>
+  <div class="storage-stat"><div class="label">Tracked tasks</div><div class="value">{{ tasks|length }}</div></div>
+  <div class="storage-stat"><div class="label">SMART alerts</div><div class="value" style="color:{% if smart_summary.critical|default(0) > 0 %}var(--accent-red,#ef4444){% elif smart_summary.warning|default(0) > 0 %}var(--accent-amber){% else %}var(--accent-green,#22c55e){% endif %};">{{ smart_summary.critical|default(0) + smart_summary.warning|default(0) }}</div></div>
+</div>
+
+<div class="workspace-card">
+  <div class="workspace-card-header"><h2>Disk inventory</h2><a class="btn btn-secondary btn-sm" href="/disks">Detailed Disk Tools</a></div>
+  <div class="workspace-card-body">
+    {% if disks %}
+    <table class="workspace-table"><thead><tr><th>Device</th><th>Model</th><th>Capacity</th><th>Usage</th><th>Actions</th></tr></thead><tbody>
+    {% for disk in disks %}
+      <tr>
+        <td data-label="Device"><code>/dev/{{ disk.device }}</code></td>
+        <td data-label="Model">{{ disk.model|default('Unknown') }}</td>
+        <td data-label="Capacity">{{ disk.size|default('—') }}</td>
+        <td data-label="Usage">{{ ('%s%%' % disk.usage) if disk.usage is not none else 'Not mounted' }}</td>
+        <td data-label="Actions"><div class="workspace-actions">
+          <a class="btn btn-secondary btn-sm" href="/disks/smart/{{ disk.device }}">SMART</a>
+          <a class="btn btn-secondary btn-sm" href="/disks/validate/{{ disk.device }}">Validate</a>
+          {% if can_operate %}<a class="btn btn-outline-danger btn-sm" href="/disks/format/{{ disk.device }}">Format</a>{% endif %}
+        </div></td>
+      </tr>
+    {% endfor %}
+    </tbody></table>
+    {% else %}<p class="workspace-muted">No local disk inventory is available yet.</p>{% endif %}
+  </div>
+</div>
+
+<div class="workspace-card">
+  <div class="workspace-card-header"><h2>Durable storage jobs</h2><a class="btn btn-secondary btn-sm" href="/disks/tasks">Open task history</a></div>
+  <div class="workspace-card-body">
+    <div class="workspace-notice">Jobs run on the FleetPilot server. You may close the browser and return to this workspace or the task history after signing in again. Destructive actions remain restricted to Operator and Administrator roles.</div>
+    {% if tasks %}
+    <table class="workspace-table" style="margin-top:.75rem;"><thead><tr><th>ID</th><th>Action</th><th>Target</th><th>Status</th><th>Started</th><th></th></tr></thead><tbody>
+    {% for task in tasks[:8] %}<tr>
+      <td data-label="ID">#{{ task.id }}</td><td data-label="Action">{{ task.action }}</td><td data-label="Target"><code>{{ task.device }}</code></td>
+      <td data-label="Status"><span class="badge {% if task.status == 'DONE' %}badge-green{% elif task.status in ['FAIL','INTERRUPTED'] %}badge-red{% else %}badge-amber{% endif %}">{{ task.status }}</span></td>
+      <td data-label="Started">{{ task.started_at|default(task.ts|default('—')) }}</td><td data-label=""><a class="btn btn-secondary btn-sm" href="/disks/task/status/{{ task.id }}">Open</a></td>
+    </tr>{% endfor %}</tbody></table>
+    {% else %}<p class="workspace-muted" style="margin-top:.75rem;">No storage jobs have been recorded.</p>{% endif %}
+  </div>
+</div>
+
+<div class="workspace-card">
+  <div class="workspace-card-header"><h2>Managed storage systems</h2><a class="btn btn-secondary btn-sm" href="/storage">Manage systems</a></div>
+  <div class="workspace-card-body">
+    {% if storage_endpoints %}
+    <table class="workspace-table"><thead><tr><th>Name</th><th>Platform</th><th>Host</th><th></th></tr></thead><tbody>{% for endpoint in storage_endpoints %}<tr>
+      <td data-label="Name">{{ endpoint.name }}</td><td data-label="Platform">{{ endpoint.platform|default('storage') }}</td><td data-label="Host">{{ endpoint.host }}</td><td data-label=""><a class="btn btn-secondary btn-sm" href="/storage/{{ endpoint.id }}">Open</a></td>
+    </tr>{% endfor %}</tbody></table>
+    {% else %}<p class="workspace-muted">No storage controllers are configured. Remote Disk management is available above for SSH-managed systems.</p>{% endif %}
+  </div>
+</div>
+{% endblock %}

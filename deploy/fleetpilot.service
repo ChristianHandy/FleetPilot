@@ -1,0 +1,37 @@
+[Unit]
+Description=FleetPilot infrastructure operations platform
+Documentation=https://github.com/ChristianHandy/FleetPilot
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=exec
+User=fleetpilot
+Group=fleetpilot
+WorkingDirectory=/opt/fleetpilot
+EnvironmentFile=/opt/fleetpilot/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=FLEETPILOT_DATA_DIR=/opt/fleetpilot/data
+Environment=GUNICORN_BIND=127.0.0.1:5000
+ExecStart=/opt/fleetpilot/venv/bin/gunicorn --config /opt/fleetpilot/gunicorn.conf.py app:app
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+UMask=0027
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=fleetpilot
+SupplementaryGroups=plugdev input
+
+# Protect the host without blocking approved Disk Tools access through its
+# dedicated root-owned sudo helper. Do not set NoNewPrivileges here: sudo must
+# retain its normal privilege transition for that tightly restricted helper.
+ProtectSystem=full
+ReadWritePaths=/opt/fleetpilot/data /opt/fleetpilot/logs
+PrivateTmp=true
+ProtectHome=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

@@ -87,6 +87,7 @@ apt-get install -y -qq \
     ipmitool \
     net-tools \
     nmap \
+    nginx \
     libhidapi-hidraw0 \
     libhidapi-libusb0 \
     python3-hid \
@@ -134,10 +135,11 @@ success "Python dependencies installed"
 
 deactivate
 
-# Step 8: Create data directory
-mkdir -p "$INSTALL_DIR/data"
-mkdir -p "$INSTALL_DIR/logs"
-chown -R "$FP_USER:$FP_USER" "$INSTALL_DIR"
+# Step 8: Separate immutable application code from mutable service data.
+mkdir -p "$INSTALL_DIR/data" "$INSTALL_DIR/logs"
+chown -R root:root "$INSTALL_DIR"
+chown -R "$FP_USER:$FP_USER" "$INSTALL_DIR/data" "$INSTALL_DIR/logs"
+chmod 0750 "$INSTALL_DIR/data" "$INSTALL_DIR/logs"
 
 # Step 9: Install the restricted local Disk Tools helper and its sudo rule.
 # The helper is root-owned, validates mode/filesystem/device, and blocks mounted system disks.
@@ -152,17 +154,22 @@ chmod 0440 /etc/sudoers.d/fleetpilot-disk-action
 visudo -cf /etc/sudoers.d/fleetpilot-disk-action >/dev/null || error "Invalid Disk Tools sudo rule"
 success "Protected Disk Tools helper installed"
 
-# Step 10: Create .env file if not exists
-if [ ! -f "$INSTALL_DIR/.env" ]; then
-    cat > "$INSTALL_DIR/.env" << EOF
-# FleetPilot Configuration
-SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
-DASHBOARD_PASSWORD=FleetPilot2025
-PORT=$PORT
-DEBUG=false
-EOF
-    success "Created .env configuration"
-fi
+# Step 10: Create a protected runtime configuration. Existing values are preserved.
+touch "$INSTALL_DIR/.env"
+chmod 0600 "$INSTALL_DIR/.env"
+chown root:"$FP_USER" "$INSTALL_DIR/.env"
+ensure_env() {
+    key="$1"; value="$2"
+    grep -q "^${key}=" "$INSTALL_DIR/.env" || echo "${key}=${value}" >> "$INSTALL_DIR/.env"
+}
+ensure_env SECRET_KEY "$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+ensure_env DASHBOARD_PASSWORD "CHANGE_THIS_AFTER_INSTALL"
+ensure_env FLEETPILOT_PRODUCTION "false"
+ensure_env FLEETPILOT_TRUST_PROXY "true"
+ensure_env FLEETPILOT_COOKIE_SECURE "false"
+ensure_env FLEETPILOT_SESSION_MINUTES "480"
+ensure_env WTF_CSRF_ENABLED "false"
+success "Protected runtime configuration prepared"
 
 # Step 11: Create systemd service
 info "Creating systemd service..."
@@ -178,8 +185,8 @@ User=$FP_USER
 WorkingDirectory=$INSTALL_DIR
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONPATH=$INSTALL_DIR
-ExecStart=$INSTALL_DIR/venv/bin/python3 app.py
-Restart=always
+ExecStart=$INSTALL_DIR/venv/bin/gunicorn --config $INSTALL_DIR/gunicorn.conf.py app:app
+Restart=on-failure
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
@@ -187,6 +194,12 @@ SyslogIdentifier=fleetpilot
 
 # Raspberry Pi specific: allow USB HID access
 SupplementaryGroups=plugdev input
+UMask=0027
+ProtectSystem=full
+ReadWritePaths=$INSTALL_DIR/data $INSTALL_DIR/logs
+PrivateTmp=true
+ProtectHome=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 
 [Install]
 WantedBy=multi-user.target

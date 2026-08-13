@@ -12,11 +12,12 @@ bind        = os.environ.get("GUNICORN_BIND", f"{_server_ip}:{_app_port}")
 backlog     = 2048
 
 # ── Workers ───────────────────────────────────────────────────────────────────
-# Formula: (2 × CPU cores) + 1  — good for I/O-bound Flask apps
-workers     = int(os.environ.get("GUNICORN_WORKERS",
-                  min(multiprocessing.cpu_count() * 2 + 1, 9)))
-worker_class = "sync"          # sync is fine; use "gthread" for heavy concurrency
-threads     = 2                # 2 threads per worker for light parallelism
+# FleetPilot starts polling and scheduling threads during application startup.
+# A single worker avoids duplicate pollers and SQLite writers. Threads keep
+# request handling responsive on the Raspberry Pi.
+workers     = int(os.environ.get("GUNICORN_WORKERS", "1"))
+worker_class = "gthread"
+threads     = int(os.environ.get("GUNICORN_THREADS", "4"))
 worker_connections = 1000
 
 # ── Timeouts ──────────────────────────────────────────────────────────────────
@@ -36,7 +37,7 @@ proc_name   = "fleetpilot"
 default_proc_name = "fleetpilot"
 
 # ── Performance tweaks ────────────────────────────────────────────────────────
-preload_app  = True            # load app once before forking → lower RAM per worker
+preload_app  = False           # do not fork after scheduler/polling threads initialise
 max_requests = 1000            # recycle workers to prevent memory leaks
 max_requests_jitter = 100      # randomise recycling to avoid thundering herd
 sendfile     = True            # use OS sendfile() for static files

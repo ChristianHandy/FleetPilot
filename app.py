@@ -4,6 +4,8 @@ import re, time as _time
 from collections import defaultdict
 from i18n import get_translator, SUPPORTED_LANGUAGES
 import json, threading, paramiko, os, secrets
+import audit_log
+import production_runtime
 import ssh_helper
 from updater import run_update
 import scheduler
@@ -58,8 +60,10 @@ os.makedirs(DATA_DIR, exist_ok=True)
 ssh_helper.init(DATA_DIR)
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
-# Security: Use environment variables for credentials, generate secure secret key
+# Security: Use environment variables for credentials, generate secure secret key.
+# Production setup generates and protects SECRET_KEY in /opt/fleetpilot/.env.
 app.secret_key = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
+PRODUCTION_STATUS = production_runtime.configure_app(app)
 
 # ── Flask-Compress: Gzip response compression ───────────────────────────────────────
 try:
@@ -254,6 +258,7 @@ addon_mgr.load_addons()
 # invocations initialise the database before any request is handled.
 with app.app_context():
     user_management.init_user_db()
+    audit_log.init_db()
     if user_management.migrate_env_user_to_db():
         print(f"INFO: Migrated env-var user '{USERNAME}' to database.")
     disktool_core.init_db()
@@ -370,6 +375,89 @@ def current_user_has_role(*roles):
     if 'admin' in user_roles:
         return True
     return any(role in user_roles for role in roles)
+
+_AUDIT_IGNORED_ENDPOINTS = {
+    'static', 'api_dashboard_layout_get', 'api_update_notification',
+    'task_status_api', 'api_tfa_status', 'api_host_metrics'
+}
+
+
+@app.after_request
+def record_mutating_request_audit(response):
+    """Persist a concise audit record for state-changing requests.
+
+    Request bodies are deliberately excluded so passwords, API keys, SSH keys,
+    and disk command parameters never enter the audit database.
+    """
+    try:
+        if request.method in {'POST', 'PUT', 'PATCH', 'DELETE'} and request.endpoint not in _AUDIT_IGNORED_ENDPOINTS:
+            actor_id = session.get('user_id')
+            actor = session.get('username') or ('user-%s' % actor_id if actor_id else 'anonymous')
+            audit_log.record_event(
+                actor_id=actor_id,
+                actor=actor,
+                event_type='http.%s' % request.method.lower(),
+                target=(request.endpoint or request.path),
+                outcome='success' if response.status_code < 400 else 'failed',
+                remote_addr=request.remote_addr or '',
+                metadata={'status_code': response.status_code, 'path': request.path[:200]},
+            )
+    except Exception as audit_error:
+        app.logger.warning('Audit write failed: %s', audit_error)
+    return response
+
+
+@app.route('/storage/workspace')
+@login_required
+def storage_workspace():
+    """Unified Storage workspace: inventory, health, durable jobs, and safe actions."""
+    try:
+        disks = disktool_core.get_disk_list()
+    except Exception:
+        disks = []
+    try:
+        tasks = disktool_core.list_task_history(12)
+    except Exception:
+        tasks = []
+    try:
+        storage_endpoints = storage_controller.list_endpoints()
+    except Exception:
+        storage_endpoints = []
+    try:
+        smart_summary = smart_manager.get_health_summary()
+    except Exception:
+        smart_summary = {}
+    can_operate = current_user_has_role('operator', 'admin')
+    return render_template(
+        'storage_workspace.html', disks=disks, tasks=tasks,
+        storage_endpoints=storage_endpoints, smart_summary=smart_summary,
+        can_operate=can_operate,
+    )
+
+
+@app.route('/system/audit')
+@login_required
+def system_audit():
+    if not current_user_has_role('admin'):
+        flash('Administrator role required to view the audit trail.', 'error')
+        return redirect(url_for('index'))
+    return render_template('system_audit.html', events=audit_log.list_events(200), audit_health=audit_log.health())
+
+
+@app.route('/system/production')
+@login_required
+def production_status():
+    if not current_user_has_role('admin'):
+        flash('Administrator role required to view production status.', 'error')
+        return redirect(url_for('index'))
+    return render_template('production_status.html', production=PRODUCTION_STATUS, audit_health=audit_log.health())
+
+
+@app.route('/healthz')
+def healthz():
+    """Minimal unauthenticated liveness probe for a local reverse proxy or monitor."""
+    return jsonify({'status': 'ok'}), 200
+
 
 def is_online(host, user):
     # Check if this is localhost
@@ -522,6 +610,8 @@ def login():
                 session['_2fa_pending_username'] = username
                 session['_2fa_next'] = next_url
                 return redirect(url_for('tfa_verify'))
+            session.clear()
+            session.permanent = True
             session["user_id"] = user_id
             session["username"] = username
             session["login"] = True
@@ -531,6 +621,8 @@ def login():
         # Fallback to environment variable authentication for backward compatibility
         if username == USERNAME and password == PASSWORD:
             _clear_login_attempts(ip)
+            session.clear()
+            session.permanent = True
             session["login"] = True
             session["username"] = username
             flash('Logged in successfully (legacy mode)')
