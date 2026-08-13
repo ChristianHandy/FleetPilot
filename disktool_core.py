@@ -348,53 +348,42 @@ def view_smart(device):
                    (device, None, temp, health))
     return out
 
-def validate_blocks(device, sample_count=256):
-    """Run a bounded, read-only spot check across a whole disk.
+def validate_blocks(device):
+    """Run bounded raw-device reads through the restricted root helper.
 
-    The validator reads 4 KiB samples evenly distributed across the entire
-    device. It never writes data. A full media surface scan belongs in SMART
-    extended testing and is intentionally not started by this UI action.
+    FleetPilot itself is deliberately unprivileged. The helper accepts only the
+    fixed ``validate read <device>`` command and performs 256 direct 4 KiB
+    reads across the whole device; it has no write path in validation mode.
     """
     device = sanitize_device_name(device)
-    sample_count = max(1, min(int(sample_count), 512))
-    block_size = 4096
-    try:
-        size = int(run(['blockdev', '--getsize64', f'/dev/{device}']).strip())
-    except Exception:
-        size = 0
+    result = subprocess.run(
+        ['sudo', '-n', DISK_ACTION_HELPER, 'validate', 'read', device],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        shell=False,
+        timeout=300,
+        check=False,
+    )
+    output = result.stdout or ''
+    if result.returncode != 0:
+        raise RuntimeError(output.strip() or 'Read-only validation helper failed')
 
-    total_blocks = max(1, size // block_size)
-    actual_count = min(sample_count, total_blocks)
-    offsets = [0] if actual_count == 1 else [
-        (index * (total_blocks - 1)) // (actual_count - 1)
-        for index in range(actual_count)
-    ]
-
-    bad_blocks = []
-    blocks = list(range(actual_count))
-    for sample_index, disk_block in enumerate(offsets):
-        try:
-            result = subprocess.run(
-                ['dd', f'if=/dev/{device}', f'bs={block_size}', 'count=1',
-                 f'skip={disk_block}', 'iflag=direct', 'status=none'],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                timeout=10,
-                check=False,
-            )
-            if result.returncode != 0:
-                bad_blocks.append(sample_index)
-        except (OSError, subprocess.TimeoutExpired):
-            bad_blocks.append(sample_index)
-
+    match = re.search(r'VALIDATION_SUMMARY samples=(\d+) bytes=(\d+) bad=(\d+) size=(\d+)', output)
+    if not match:
+        raise RuntimeError('Validation helper returned no summary')
+    sample_count, sample_bytes, bad_count, device_size = map(int, match.groups())
+    bad_blocks = [int(value) for value in re.findall(r'^BAD_SAMPLE\s+(\d+)$', output, re.MULTILINE)]
+    if len(bad_blocks) != bad_count:
+        raise RuntimeError('Validation helper returned inconsistent error counts')
     summary = {
-        'device_size_bytes': size,
-        'sample_count': actual_count,
-        'sample_bytes': actual_count * block_size,
-        'bad_count': len(bad_blocks),
+        'device_size_bytes': device_size,
+        'sample_count': sample_count,
+        'sample_bytes': sample_bytes,
+        'bad_count': bad_count,
         'method': 'Read-only 4 KiB samples evenly distributed across the device',
     }
-    return blocks, bad_blocks, summary
+    return list(range(sample_count)), bad_blocks, summary
 
 # --- Hilfsfunktionen für UI/DB-Abfragen (für Flask-Routen) ---
 def _parse_df_usage():

@@ -1,7 +1,8 @@
 #!/bin/sh
 # Restricted FleetPilot disk action helper.
-# Invoked through sudo with exactly: MODE FILESYSTEM DEVICE_NAME
-# Never accepts a path or arbitrary command.
+# Invoked through sudo with exactly: MODE FILESYSTEM DEVICE_NAME.
+# It accepts only fixed modes and a safe block-device basename; it never accepts
+# a path, shell expression, or arbitrary command.
 set -eu
 
 fail() {
@@ -13,16 +14,45 @@ fail() {
 MODE=$1
 FILESYSTEM=$2
 DEVICE=$3
-
-case "$MODE" in quick|full) ;; *) fail "Unsupported wipe mode" ;; esac
-case "$FILESYSTEM" in ext4|xfs|fat32) ;; *) fail "Unsupported filesystem" ;; esac
+case "$MODE" in quick|full|validate) ;; *) fail "Unsupported mode" ;; esac
 case "$DEVICE" in ''|*[!A-Za-z0-9_-]*) fail "Invalid device name" ;; esac
-
 DEV="/dev/$DEVICE"
 [ -b "$DEV" ] || fail "$DEV is not a block device"
 [ "$(lsblk -dn -o TYPE "$DEV")" = "disk" ] || fail "$DEV is not a whole physical disk"
 
-# Refuse disks that contain the operating system or another active mount.
+if [ "$MODE" = "validate" ]; then
+  [ "$FILESYSTEM" = "read" ] || fail "Validation requires FILESYSTEM value read"
+  # Bounded, read-only samples: 256 direct 4 KiB reads evenly distributed over
+  # the device.  The command never writes or alters partitions/filesystems.
+  BLOCK_SIZE=4096
+  SAMPLE_COUNT=256
+  SIZE=$(blockdev --getsize64 "$DEV")
+  TOTAL_BLOCKS=$((SIZE / BLOCK_SIZE))
+  [ "$TOTAL_BLOCKS" -gt 0 ] || fail "$DEV has no readable blocks"
+  [ "$TOTAL_BLOCKS" -lt "$SAMPLE_COUNT" ] && SAMPLE_COUNT=$TOTAL_BLOCKS
+  BAD_COUNT=0
+  INDEX=0
+  while [ "$INDEX" -lt "$SAMPLE_COUNT" ]; do
+    if [ "$SAMPLE_COUNT" -eq 1 ]; then
+      DISK_BLOCK=0
+    else
+      DISK_BLOCK=$((INDEX * (TOTAL_BLOCKS - 1) / (SAMPLE_COUNT - 1)))
+    fi
+    if ! timeout 5 dd if="$DEV" of=/dev/null bs=$BLOCK_SIZE count=1 \
+        skip="$DISK_BLOCK" iflag=direct status=none 2>/dev/null; then
+      echo "BAD_SAMPLE $INDEX"
+      BAD_COUNT=$((BAD_COUNT + 1))
+    fi
+    INDEX=$((INDEX + 1))
+  done
+  echo "VALIDATION_SUMMARY samples=$SAMPLE_COUNT bytes=$((SAMPLE_COUNT * BLOCK_SIZE)) bad=$BAD_COUNT size=$SIZE"
+  exit 0
+fi
+
+case "$FILESYSTEM" in ext4|xfs|fat32) ;; *) fail "Unsupported filesystem" ;; esac
+
+# Refuse disks that contain the operating system or another active mount before
+# allowing a destructive quick/full operation.
 for MOUNT in / /boot /boot/firmware; do
   SOURCE=$(findmnt -n -o SOURCE --target "$MOUNT" 2>/dev/null || true)
   case "$SOURCE" in /dev/*)
@@ -35,7 +65,8 @@ done
 if lsblk -nr -o MOUNTPOINT "$DEV" | grep -q '[^[:space:]]'; then
   fail "$DEV or one of its partitions is mounted"
 fi
-# Verify the requested filesystem tool before changing any disk metadata.
+
+# Verify the requested formatter before changing any disk metadata.
 case "$FILESYSTEM" in
   ext4) FORMAT_TOOL=mkfs.ext4 ;;
   xfs) FORMAT_TOOL=mkfs.xfs ;;
@@ -43,13 +74,10 @@ case "$FILESYSTEM" in
 esac
 command -v "$FORMAT_TOOL" >/dev/null 2>&1 || \
   fail "Required formatter $FORMAT_TOOL is not installed; no disk changes were made"
+
 echo "Validated target: $DEV"
-
 echo "Mode: $MODE; filesystem: $FILESYSTEM"
-
-# Remove all recognised filesystem and partition signatures first.
 wipefs -a -f "$DEV"
-
 if [ "$MODE" = "full" ]; then
   echo "Starting full zero wipe. This may take a long time."
   dd if=/dev/zero of="$DEV" bs=16M status=progress conv=fsync
@@ -58,8 +86,7 @@ else
   echo "Quick wipe completed: signatures and partition metadata removed."
 fi
 
-# Use GPT plus one data partition.  This is required for robust handling of
-# large disks and avoids creating filesystems directly on a raw whole disk.
+# Use GPT plus one data partition for robust handling of large disks.
 printf 'label: gpt\n, , L\n' | sfdisk --wipe always "$DEV"
 partprobe "$DEV" 2>/dev/null || true
 udevadm settle
@@ -73,11 +100,9 @@ for _ in $(seq 1 10); do
 done
 [ -b "$PART" ] || fail "Data partition was not created: $PART"
 echo "Created GPT data partition: $PART"
-
 case "$FILESYSTEM" in
   ext4) mkfs.ext4 -F -O 64bit "$PART" ;;
   xfs) mkfs.xfs -f "$PART" ;;
   fat32) mkfs.vfat -F 32 "$PART" ;;
 esac
-
 echo "SUCCESS: $PART formatted as $FILESYSTEM after $MODE wipe"
