@@ -3,11 +3,14 @@
 {% block content %}
 <h1>{{ _('History') }}</h1>
 <h2>{{ _('Operations') }}</h2>
-<table class="table table-striped"><thead><tr><th>{{ _('ID') }}</th><th>{{ _('Device') }}</th><th>{{ _('Action') }}</th><th>{{ _('Status') }}</th><th>{{ _('Progress') }}</th><th>{{ _('Time') }}</th></tr></thead><tbody>
+<div class="alert alert-info">Tasks run on the FleetPilot server. You can close the browser and reopen any task later from this list.</div>
+<table class="table table-striped"><thead><tr><th>{{ _('ID') }}</th><th>{{ _('Device') }}</th><th>{{ _('Action') }}</th><th>{{ _('Status') }}</th><th>{{ _('Progress') }}</th><th>{{ _('Started') }}</th><th></th></tr></thead><tbody>
 {% for o in ops %}<tr>
-  <td>{{ o.id }}</td><td>{{ o.device }}</td><td>{{ o.action }}</td><td>{{ o.status }}</td>
-  <td>{{ o.progress }}%</td><td>{{ o.ts }}</td>
-</tr>{% endfor %}
+  <td>{{ o.id }}</td><td>{{ o.device }}</td><td>{{ o.action }}</td>
+  <td><span class="badge {{ 'bg-success' if o.status == 'OK' else ('bg-danger' if o.status in ['FAIL','INTERRUPTED'] else 'bg-secondary') }}">{{ o.status }}</span></td>
+  <td>{{ o.progress }}%</td><td>{{ o.started_ts or o.ts }}</td>
+  <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('task_status', op_id=o.id) }}">View task</a></td>
+</tr>{% else %}<tr><td colspan="7" class="text-muted">No Disk Tools tasks have been recorded.</td></tr>{% endfor %}
 </tbody></table>
 <h2 class="mt-4">{{ _('SMART History') }}</h2>
 <table class="table table-striped"><thead><tr><th>{{ _('ID') }}</th><th>{{ _('Device') }}</th><th>{{ _('Temp') }}</th><th>{{ _('Health') }}</th><th>{{ _('Time') }}</th></tr></thead><tbody>

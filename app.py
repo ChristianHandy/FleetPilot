@@ -257,6 +257,7 @@ with app.app_context():
     if user_management.migrate_env_user_to_db():
         print(f"INFO: Migrated env-var user '{USERNAME}' to database.")
     disktool_core.init_db()
+    disktool_core.recover_interrupted_tasks()
     vm_controller.init_db()
     storage_controller.init_db()
     smart_manager.init_db()
@@ -1546,6 +1547,14 @@ def validate_route(device):
     blocks, bad = disktool_core.validate_blocks(device)
     return render_template('disks/validate.html', device=device, blocks=blocks, bad_blocks=bad)
 
+@app.route("/disks/tasks")
+@login_required
+def disk_tasks():
+    """Durable server-side Disk Tools task list, available after re-login."""
+    tasks = disktool_core.list_task_history()
+    return render_template('disks/tasks.html', tasks=tasks)
+
+
 @app.route("/disks/history")
 @login_required
 def disk_history():
@@ -1595,14 +1604,27 @@ def import_smart():
 @app.route("/disks/task/status/api/<int:op_id>")
 @login_required
 def task_status_api(op_id):
-    status, progress, details = disktool_core.get_task_status(op_id)
-    return jsonify(status=status, progress=progress, details=details or '')
+    status, progress, details, started_ts, finished_ts, runner_note = disktool_core.get_task_status(op_id)
+    if status is None:
+        return jsonify(error='Task not found'), 404
+    return jsonify(
+        status=status,
+        progress=progress,
+        details=details or '',
+        started_ts=started_ts,
+        finished_ts=finished_ts,
+        runner_note=runner_note or '',
+    )
+
 
 @app.route("/disks/task/status/<int:op_id>")
 @login_required
 def task_status(op_id):
-    action = disktool_core.get_task_action(op_id)
-    return render_template('disks/task_status.html', op_id=op_id, action=action)
+    task = disktool_core.get_task_record(op_id)
+    if not task:
+        flash('Task not found.', 'error')
+        return redirect(url_for('disk_tasks'))
+    return render_template('disks/task_status.html', op_id=op_id, action=task['action'], task=task)
 
 @app.route("/disks/task/stop/<int:op_id>")
 @login_required

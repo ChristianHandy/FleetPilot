@@ -1,0 +1,43 @@
+{% extends 'disks/base.html' %}
+{% block title %}Tasks{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="mb-1">Server Tasks</h1>
+    <p class="text-muted mb-0">Disk Tools tasks run on FleetPilot’s server, not in this browser tab.</p>
+  </div>
+  <a class="btn btn-secondary" href="{{ url_for('disks_index') }}">Back to Disk Tools</a>
+</div>
+
+<div class="alert alert-info">
+  You may close the browser or sign out after a task has started. Sign back in and open this page to see its current or final status. A server restart marks unfinished tasks as <strong>Interrupted</strong> rather than silently losing their result.
+</div>
+
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <strong>Recent tasks</strong>
+    <span class="badge bg-secondary">{{ tasks|length }} entries</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead><tr><th>ID</th><th>Device</th><th>Action</th><th>Status</th><th>Progress</th><th>Started</th><th>Finished</th><th></th></tr></thead>
+      <tbody>
+      {% for task in tasks %}
+        <tr>
+          <td>#{{ task.id }}</td>
+          <td><code>/dev/{{ task.device }}</code></td>
+          <td>{{ task.action }}</td>
+          <td><span class="badge {{ 'bg-success' if task.status == 'OK' else ('bg-danger' if task.status in ['FAIL','INTERRUPTED'] else 'bg-secondary') }}">{{ task.status }}</span></td>
+          <td style="min-width:120px"><div class="progress" style="height:7px"><div class="progress-bar" style="width:{{ task.progress or 0 }}%"></div></div><small>{{ task.progress or 0 }}%</small></td>
+          <td><small>{{ task.started_ts or task.ts }}</small></td>
+          <td><small>{{ task.finished_ts or '—' }}</small></td>
+          <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('task_status', op_id=task.id) }}">Open</a></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="8" class="text-muted text-center py-4">No Disk Tools tasks have been recorded yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

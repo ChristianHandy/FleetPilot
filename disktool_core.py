@@ -47,7 +47,10 @@ def init_db():
           status TEXT,
           progress INTEGER,
           details TEXT,
-          ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          started_ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          finished_ts TIMESTAMP,
+          runner_note TEXT
         );
         CREATE TABLE IF NOT EXISTS smart_history(
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -80,6 +83,33 @@ def init_db():
         operation_cols = {c[1] for c in db.execute("PRAGMA table_info(operations)")}
         if 'details' not in operation_cols:
             db.execute("ALTER TABLE operations ADD COLUMN details TEXT")
+        if 'started_ts' not in operation_cols:
+            db.execute("ALTER TABLE operations ADD COLUMN started_ts TIMESTAMP")
+            db.execute("UPDATE operations SET started_ts=ts WHERE started_ts IS NULL")
+        if 'finished_ts' not in operation_cols:
+            db.execute("ALTER TABLE operations ADD COLUMN finished_ts TIMESTAMP")
+        if 'runner_note' not in operation_cols:
+            db.execute("ALTER TABLE operations ADD COLUMN runner_note TEXT")
+
+
+def recover_interrupted_tasks():
+    """Mark jobs left running by a FleetPilot service restart as interrupted.
+
+    Browser disconnects do not affect worker threads; this recovery only applies
+    when the FleetPilot process itself has stopped before a job completed.
+    """
+    with get_db() as db:
+        db.execute("""
+            UPDATE operations
+               SET status='INTERRUPTED',
+                   finished_ts=COALESCE(finished_ts, CURRENT_TIMESTAMP),
+                   runner_note='FleetPilot restarted before this task completed.',
+                   details=CASE
+                     WHEN details IS NULL OR details='' THEN 'Interrupted because FleetPilot restarted.'
+                     ELSE details || '\\nInterrupted because FleetPilot restarted.'
+                   END
+             WHERE status='RUNNING'
+        """)
 
 def run(cmd):
     """Führt einen Shell-Befehl aus und gibt den gesamten Output zurück."""
@@ -175,23 +205,30 @@ def sync_disks():
             start_smart(dev, 'short')
 
 # --- Operations-Logging in DB ---
-def log_op(device, action):
-    """Erzeugt einen neuen Eintrag in der Operations-Tabelle und gibt die ID zurück."""
+def log_op(device, action, details='Task queued on the FleetPilot server.'):
+    """Create a durable server-side task record and return its ID."""
     with get_db() as db:
-        cur = db.execute('INSERT INTO operations(device, action, status, progress) VALUES (?, ?, ?, 0)',
-                         (device, action, 'RUNNING'))
+        cur = db.execute(
+            '''INSERT INTO operations(device, action, status, progress, details, started_ts, runner_note)
+               VALUES (?, ?, 'RUNNING', 0, ?, CURRENT_TIMESTAMP,
+                       'Runs on the FleetPilot server; closing the browser does not stop it.')''',
+            (device, action, str(details)[:5000]),
+        )
         return cur.lastrowid
 
+
 def update_op(op_id, status=None, progress=None, details=None):
-    """Update Disk Tools task state and optional diagnostic details."""
+    """Persist Disk Tools task state, diagnostics, and terminal timestamps."""
     sets = []
     vals = []
     if status:
         sets.append('status=?'); vals.append(status)
+        if status in {'OK', 'FAIL', 'STOPPED', 'INTERRUPTED'}:
+            sets.append('finished_ts=CURRENT_TIMESTAMP')
     if progress is not None:
         sets.append('progress=?'); vals.append(progress)
     if details is not None:
-        sets.append('details=?'); vals.append(str(details)[:2000])
+        sets.append('details=?'); vals.append(str(details)[:5000])
     if not sets:
         return
     vals.append(op_id)
@@ -249,7 +286,10 @@ def format_worker(device, fs, wipe_mode, op_id):
             raise ValueError('Unsupported filesystem type')
         if wipe_mode not in WIPE_MODES:
             raise ValueError('Unsupported wipe mode')
-        update_op(op_id, progress=5, details=f'Validating /dev/{device} for a {wipe_mode} wipe')
+        update_op(op_id, progress=5, details=(
+            f'Running on the FleetPilot server. You may close the browser and return later.\n'
+            f'Validating /dev/{device} for a {wipe_mode} wipe.'
+        ))
         result = subprocess.run(
             ['sudo', '-n', DISK_ACTION_HELPER, wipe_mode, fs, device],
             stdout=subprocess.PIPE,
@@ -273,8 +313,19 @@ def start_format(device, fs, wipe_mode):
         raise ValueError('Unsupported filesystem type')
     if wipe_mode not in WIPE_MODES:
         raise ValueError('Unsupported wipe mode')
-    op_id = log_op(device, f'{wipe_mode.upper()}_WIPE_FORMAT_{fs.upper()}')
-    threading.Thread(target=format_worker, args=(device, fs, wipe_mode, op_id), daemon=True).start()
+    op_id = log_op(
+        device,
+        f'{wipe_mode.upper()}_WIPE_FORMAT_{fs.upper()}',
+        f'Queued {wipe_mode} wipe and {fs} format for /dev/{device}. '
+        'This task runs on the FleetPilot server and continues if you close the browser.',
+    )
+    worker = threading.Thread(
+        target=format_worker,
+        args=(device, fs, wipe_mode, op_id),
+        daemon=False,
+        name=f'fleetpilot-disk-task-{op_id}',
+    )
+    worker.start()
     return op_id
 
 def start_smart(device, mode):
@@ -385,11 +436,26 @@ def get_disk_list(filter_str=''):
 
 
 def fetch_history_data():
-    """Liest die Verlaufsdaten (operations und smart_history) aus der Datenbank."""
+    """Read durable task history and SMART history from the database."""
     with get_db() as db:
-        ops = db.execute("SELECT * FROM operations ORDER BY ts DESC").fetchall()
+        ops = db.execute("SELECT * FROM operations ORDER BY id DESC").fetchall()
         smart = db.execute("SELECT * FROM smart_history ORDER BY ts DESC").fetchall()
     return ops, smart
+
+
+def list_task_history(limit=200):
+    """Return durable task records for the Tasks page after a user signs back in."""
+    limit = max(1, min(int(limit), 500))
+    with get_db() as db:
+        return db.execute(
+            "SELECT * FROM operations ORDER BY id DESC LIMIT ?", (limit,)
+        ).fetchall()
+
+
+def get_task_record(op_id):
+    """Return one complete durable task record or None."""
+    with get_db() as db:
+        return db.execute("SELECT * FROM operations WHERE id=?", (op_id,)).fetchone()
 
 
 def clear_history():
@@ -480,8 +546,15 @@ def remove_remote(remote_id):
 # Task helpers (existing): get_task_status, get_task_action, stop_task, auto_mode_worker
 
 def get_task_status(op_id):
-    row = get_db().execute("SELECT status, progress, details FROM operations WHERE id=?", (op_id,)).fetchone()
-    return (row['status'], row['progress'], row['details']) if row else (None, None, None)
+    with get_db() as db:
+        row = db.execute(
+            "SELECT status, progress, details, started_ts, finished_ts, runner_note FROM operations WHERE id=?",
+            (op_id,),
+        ).fetchone()
+    if not row:
+        return None, None, None, None, None, None
+    return (row['status'], row['progress'], row['details'], row['started_ts'],
+            row['finished_ts'], row['runner_note'])
 
 def get_task_action(op_id):
     row = get_db().execute("SELECT action FROM operations WHERE id=?", (op_id,)).fetchone()
