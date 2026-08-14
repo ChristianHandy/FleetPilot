@@ -2,6 +2,12 @@
 
 Alle bemerkenswerten Änderungen an FleetPilot werden in diesem Dokument festgehalten. Die Versionsnummern folgen dem Prinzip der semantischen Versionierung.
 
+## [1.3.1] — 2026-08-14
+
+### Behoben
+
+- Bereits angemeldete Nutzer werden beim Aufruf der zentralen Adresse <code>http://192.168.1.100/</code> nun automatisch zur **FleetPilot Service Hub**-Übersicht unter <code>/index</code> weitergeleitet, statt erneut die Anmeldeseite zu sehen.
+
 ## [1.3.0] — 2026-08-14
 
 Dieses Funktionsrelease macht den zentralen FleetPilot-Einstieg verständlicher und erkennt verwaltbare Fähigkeiten neuer Hosts automatisch, ohne Zugangsdaten oder Änderungen auf dem Zielgerät vorzunehmen.
@@ -84,6 +90,7 @@ Dies ist das erste formale, produktionsorientierte FleetPilot-Release für klein
 - Das Umgebungsdatei-Recht auf dem Raspberry Pi ist auf `root:fleetpilot` mit Modus `0640` eingeschränkt.
 - HTTPS, sichere Cookies und die globale CSRF-Erzwingung bleiben bewusst als nächste, separat testbare Produktionsschritte ausstehend.
 
+[1.3.1]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.3.1
 [1.3.0]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.3.0
 [1.1.2]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.1.2
 [1.1.1]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.1.1

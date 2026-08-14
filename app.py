@@ -747,6 +747,11 @@ def login():
     if _raw_next and (not _raw_next.startswith('/') or '//' in _raw_next or _raw_next.startswith('//') or '\\' in _raw_next):
         _raw_next = ''
     next_url = _raw_next or url_for('index')
+    # The central ingress address is the normal entry point.  Once a session
+    # exists, returning the login form at '/' is confusing and hides the
+    # Service Hub. Redirect authenticated users to the requested page or home.
+    if request.method == "GET" and (session.get("user_id") or session.get("login")):
+        return redirect(next_url)
     if request.method == "POST":
         ip = request.remote_addr or '127.0.0.1'  # Use loopback as fallback, not all-interfaces
         # ── Brute-Force check ─────────────────────────────────────────────────────────
