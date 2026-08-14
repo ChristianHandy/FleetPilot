@@ -4,7 +4,7 @@ Keep this module dependency-free so the web interface, health checks, deployment
 scripts, and future clients all report the same semantic application version.
 """
 
-VERSION = "1.1.2"
+VERSION = "1.3.0"
 TAG = f"v{VERSION}"
 DISPLAY_NAME = f"FleetPilot {TAG}"
 

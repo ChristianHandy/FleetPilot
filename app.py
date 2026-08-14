@@ -8,6 +8,7 @@ import audit_log
 import fleetpilot_version
 import production_runtime
 import proxy_manager
+import host_discovery
 import ssh_helper
 from updater import run_update
 import scheduler
@@ -589,6 +590,7 @@ def normalize_host(data):
         "last_update": None,
         "last_seen": None,
         "custom_image": None,  # URL to custom server image
+        "management": {},        # passive capability discovery result
     }
     defaults.update(data)
     # Ensure tags is always a list
@@ -609,15 +611,82 @@ def load_hosts():
     cache_set('hosts', data, ttl=15)
     return data
 
-def save_hosts(hosts):
+_host_discovery_lock = threading.Lock()
+_host_discovery_inflight = set()
+
+
+def _sync_hosts_to_registry(hosts):
+    """Keep the central registry authoritative for every saved update-manager host."""
+    if not _REGISTRY_AVAILABLE:
+        return
+    try:
+        registry = _registry.get_registry(DATA_DIR)
+        for name, data in hosts.items():
+            server_id = registry.upsert_server(
+                name=name,
+                host=data.get('host', ''),
+                port=data.get('port', 22),
+                user=data.get('user', 'root'),
+                ssh_key=data.get('ssh_key', ''),
+                description=data.get('description', ''),
+                location=data.get('location', ''),
+                environment=data.get('environment', 'Production'),
+                criticality=data.get('criticality', 'Medium'),
+                tags=data.get('tags', []),
+                mac=data.get('mac', ''),
+                notes=data.get('notes', ''),
+            )
+            registry.register_module(server_id, 'update_manager')
+    except Exception as registry_error:
+        app.logger.warning('[ServerRegistry] Host sync error: %s', registry_error)
+
+
+def _discover_host_and_store(name):
+    """Run one passive capability probe and persist the result without credentials."""
+    try:
+        hosts = load_hosts()
+        data = hosts.get(name)
+        if not data:
+            return
+        result = host_discovery.discover_management_capabilities(
+            data.get('host', ''), data.get('port', 22)
+        )
+        hosts = load_hosts()
+        if name not in hosts:
+            return
+        hosts[name]['management'] = result
+        save_hosts(hosts)
+    except Exception as discovery_error:
+        app.logger.warning('[HostDiscovery] %s failed: %s', name, discovery_error)
+    finally:
+        with _host_discovery_lock:
+            _host_discovery_inflight.discard(name)
+
+
+def schedule_host_discovery(name):
+    """Avoid duplicate probes while automatically assessing newly added hosts."""
+    with _host_discovery_lock:
+        if name in _host_discovery_inflight:
+            return False
+        _host_discovery_inflight.add(name)
+    threading.Thread(target=_discover_host_and_store, args=(name,), daemon=True,
+                     name=f'host-discovery-{name[:24]}').start()
+    return True
+
+
+def save_hosts(hosts, discover_names=None):
     with open(os.path.join(DATA_DIR, "hosts.json"), "w") as f:
         json.dump(hosts, f, indent=2)
     cache_invalidate('hosts')
+    _sync_hosts_to_registry(hosts)
     # Auto-sync to HW Monitor (so servers appear there without manual re-entry)
     try:
         _hw._auto_import_from_hosts(DATA_DIR)
     except Exception:
         pass
+    for name in discover_names or []:
+        if name in hosts:
+            schedule_host_discovery(name)
 
 def get_local_public_key():
     """
@@ -851,6 +920,47 @@ def logout():
     flash('Logged out')
     return redirect(url_for('login'))
 
+def _home_page_catalog(is_admin):
+    """Return every principal FleetPilot area visible to the current user."""
+    pages = [
+        {'name': 'Host & Update Management', 'href': '/dashboard', 'icon': '↻', 'group': 'Core', 'description': 'Patch status, update jobs and remote host operations.'},
+        {'name': 'Managed Hosts', 'href': '/hosts', 'icon': '▣', 'group': 'Core', 'description': 'Central host registry, tags, SSH details and Wake-on-LAN.'},
+        {'name': 'Network Scanner', 'href': '/scanner', 'icon': '⌕', 'group': 'Core', 'description': 'Find reachable devices and add them to FleetPilot.'},
+        {'name': 'Storage & Disks', 'href': '/storage/workspace', 'icon': '◉', 'group': 'Hardware', 'description': 'Disk inventory, SMART health and protected storage tasks.'},
+        {'name': 'SMART Dashboard', 'href': '/smart', 'icon': '◌', 'group': 'Hardware', 'description': 'Drive health, alerts and SMART history.'},
+        {'name': 'Hardware Overview', 'href': '/hw_overview', 'icon': '▤', 'group': 'Hardware', 'description': 'Fast hardware, sensor and operating-system overview.'},
+        {'name': 'Fan & Cooling', 'href': '/fans', 'icon': '≋', 'group': 'Hardware', 'description': 'Cooling devices, temperature sensors and fan profiles.'},
+        {'name': 'VM Controller', 'href': '/vm', 'icon': '▦', 'group': 'Virtualization', 'description': 'Proxmox endpoints, virtual machines and cluster operations.'},
+        {'name': 'Storage Controller', 'href': '/storage', 'icon': '▧', 'group': 'Virtualization', 'description': 'NAS and storage-controller integrations.'},
+        {'name': 'Backup Servers', 'href': '/backup', 'icon': '⛨', 'group': 'Operations', 'description': 'Backup jobs, snapshots and recovery status.'},
+        {'name': 'Scheduled Shutdown', 'href': '/shutdown_schedule', 'icon': '◔', 'group': 'Operations', 'description': 'Safe night shutdown and Wake-on-LAN schedules.'},
+        {'name': 'CheckMK', 'href': '/checkmk', 'icon': '✓', 'group': 'Operations', 'description': 'Monitoring integration and API status.'},
+        {'name': 'Two-Factor Authentication', 'href': '/2fa', 'icon': '⌑', 'group': 'Account', 'description': 'Authenticator, backup codes and YubiKey setup.'},
+        {'name': 'My Profile', 'href': '/users/profile', 'icon': '◉', 'group': 'Account', 'description': 'Profile, password and personal account settings.'},
+        {'name': 'Update Settings', 'href': '/update_settings', 'icon': '⚙', 'group': 'System', 'description': 'Update behavior, notifications and policies.'},
+        {'name': 'Email Configuration', 'href': '/email_settings', 'icon': '✉', 'group': 'System', 'description': 'Outbound notification and email settings.'},
+    ]
+    if is_admin:
+        pages.extend([
+            {'name': 'Proxy Services', 'href': '/system/proxy', 'icon': '⇄', 'group': 'System', 'description': 'Publish internal HTTP services through the Raspberry Pi ingress.', 'admin': True},
+            {'name': 'Production Status', 'href': '/system/production', 'icon': '⛨', 'group': 'System', 'description': 'Runtime hardening and production-readiness checks.', 'admin': True},
+            {'name': 'Audit Trail', 'href': '/system/audit', 'icon': '☷', 'group': 'System', 'description': 'Administrative record of state-changing actions.', 'admin': True},
+            {'name': 'FleetPilot Update', 'href': '/fleetpilot_update', 'icon': '↑', 'group': 'System', 'description': 'Verified application release and self-update workflow.', 'admin': True},
+            {'name': 'System Monitor', 'href': '/monitor', 'icon': '◒', 'group': 'Operations', 'description': 'Live FleetPilot service and host monitoring.', 'admin': True},
+            {'name': 'User Administration', 'href': '/users', 'icon': '♙', 'group': 'Account', 'description': 'Roles, accounts and access administration.', 'admin': True},
+            {'name': 'Plugin Manager', 'href': '/plugins', 'icon': '▦', 'group': 'System', 'description': 'Installed FleetPilot extensions and their settings.', 'admin': True},
+        ])
+    return pages
+
+
+def _home_manageability_summary(hosts):
+    states = {'manageable': 0, 'web_only': 0, 'unreachable': 0, 'unknown': 0}
+    for host in hosts.values():
+        state = (host.get('management') or {}).get('state', 'unknown')
+        states[state if state in states else 'unknown'] += 1
+    return states
+
+
 @app.route("/index")
 @login_required
 def index():
@@ -897,6 +1007,21 @@ def index():
     except Exception:
         smart_summary = {}
 
+    # Passively assess hosts that have not been inspected yet. This operates only
+    # on explicitly configured addresses and never attempts authentication.
+    if current_user_has_role('operator', 'admin'):
+        for name, host in list(hosts.items())[:25]:
+            if not host.get('management'):
+                schedule_host_discovery(name)
+
+    is_admin = current_user_has_role('admin')
+    try:
+        proxy_routes = [route for route in proxy_manager.load_routes() if route.get('enabled')]
+    except Exception:
+        proxy_routes = []
+    home_pages = _home_page_catalog(is_admin)
+    manageability = _home_manageability_summary(hosts)
+
     # Per-user dashboard layout
     layout = user_management.get_dashboard_layout(user_id) if user_id else user_management.DEFAULT_DASHBOARD_LAYOUT
 
@@ -917,6 +1042,9 @@ def index():
         smart_summary=smart_summary,
         dashboard_layout=layout,
         recent_history=recent_history,
+        home_pages=home_pages,
+        proxy_routes=proxy_routes,
+        manageability=manageability,
     )
 
 
@@ -1224,7 +1352,7 @@ def manage_hosts():
                     os_profiles[0]["default"] = True
             host_data["os_profiles"] = os_profiles
             hosts[name] = host_data
-            save_hosts(hosts)
+            save_hosts(hosts, discover_names=[name])
             cache_invalidate('hosts')
             # Sync to central registry so server appears in all modules
             if _REGISTRY_AVAILABLE:
@@ -1314,7 +1442,7 @@ def edit_host(orig_name):
                     os_profiles[0]["default"] = True
             host_data["os_profiles"] = os_profiles
             hosts[new_name] = host_data
-            save_hosts(hosts)
+            save_hosts(hosts, discover_names=[new_name])
             cache_invalidate('hosts')
         return redirect("/hosts")
     # GET
@@ -2222,6 +2350,34 @@ def api_scan_host():
         hostname = _detect_hostname(ip)
     return jsonify({'ip': ip, 'online': online, 'ssh': ssh, 'mac': mac, 'hostname': hostname})
 
+@app.route('/hosts/discover/<name>', methods=['POST'])
+@login_required
+def discover_host_capabilities(name):
+    """Re-run passive management capability detection for one configured host."""
+    if session.get('user_id') and not current_user_has_role('operator', 'admin'):
+        flash('You need operator or admin role to inspect host capabilities.', 'error')
+        return redirect(url_for('manage_hosts'))
+    if name not in load_hosts():
+        flash('Host not found.', 'error')
+    elif schedule_host_discovery(name):
+        flash(f'Checking management interfaces for {name} in the background.', 'success')
+    else:
+        flash(f'A capability check for {name} is already running.', 'warning')
+    return redirect(request.referrer or url_for('manage_hosts'))
+
+
+@app.route('/hosts/discover_all', methods=['POST'])
+@login_required
+def discover_all_host_capabilities():
+    """Schedule safe capability checks for all configured hosts without scanning a network range."""
+    if session.get('user_id') and not current_user_has_role('operator', 'admin'):
+        flash('You need operator or admin role to inspect host capabilities.', 'error')
+        return redirect(url_for('index'))
+    scheduled = sum(1 for name in load_hosts() if schedule_host_discovery(name))
+    flash(f'Capability checks scheduled for {scheduled} configured host(s).', 'success')
+    return redirect(request.referrer or url_for('index'))
+
+
 @app.route('/hosts/quick_add', methods=['POST'])
 @login_required
 def quick_add_host():
@@ -2246,8 +2402,8 @@ def quick_add_host():
         'notes':       f'Discovered by Network Scanner on {__import__("datetime").datetime.now().strftime("%Y-%m-%d %H:%M")}',
     }
     hosts[name] = normalize_host(host_data)
-    save_hosts(hosts)
-    flash(f'Host "{name}" added successfully from scanner!', 'success')
+    save_hosts(hosts, discover_names=[name])
+    flash(f'Host "{name}" added successfully from scanner! FleetPilot is now checking its management interfaces.', 'success')
     return redirect(url_for('manage_hosts'))
 
 # ---- Update Notification API ----

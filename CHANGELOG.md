@@ -2,6 +2,22 @@
 
 Alle bemerkenswerten Änderungen an FleetPilot werden in diesem Dokument festgehalten. Die Versionsnummern folgen dem Prinzip der semantischen Versionierung.
 
+## [1.3.0] — 2026-08-14
+
+Dieses Funktionsrelease macht den zentralen FleetPilot-Einstieg verständlicher und erkennt verwaltbare Fähigkeiten neuer Hosts automatisch, ohne Zugangsdaten oder Änderungen auf dem Zielgerät vorzunehmen.
+
+### Hinzugefügt
+
+- Einen **FleetPilot Service Hub** auf der Hauptseite mit allen für den aktuellen Benutzer erreichbaren Bereichen, gruppiert nach Funktion und Rolle.
+- Einen zentralen Überblick über die Raspberry-Pi-Ingress-Adresse, veröffentlichte Proxy-Pfade und den aktuellen Status verwaltbarer Hosts.
+- Eine klare vierstufige Erklärung des Proxy-Workflows direkt auf der Startseite und auf der Seite **System → Proxy Services**, einschließlich eines vollständigen Praxisbeispiels.
+- Passive Management-Erkennung für neue Hosts: FleetPilot prüft nur die explizit konfigurierte Adresse auf SSH, Proxmox API sowie HTTP/HTTPS und schlägt passende Module vor.
+- Einen sicheren Einzel- und Sammel-Refresh der Fähigkeitserkennung für bereits konfigurierte Hosts.
+
+### Sicherheit
+
+- Die automatische Erkennung authentifiziert sich nicht, probiert keine Zugangsdaten, führt keine Remote-Befehle aus und scannt keine Netzwerkbereiche. Sie untersucht ausschließlich die Adresse eines bereits konfigurierten Hosts.
+
 ## [1.1.2] — 2026-08-14
 
 ### Behoben
@@ -68,6 +84,7 @@ Dies ist das erste formale, produktionsorientierte FleetPilot-Release für klein
 - Das Umgebungsdatei-Recht auf dem Raspberry Pi ist auf `root:fleetpilot` mit Modus `0640` eingeschränkt.
 - HTTPS, sichere Cookies und die globale CSRF-Erzwingung bleiben bewusst als nächste, separat testbare Produktionsschritte ausstehend.
 
+[1.3.0]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.3.0
 [1.1.2]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.1.2
 [1.1.1]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.1.1
 [1.1.0]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.1.0

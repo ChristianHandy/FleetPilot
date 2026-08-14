@@ -353,16 +353,17 @@ import json as _json
 # order, size, and visibility.  Each entry is keyed by a stable widget ID.
 DEFAULT_DASHBOARD_LAYOUT = {
     "widgets": [
-        {"id": "stat_grid",       "title": "Quick Stats",         "visible": True,  "order": 0,  "size": "full"},
-        {"id": "fleet_overview",  "title": "Fleet Overview",      "visible": True,  "order": 1,  "size": "full"},
-        {"id": "vm_summary",      "title": "VM Controllers",      "visible": True,  "order": 2,  "size": "half"},
-        {"id": "storage_summary", "title": "Storage Controllers", "visible": True,  "order": 3,  "size": "half"},
-        {"id": "smart_summary",   "title": "SMART / Disk Health", "visible": True,  "order": 4,  "size": "half"},
-        {"id": "env_breakdown",   "title": "Environments",        "visible": True,  "order": 5,  "size": "half"},
-        {"id": "tag_cloud",       "title": "Tag Cloud",           "visible": True,  "order": 6,  "size": "half"},
-        {"id": "recent_updates",  "title": "Recent Updates",      "visible": True,  "order": 7,  "size": "half"},
-        {"id": "nav_cards",       "title": "Navigation Cards",    "visible": True,  "order": 8,  "size": "full"},
-        {"id": "plugin_widgets",  "title": "Plugin Widgets",      "visible": True,  "order": 9,  "size": "full"},
+        {"id": "service_hub",     "title": "Service Hub",         "visible": True,  "order": -10, "size": "full"},
+        {"id": "stat_grid",       "title": "Quick Stats",         "visible": True,  "order": 0,   "size": "full"},
+        {"id": "fleet_overview",  "title": "Fleet Overview",      "visible": True,  "order": 1,   "size": "full"},
+        {"id": "vm_summary",      "title": "VM Controllers",      "visible": True,  "order": 2,   "size": "half"},
+        {"id": "storage_summary", "title": "Storage Controllers", "visible": True,  "order": 3,   "size": "half"},
+        {"id": "smart_summary",   "title": "SMART / Disk Health", "visible": True,  "order": 4,   "size": "half"},
+        {"id": "env_breakdown",   "title": "Environments",        "visible": True,  "order": 5,   "size": "half"},
+        {"id": "tag_cloud",       "title": "Tag Cloud",           "visible": True,  "order": 6,   "size": "half"},
+        {"id": "recent_updates",  "title": "Recent Updates",      "visible": True,  "order": 7,   "size": "half"},
+        {"id": "nav_cards",       "title": "Navigation Cards",    "visible": True,  "order": 8,   "size": "full"},
+        {"id": "plugin_widgets",  "title": "Plugin Widgets",      "visible": True,  "order": 9,   "size": "full"},
     ]
 }
 
