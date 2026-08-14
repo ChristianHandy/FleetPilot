@@ -159,7 +159,6 @@ def render(routes: list[dict[str, object]]) -> str:
             '',
             f"frontend fp_tls_{route['id']}",
             '    mode tcp',
-            '    no option httplog',
             '    option tcplog',
             f"    bind :{route['public_port']}",
             '    timeout client 1h',
