@@ -2,6 +2,12 @@
 
 Alle bemerkenswerten Änderungen an FleetPilot werden in diesem Dokument festgehalten. Die Versionsnummern folgen dem Prinzip der semantischen Versionierung.
 
+## [1.5.3] — 2026-08-14
+
+### Fixed
+
+- Proxmox TLS passthrough backends now use reliable TCP-connect health checks. The prior SSL hello probe was rejected by the Proxmox proxy and incorrectly marked healthy HTTPS backends unavailable.
+
 ## [1.5.2] — 2026-08-14
 
 ### Fixed
@@ -138,6 +144,7 @@ Dies ist das erste formale, produktionsorientierte FleetPilot-Release für klein
 - Das Umgebungsdatei-Recht auf dem Raspberry Pi ist auf `root:fleetpilot` mit Modus `0640` eingeschränkt.
 - HTTPS, sichere Cookies und die globale CSRF-Erzwingung bleiben bewusst als nächste, separat testbare Produktionsschritte ausstehend.
 
+[1.5.3]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.5.3
 [1.5.2]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.5.2
 [1.5.1]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.5.1
 [1.5.0]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.5.0

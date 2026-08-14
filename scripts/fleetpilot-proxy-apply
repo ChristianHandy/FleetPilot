@@ -167,7 +167,6 @@ def render(routes: list[dict[str, object]]) -> str:
             f"backend fp_tls_backend_{route['id']}",
             '    mode tcp',
             '    timeout server 1h',
-            '    option ssl-hello-chk',
             f"    server {route['name']} {route['host']}:{route['port']} check inter 5s fall 2 rise 2",
         ])
     lines.extend([
