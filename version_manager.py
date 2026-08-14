@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import requests
 from datetime import datetime, timedelta
+from fleetpilot_version import TAG
 
 # Get logger for this module
 logger = logging.getLogger(__name__)
@@ -19,6 +20,12 @@ logger = logging.getLogger(__name__)
 VERSION_CHECK_FILE = "version_check.json"
 GITHUB_REPO = "ChristianHandy/fleetpilot"
 GITHUB_API_BASE = "https://api.github.com"
+
+
+def get_current_version() -> str:
+    """Return the authoritative semantic FleetPilot release version."""
+    return TAG
+
 
 def load_version_data():
     """Load version check data from file"""

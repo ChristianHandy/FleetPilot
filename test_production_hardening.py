@@ -4,6 +4,7 @@ import tempfile
 from flask import Flask
 
 import audit_log
+import fleetpilot_version
 import production_runtime
 
 ROOT = Path(__file__).parent
@@ -27,6 +28,7 @@ def test_templates_render():
         'is_admin': True, 'is_operator': True,
         'current_user': type('User', (), {'username': 'tester', 'is_authenticated': True})(),
         'csrf_token': lambda: '',
+        'fleetpilot_release': fleetpilot_version.release_metadata(),
     }
     with app.test_request_context('/storage/workspace'):
         storage = app.jinja_env.get_template('storage_workspace.html').render(
@@ -46,6 +48,13 @@ def test_templates_render():
     assert 'Production Status' in production
 
 
+def test_release_metadata():
+    release = fleetpilot_version.release_metadata()
+    assert release['version'] == '1.0.0'
+    assert release['tag'] == 'v1.0.0'
+    assert release['display_name'] == 'FleetPilot v1.0.0'
+
+
 def test_audit_log():
     original = audit_log.DB_PATH
     with tempfile.TemporaryDirectory() as temp:
@@ -61,5 +70,6 @@ def test_audit_log():
 if __name__ == '__main__':
     test_runtime_defaults()
     test_templates_render()
+    test_release_metadata()
     test_audit_log()
     print('production hardening tests: OK')

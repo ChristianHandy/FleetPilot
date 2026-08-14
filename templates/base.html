@@ -6,7 +6,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>{% block title %}FleetPilot{% endblock %}</title>
+  <title>{% block title %}FleetPilot {{ fleetpilot_release.tag }}{% endblock %}</title>
   {% if csrf_token is defined %}<meta name="csrf-token" content="{{ csrf_token() }}">{% endif %}
   <link rel="stylesheet" href="/static/style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -27,7 +27,7 @@
       <div class="sidebar-brand-icon" style="background:linear-gradient(135deg,#3b82f6,#8b5cf6);box-shadow:0 0 16px rgba(59,130,246,.5);border-radius:10px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;">&#x1F6E9;</div>
       <div class="sidebar-brand-text">
         <span class="sidebar-brand-title" style="font-size:0.95rem;font-weight:800;letter-spacing:-0.01em;">FleetPilot</span>
-        <span class="sidebar-brand-sub" style="font-size:0.62rem;color:var(--text-muted);letter-spacing:0.05em;">Linux &amp; Windows</span>
+        <span class="sidebar-brand-sub" style="font-size:0.62rem;color:var(--text-muted);letter-spacing:0.05em;">{{ fleetpilot_release.tag }} · Linux &amp; Windows</span>
       </div>
     </div>
 
@@ -223,6 +223,7 @@
     {% endif %}
 
     <div class="sidebar-footer">
+      <div style="padding:0.35rem 0.75rem 0.55rem;font-size:0.68rem;color:var(--text-muted);letter-spacing:0.04em;">{{ fleetpilot_release.display_name }}</div>
       <a class="sidebar-link" href="/logout">
         <span class="sidebar-icon">&#x1F6AA;</span> {{ _('Logout') }}
       </a>
@@ -326,7 +327,7 @@
     <div class="update-toast-title" id="toastTitle">FleetPilot Update Available</div>
     <div class="update-toast-msg" id="toastMsg">A new version is ready.</div>
     <div class="update-toast-actions">
-      <a class="btn btn-primary btn-sm" id="toastUpdateBtn" href="/dashboard_update">&#x2B06; Update Now</a>
+      <a class="btn btn-primary btn-sm" id="toastUpdateBtn" href="/dashboard_version/update">&#x2B06; Update Now</a>
       <a class="btn btn-secondary btn-sm" id="toastDetailsBtn" href="#" target="_blank">&#x1F517; Details</a>
       <button class="btn btn-ghost btn-sm" id="toastDismissBtn" type="button">&#x2715; Dismiss</button>
     </div>

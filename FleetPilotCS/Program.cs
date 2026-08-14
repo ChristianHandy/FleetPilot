@@ -65,7 +65,7 @@ app.MapControllers();
 app.MapGet("/api/health", () => new
 {
     status = "ok",
-    version = "2.0.0-csharp",
+    version = "1.0.0",
     timestamp = DateTime.UtcNow
 });
 

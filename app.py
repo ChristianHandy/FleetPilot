@@ -5,6 +5,7 @@ from collections import defaultdict
 from i18n import get_translator, SUPPORTED_LANGUAGES
 import json, threading, paramiko, os, secrets
 import audit_log
+import fleetpilot_version
 import production_runtime
 import ssh_helper
 from updater import run_update
@@ -352,7 +353,8 @@ def inject_ui_context():
         current_lang=lang,
         current_theme=theme,
         _=translator,
-        supported_languages=SUPPORTED_LANGUAGES
+        supported_languages=SUPPORTED_LANGUAGES,
+        fleetpilot_release=fleetpilot_version.release_metadata(),
     )
 
 # Template function for version update notifications
@@ -456,7 +458,7 @@ def production_status():
 @app.route('/healthz')
 def healthz():
     """Minimal unauthenticated liveness probe for a local reverse proxy or monitor."""
-    return jsonify({'status': 'ok'}), 200
+    return jsonify({'status': 'ok', 'release': fleetpilot_version.release_metadata()}), 200
 
 
 def is_online(host, user):
