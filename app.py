@@ -1,4 +1,4 @@
-from flask import Flask, render_template, redirect, session, request, flash, jsonify, send_file, url_for
+from flask import Flask, render_template, redirect, session, request, flash, jsonify, send_file, url_for, make_response
 from markupsafe import escape as html_escape
 import re, time as _time
 from collections import defaultdict
@@ -476,8 +476,73 @@ def proxy_services():
     except Exception as error:
         routes = []
         flash(str(error), 'error')
+    proxmox_candidates = _proxmox_route_candidates(load_hosts(), routes)
     helper_ok, helper_status = proxy_manager.status()
-    return render_template('proxy_services.html', routes=routes, helper_ok=helper_ok, helper_status=helper_status)
+    return render_template('proxy_services.html', routes=routes, proxmox_candidates=proxmox_candidates, helper_ok=helper_ok, helper_status=helper_status)
+
+
+def _proxmox_route_candidates(hosts, routes):
+    """Return only named PVE hosts that can receive a fixed dedicated console port."""
+    existing = {(route.get('route_type'), str(route.get('backend_host', '')).lower()) for route in routes}
+    candidates = []
+    for name, data in sorted(hosts.items(), key=lambda item: item[0].lower()):
+        match = re.fullmatch(r'pve(\d{1,3})', str(name).lower())
+        host = str(data.get('host', '')).strip()
+        if not match or not host or ('proxmox_tls', host.lower()) in existing:
+            continue
+        node_number = int(match.group(1))
+        public_port = 8100 + node_number
+        if not 1024 <= public_port <= 65535:
+            continue
+        candidates.append({'name': name, 'host': host, 'public_port': public_port})
+    return candidates
+
+
+def _apply_proxy_routes_or_rollback(previous):
+    applied, detail = proxy_manager.apply()
+    if not applied:
+        proxy_manager.restore_routes(previous)
+        proxy_manager.apply()
+        raise RuntimeError(detail)
+    _invalidate_service_map_cache()
+
+
+@app.route('/system/proxy/proxmox/add', methods=['POST'])
+@user_management.login_required
+def proxy_add_proxmox_routes():
+    denied = _proxy_admin_required()
+    if denied:
+        return denied
+    previous = proxy_manager.load_routes()
+    selected = request.form.get('host_name', '').strip().lower()
+    candidates = _proxmox_route_candidates(load_hosts(), previous)
+    if selected == 'all':
+        chosen = candidates
+    else:
+        chosen = [item for item in candidates if item['name'].lower() == selected]
+    if not chosen:
+        flash('No eligible Proxmox host was selected. Existing routes were left unchanged.', 'error')
+        return redirect(url_for('proxy_services'))
+    try:
+        for candidate in chosen:
+            proxy_manager.add_route({
+                'name': candidate['name'].lower(),
+                'path_prefix': '/' + candidate['name'].lower(),
+                'backend_host': candidate['host'],
+                'backend_port': 8006,
+                'health_path': '/',
+                'route_type': 'proxmox_tls',
+                'public_port': candidate['public_port'],
+                'enabled': True,
+            })
+        _apply_proxy_routes_or_rollback(previous)
+        route_urls = ', '.join(f"https://192.168.1.100:{item['public_port']}/" for item in chosen)
+        flash(f'Applied {len(chosen)} dedicated Proxmox TLS route(s): {route_urls}', 'success')
+    except (ValueError, RuntimeError) as error:
+        proxy_manager.restore_routes(previous)
+        proxy_manager.apply()
+        flash(f'Proxmox routes were not changed: {error}', 'error')
+    return redirect(url_for('proxy_services'))
 
 
 @app.route('/system/proxy/add', methods=['POST'])
@@ -496,12 +561,7 @@ def proxy_add_service():
             'health_path': request.form.get('health_path', '/'),
             'enabled': request.form.get('enabled') == 'on',
         })
-        applied, detail = proxy_manager.apply()
-        if not applied:
-            proxy_manager.restore_routes(previous)
-            proxy_manager.apply()
-            raise RuntimeError(detail)
-        _invalidate_service_map_cache()
+        _apply_proxy_routes_or_rollback(previous)
         flash(f"Service route '{route['name']}' applied successfully.", 'success')
     except (ValueError, RuntimeError) as error:
         flash(f'Proxy route was not changed: {error}', 'error')
@@ -517,13 +577,8 @@ def proxy_delete_service(route_id):
     previous = proxy_manager.load_routes()
     try:
         route = proxy_manager.remove_route(route_id)
-        applied, detail = proxy_manager.apply()
-        if not applied:
-            proxy_manager.restore_routes(previous)
-            proxy_manager.apply()
-            raise RuntimeError(detail)
+        _apply_proxy_routes_or_rollback(previous)
         # Route changes alter the central service map immediately.
-        _invalidate_service_map_cache()
         flash(f"Service route '{route['name']}' removed successfully.", 'success')
     except (ValueError, RuntimeError) as error:
         flash(f'Proxy route was not changed: {error}', 'error')
@@ -1096,6 +1151,7 @@ def _build_service_map(hosts, routes):
         'name': 'FleetPilot',
         'path_prefix': '/',
         'public_url': 'http://192.168.1.100/',
+        'route_type': 'fleetpilot',
         'backend': 'Raspberry Pi · Nginx 127.0.0.1:8080',
         'target_host': 'fleetpilot',
         'enabled': True,
@@ -1109,10 +1165,15 @@ def _build_service_map(hosts, routes):
         backend = f"{route.get('backend_host')}:{route.get('backend_port')}"
         if target_name:
             backend = f"{target_name} · {backend}"
+        route_type = route.get('route_type', 'http_path')
+        is_proxmox_tls = route_type == 'proxmox_tls'
+        public_url = (f"https://192.168.1.100:{route.get('public_port')}/" if is_proxmox_tls
+                      else f"http://192.168.1.100{route.get('path_prefix', '')}")
         item = {
             'name': route.get('name', 'Unnamed service'),
-            'path_prefix': route.get('path_prefix', ''),
-            'public_url': f"http://192.168.1.100{route.get('path_prefix', '')}",
+            'path_prefix': ('Dedicated TLS port ' + str(route.get('public_port')) if is_proxmox_tls else route.get('path_prefix', '')),
+            'public_url': public_url,
+            'route_type': route_type,
             'backend': backend,
             'target_host': target_name or 'Unregistered target',
             'enabled': bool(route.get('enabled')),
@@ -1142,6 +1203,42 @@ def _build_server_service_map(hosts, services):
             'services': [service for service in services if service.get('target_host') == name],
         })
     return server_map
+
+
+def _public_status_snapshot():
+    """Return a deliberately limited status view that never contains IPs, credentials or controls."""
+    hosts = load_hosts()
+    try:
+        routes = proxy_manager.load_routes()
+    except Exception:
+        routes = []
+    services = _build_service_map(hosts, routes)
+    public_services = [{
+        'name': item['name'],
+        'url': item['public_url'],
+        'kind': 'Proxmox console' if item.get('route_type') == 'proxmox_tls' else 'Published service',
+        'status': item['status'],
+        'detail': 'Reachable' if item['status'] == 'healthy' else ('Disabled' if item['status'] == 'disabled' else 'Needs attention'),
+    } for item in services]
+    public_hosts = []
+    for name, data in sorted(hosts.items(), key=lambda item: item[0].lower()):
+        management = data.get('management') or {}
+        state = management.get('state', 'unknown')
+        public_hosts.append({
+            'name': name,
+            'role': 'Proxmox host' if re.fullmatch(r'pve\d{1,3}', name.lower()) else 'Managed host',
+            'status': 'available' if state in {'manageable', 'web_only'} else state,
+        })
+    return public_services, public_hosts
+
+
+@app.route('/status')
+def public_status():
+    services, hosts = _public_status_snapshot()
+    response = make_response(render_template('public_status.html', services=services, hosts=hosts, generated_at=_time.strftime('%Y-%m-%d %H:%M:%S')))
+    response.headers['Cache-Control'] = 'no-store'
+    response.headers['Referrer-Policy'] = 'same-origin'
+    return response
 
 
 @app.route("/index")

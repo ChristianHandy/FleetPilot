@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="refresh" content="30">
+  <title>FleetPilot Service Status</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    .status-shell{max-width:1100px;margin:0 auto;padding:2rem 1rem 3rem}.status-header{display:flex;justify-content:space-between;align-items:end;gap:1rem;flex-wrap:wrap;margin-bottom:1.5rem}.status-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:1rem}.status-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-md);padding:1rem}.status-card h2{font-size:1rem;margin:0 0 .35rem}.status-card p{font-size:.82rem;color:var(--text-muted);margin:.25rem 0}.status-table{width:100%;border-collapse:collapse}.status-table th,.status-table td{padding:.72rem .55rem;border-bottom:1px solid var(--border);text-align:left;font-size:.84rem}.health{font-weight:700}.health-healthy,.health-available{color:#4ade80}.health-unhealthy,.health-unreachable{color:#f87171}.health-unknown,.health-web_only,.health-disabled{color:#fbbf24}.public-note{font-size:.78rem;color:var(--text-muted);line-height:1.5;margin-top:1rem}.service-link{color:var(--accent-blue,#60a5fa);text-decoration:none}.service-link:hover{text-decoration:underline}
+  </style>
+</head>
+<body>
+  <main class="status-shell">
+    <header class="status-header">
+      <div><p style="color:var(--accent-blue,#60a5fa);font-size:.75rem;font-weight:700;letter-spacing:.08em;margin:0 0 .35rem">FLEETPILOT</p><h1 style="margin:0;font-size:1.65rem">Service Status</h1><p style="margin:.35rem 0 0;color:var(--text-muted)">Read-only availability overview for published services and registered infrastructure.</p></div>
+      <div style="text-align:right"><a class="btn btn-secondary btn-sm" href="/">Sign in</a><p style="font-size:.72rem;color:var(--text-muted);margin:.55rem 0 0">Updated {{ generated_at }} · refreshes every 30 seconds</p></div>
+    </header>
+
+    <section class="card" style="padding:1rem;margin-bottom:1rem">
+      <h2 style="font-size:1rem;margin:0 0 .85rem">Published services</h2>
+      {% if services %}
+      <div style="overflow-x:auto"><table class="status-table"><thead><tr><th>Service</th><th>Type</th><th>Public endpoint</th><th>Status</th></tr></thead><tbody>{% for service in services %}<tr><td><strong>{{ service.name }}</strong></td><td>{{ service.kind }}</td><td><a class="service-link" href="{{ service.url }}">Open</a></td><td class="health health-{{ service.status }}">{{ service.detail }}</td></tr>{% endfor %}</tbody></table></div>
+      {% else %}<p class="public-note">No services are currently published.</p>{% endif %}
+    </section>
+
+    <section class="card" style="padding:1rem">
+      <h2 style="font-size:1rem;margin:0 0 .85rem">Registered infrastructure</h2>
+      {% if hosts %}<div class="status-grid">{% for host in hosts %}<article class="status-card"><h2>{{ host.name }}</h2><p>{{ host.role }}</p><p class="health health-{{ host.status }}">{{ host.status|replace('_', ' ')|title }}</p></article>{% endfor %}</div>{% else %}<p class="public-note">No hosts are registered.</p>{% endif %}
+    </section>
+
+    <p class="public-note">This page intentionally excludes server addresses, credentials, inventory, logs, and management actions. Proxmox consoles retain their own authentication.</p>
+  </main>
+</body>
+</html>

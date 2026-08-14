@@ -26,6 +26,8 @@ FLEETPILOT_BACKEND = '127.0.0.1:8080'
 NAME_RE = re.compile(r'^[A-Za-z][A-Za-z0-9_-]{0,47}$')
 HOST_RE = re.compile(r'^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)*[A-Za-z0-9][A-Za-z0-9-]*$')
 PATH_RE = re.compile(r'^/[A-Za-z0-9._~/%-]*$')
+ROUTE_TYPES = {'http_path', 'proxmox_tls'}
+RESERVED_PUBLIC_PORTS = {80, 443, 8080, 8404}
 
 
 def fail(message: str, code: int = 1) -> None:
@@ -58,6 +60,7 @@ def load_routes() -> list[dict[str, object]]:
     routes: list[dict[str, object]] = []
     names: set[str] = set()
     prefixes: set[str] = set()
+    public_ports: set[int] = set()
     for item in raw:
         if not isinstance(item, dict):
             fail('Invalid FleetPilot proxy registry entry.')
@@ -66,22 +69,39 @@ def load_routes() -> list[dict[str, object]]:
         prefix = str(item.get('path_prefix', '')).strip().rstrip('/') or '/'
         host = str(item.get('backend_host', '')).strip().lower()
         health_path = str(item.get('health_path', '/')).strip() or '/'
+        route_type = str(item.get('route_type', 'http_path')).strip().lower() or 'http_path'
         enabled = item.get('enabled') is True
+        try:
+            public_port = int(item.get('public_port', 0) or 0)
+        except (TypeError, ValueError):
+            fail(f'Invalid public port for service {name or "<unknown>"}.')
         try:
             port = int(item.get('backend_port', 0))
         except (TypeError, ValueError):
             fail(f'Invalid port for service {name or "<unknown>"}.')
+        if route_type not in ROUTE_TYPES:
+            fail(f'Unsupported route type for {name or "<unknown>"}.')
         if not NAME_RE.fullmatch(name) or not re.fullmatch(r'[a-f0-9]{12}', route_id):
             fail('Invalid service identifier in FleetPilot proxy registry.')
         if not valid_path(prefix) or prefix in {'/healthz', '/proxy'}:
             fail(f'Invalid or reserved route prefix for {name}.')
         if not valid_host(host) or not 1 <= port <= 65535 or not valid_path(health_path, allow_root=True):
             fail(f'Invalid backend configuration for {name}.')
-        if name.lower() in names or prefix in prefixes:
-            fail('Duplicate service name or path prefix in FleetPilot proxy registry.')
+        if route_type == 'proxmox_tls':
+            if port != 8006 or not 1024 <= public_port <= 65535 or public_port in RESERVED_PUBLIC_PORTS:
+                fail(f'Invalid dedicated Proxmox TLS configuration for {name}.')
+        else:
+            public_port = 0
+        if name.lower() in names or (route_type == 'http_path' and prefix in prefixes):
+            fail('Duplicate service name or HTTP path prefix in FleetPilot proxy registry.')
+        if route_type == 'proxmox_tls' and public_port in public_ports:
+            fail('Duplicate dedicated Proxmox TLS public port in FleetPilot proxy registry.')
         names.add(name.lower())
-        prefixes.add(prefix)
-        routes.append({'id': route_id, 'name': name, 'prefix': prefix, 'host': host, 'port': port, 'health_path': health_path, 'enabled': enabled})
+        if route_type == 'http_path':
+            prefixes.add(prefix)
+        else:
+            public_ports.add(public_port)
+        routes.append({'id': route_id, 'name': name, 'prefix': prefix, 'host': host, 'port': port, 'health_path': health_path, 'route_type': route_type, 'public_port': public_port, 'enabled': enabled})
     return sorted(routes, key=lambda route: (-len(str(route['prefix'])), str(route['name']).lower()))
 
 
@@ -112,7 +132,7 @@ def render(routes: list[dict[str, object]]) -> str:
         '    http-request set-header X-Forwarded-Proto http',
     ]
     for route in routes:
-        if route['enabled']:
+        if route['enabled'] and route['route_type'] == 'http_path':
             lines.append(f"    use_backend fp_{route['id']} if {{ path_beg {route['prefix']} }}")
     lines.extend([
         '    default_backend fp_fleetpilot',
@@ -123,13 +143,30 @@ def render(routes: list[dict[str, object]]) -> str:
         f'    server fleetpilot_nginx {FLEETPILOT_BACKEND} check inter 5s fall 2 rise 2',
     ])
     for route in routes:
-        if not route['enabled']:
+        if not route['enabled'] or route['route_type'] != 'http_path':
             continue
         lines.extend([
             '',
             f"backend fp_{route['id']}",
             f"    option httpchk GET {route['health_path']}",
             '    http-check expect status 200',
+            f"    server {route['name']} {route['host']}:{route['port']} check inter 5s fall 2 rise 2",
+        ])
+    for route in routes:
+        if not route['enabled'] or route['route_type'] != 'proxmox_tls':
+            continue
+        lines.extend([
+            '',
+            f"frontend fp_tls_{route['id']}",
+            '    mode tcp',
+            f"    bind :{route['public_port']}",
+            '    timeout client 1h',
+            f"    default_backend fp_tls_backend_{route['id']}",
+            '',
+            f"backend fp_tls_backend_{route['id']}",
+            '    mode tcp',
+            '    timeout server 1h',
+            '    option ssl-hello-chk',
             f"    server {route['name']} {route['host']}:{route['port']} check inter 5s fall 2 rise 2",
         ])
     lines.extend([

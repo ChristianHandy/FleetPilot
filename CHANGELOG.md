@@ -2,6 +2,19 @@
 
 Alle bemerkenswerten Änderungen an FleetPilot werden in diesem Dokument festgehalten. Die Versionsnummern folgen dem Prinzip der semantischen Versionierung.
 
+## [1.5.0] — 2026-08-14
+
+### Added
+
+- A read-only, unauthenticated **Service Status** page at `/status` that lists published services and registered host health without exposing internal addresses, credentials, logs, inventory, or management actions.
+- A visible status-page entry point from the sign-in screen.
+- Dedicated **Proxmox TLS passthrough routes** for named `pveNN` hosts. Each route receives a deterministic high port (`8101` for `pve01`, `8102` for `pve02`, and so on) while preserving Proxmox WebSocket consoles and Proxmox-native login.
+- Administrator-only Proxmox route installation with validation, HAProxy syntax checking, atomic configuration replacement, and automatic route-registry rollback on failure.
+
+### Changed
+
+- The proxy route registry now distinguishes conventional HTTP path routes from constrained Proxmox TLS passthrough routes. The public status view never exposes the private backend addresses associated with either route type.
+
 ## [1.4.0] — 2026-08-14
 
 ### Added
@@ -113,6 +126,7 @@ Dies ist das erste formale, produktionsorientierte FleetPilot-Release für klein
 - Das Umgebungsdatei-Recht auf dem Raspberry Pi ist auf `root:fleetpilot` mit Modus `0640` eingeschränkt.
 - HTTPS, sichere Cookies und die globale CSRF-Erzwingung bleiben bewusst als nächste, separat testbare Produktionsschritte ausstehend.
 
+[1.5.0]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.5.0
 [1.4.0]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.4.0
 [1.3.2]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.3.2
 [1.3.1]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.3.1

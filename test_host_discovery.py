@@ -58,6 +58,7 @@ def test_templates_compile():
     environment.get_template('base.html')
     environment.get_template('2fa_setup.html')
     environment.get_template('2fa_verify.html')
+    environment.get_template('public_status.html')
 
 
 if __name__ == '__main__':

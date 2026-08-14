@@ -23,6 +23,8 @@ HELPER = "/usr/local/lib/fleetpilot/proxy-apply"
 _NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,47}$")
 _HOST_RE = re.compile(r"^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)*[A-Za-z0-9][A-Za-z0-9-]*$")
 _PATH_RE = re.compile(r"^/[A-Za-z0-9._~/%-]*$")
+_ROUTE_TYPES = {'http_path', 'proxmox_tls'}
+_RESERVED_PUBLIC_PORTS = {80, 443, 8080, 8404}
 
 
 def configure(data_dir: str | Path) -> None:
@@ -50,11 +52,19 @@ def normalize_route(payload: dict[str, Any]) -> dict[str, Any]:
     prefix = str(payload.get("path_prefix", "")).strip().rstrip("/") or "/"
     host = str(payload.get("backend_host", "")).strip().lower()
     health_path = str(payload.get("health_path", "/")).strip() or "/"
+    route_type = str(payload.get('route_type', 'http_path')).strip().lower() or 'http_path'
     try:
         port = int(payload.get("backend_port", 0))
     except (TypeError, ValueError) as error:
         raise ValueError("Backend port must be a number.") from error
 
+    try:
+        public_port = int(payload.get('public_port', 0) or 0)
+    except (TypeError, ValueError) as error:
+        raise ValueError('Public port must be a number.') from error
+
+    if route_type not in _ROUTE_TYPES:
+        raise ValueError('Unsupported route type.')
     if not _NAME_RE.fullmatch(name):
         raise ValueError("Service name must start with a letter and use only letters, numbers, hyphens, or underscores.")
     if not _valid_path(prefix):
@@ -67,6 +77,13 @@ def normalize_route(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("Backend port must be between 1 and 65535.")
     if not _valid_path(health_path, allow_root=True):
         raise ValueError("Health path must be an absolute, safe path.")
+    if route_type == 'proxmox_tls':
+        if port != 8006:
+            raise ValueError('A Proxmox TLS route must use the standard Proxmox HTTPS port 8006.')
+        if not 1024 <= public_port <= 65535 or public_port in _RESERVED_PUBLIC_PORTS:
+            raise ValueError('Choose a dedicated unprivileged public port that is not reserved by FleetPilot.')
+    else:
+        public_port = 0
 
     return {
         "id": str(payload.get("id") or uuid.uuid4().hex[:12]),
@@ -75,6 +92,8 @@ def normalize_route(payload: dict[str, Any]) -> dict[str, Any]:
         "backend_host": host,
         "backend_port": port,
         "health_path": health_path,
+        "route_type": route_type,
+        "public_port": public_port,
         "enabled": bool(payload.get("enabled", True)),
     }
 
@@ -100,11 +119,14 @@ def save_routes(routes: list[dict[str, Any]]) -> None:
     _DATA_DIR.mkdir(parents=True, exist_ok=True)
     normalized = [normalize_route(route) for route in routes]
     names = [item["name"].lower() for item in normalized]
-    prefixes = [item["path_prefix"] for item in normalized]
+    prefixes = [item["path_prefix"] for item in normalized if item['route_type'] == 'http_path']
+    public_ports = [item['public_port'] for item in normalized if item['route_type'] == 'proxmox_tls']
     if len(names) != len(set(names)):
         raise ValueError("Each proxy service needs a unique name.")
     if len(prefixes) != len(set(prefixes)):
-        raise ValueError("Each proxy service needs a unique path prefix.")
+        raise ValueError("Each HTTP proxy service needs a unique path prefix.")
+    if len(public_ports) != len(set(public_ports)):
+        raise ValueError('Each Proxmox TLS route needs a unique public port.')
     fd, temporary = tempfile.mkstemp(prefix="proxy_routes.", suffix=".json", dir=_DATA_DIR)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
@@ -167,10 +189,11 @@ def status() -> tuple[bool, str]:
 
 
 def test_route(route: dict[str, Any]) -> tuple[bool, str]:
-    url = f"http://{route['backend_host']}:{route['backend_port']}{route['health_path']}"
+    scheme = 'https' if route.get('route_type') == 'proxmox_tls' else 'http'
+    url = f"{scheme}://{route['backend_host']}:{route['backend_port']}{route['health_path']}"
     try:
         result = subprocess.run(
-            ["curl", "-fsS", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "8", url],
+            ["curl", "-k", "-fsS", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "8", url],
             capture_output=True,
             text=True,
             timeout=12,
