@@ -2,6 +2,15 @@
 
 Alle bemerkenswerten Änderungen an FleetPilot werden in diesem Dokument festgehalten. Die Versionsnummern folgen dem Prinzip der semantischen Versionierung.
 
+## [1.3.2] — 2026-08-14
+
+### Geändert
+
+- Die zentrale Übersicht zeigt jetzt als Hauptinhalt eine **Services & Server Map** statt einer allgemeinen Liste von FleetPilot-Seiten.
+- Jede Proxy-Route wird mit öffentlichem Pfad, registriertem Zielserver, Backend-Adresse, aktivem Zustand und einem zwischengespeicherten direkten Health-Check dargestellt.
+- Alle registrierten Infrastrukturhosts zeigen explizit, welche veröffentlichten Proxy-Routen sie bereitstellen. Hosts ohne zugeordnete Route sind ebenfalls sichtbar.
+- Konfigurierte Routen, die auf einen nicht registrierten Server zeigen, werden deutlich als **Unregistered** markiert.
+
 ## [1.3.1] — 2026-08-14
 
 ### Behoben
@@ -90,6 +99,7 @@ Dies ist das erste formale, produktionsorientierte FleetPilot-Release für klein
 - Das Umgebungsdatei-Recht auf dem Raspberry Pi ist auf `root:fleetpilot` mit Modus `0640` eingeschränkt.
 - HTTPS, sichere Cookies und die globale CSRF-Erzwingung bleiben bewusst als nächste, separat testbare Produktionsschritte ausstehend.
 
+[1.3.2]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.3.2
 [1.3.1]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.3.1
 [1.3.0]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.3.0
 [1.1.2]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.1.2

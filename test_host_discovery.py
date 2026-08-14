@@ -43,10 +43,11 @@ def test_invalid_empty_host_is_safe():
 def test_service_hub_template_is_present():
     with open('templates/index.html', encoding='utf-8') as handle:
         content = handle.read()
-    assert 'FleetPilot Service Hub' in content
-    assert 'How the proxy works' in content
-    assert 'Manageable host discovery' in content
-    assert '/hosts/discover_all' in content
+    assert 'Services &amp; Server Map' in content
+    assert 'Published services and routes' in content
+    assert 'Registered servers and the services they provide' in content
+    assert 'service_map' in content
+    assert 'server_service_map' in content
 
 
 def test_templates_compile():

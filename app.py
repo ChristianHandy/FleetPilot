@@ -501,6 +501,7 @@ def proxy_add_service():
             proxy_manager.restore_routes(previous)
             proxy_manager.apply()
             raise RuntimeError(detail)
+        _invalidate_service_map_cache()
         flash(f"Service route '{route['name']}' applied successfully.", 'success')
     except (ValueError, RuntimeError) as error:
         flash(f'Proxy route was not changed: {error}', 'error')
@@ -521,6 +522,8 @@ def proxy_delete_service(route_id):
             proxy_manager.restore_routes(previous)
             proxy_manager.apply()
             raise RuntimeError(detail)
+        # Route changes alter the central service map immediately.
+        _invalidate_service_map_cache()
         flash(f"Service route '{route['name']}' removed successfully.", 'success')
     except (ValueError, RuntimeError) as error:
         flash(f'Proxy route was not changed: {error}', 'error')
@@ -966,6 +969,76 @@ def _home_manageability_summary(hosts):
     return states
 
 
+def _invalidate_service_map_cache():
+    for cache_key in list(_cache):
+        if cache_key.startswith('service_map:'):
+            cache_invalidate(cache_key)
+
+
+def _build_service_map(hosts, routes):
+    """Join configured proxy routes with managed hosts and cached direct health probes."""
+    route_signature = json.dumps(routes, sort_keys=True, separators=(',', ':'))
+    cache_key = f'service_map:{route_signature}'
+    cached = cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    host_by_address = {
+        str(data.get('host', '')).strip().lower(): name
+        for name, data in hosts.items() if data.get('host')
+    }
+    services = [{
+        'name': 'FleetPilot',
+        'path_prefix': '/',
+        'public_url': 'http://192.168.1.100/',
+        'backend': 'Raspberry Pi · Nginx 127.0.0.1:8080',
+        'target_host': 'fleetpilot',
+        'enabled': True,
+        'status': 'healthy',
+        'status_detail': 'This page is being served through the Raspberry Pi ingress.',
+        'default': True,
+    }]
+    for route in routes:
+        target_address = str(route.get('backend_host', '')).lower()
+        target_name = host_by_address.get(target_address, '')
+        backend = f"{route.get('backend_host')}:{route.get('backend_port')}"
+        if target_name:
+            backend = f"{target_name} · {backend}"
+        item = {
+            'name': route.get('name', 'Unnamed service'),
+            'path_prefix': route.get('path_prefix', ''),
+            'public_url': f"http://192.168.1.100{route.get('path_prefix', '')}",
+            'backend': backend,
+            'target_host': target_name or 'Unregistered target',
+            'enabled': bool(route.get('enabled')),
+            'status': 'disabled',
+            'status_detail': 'Route is saved but disabled.',
+            'default': False,
+        }
+        if item['enabled']:
+            healthy, detail = proxy_manager.test_route(route)
+            item['status'] = 'healthy' if healthy else 'unhealthy'
+            item['status_detail'] = detail
+        services.append(item)
+    cache_set(cache_key, services, ttl=20)
+    return services
+
+
+def _build_server_service_map(hosts, services):
+    """Make the relationship between registered hosts and published services explicit."""
+    server_map = []
+    for name, data in sorted(hosts.items(), key=lambda item: item[0].lower()):
+        management = data.get('management') or {}
+        server_map.append({
+            'name': name,
+            'host': data.get('host', ''),
+            'state': management.get('state', 'unknown'),
+            'capabilities': management.get('capabilities', []),
+            'services': [service for service in services if service.get('target_host') == name],
+        })
+    return server_map
+
+
 @app.route("/index")
 @login_required
 def index():
@@ -1021,9 +1094,12 @@ def index():
 
     is_admin = current_user_has_role('admin')
     try:
-        proxy_routes = [route for route in proxy_manager.load_routes() if route.get('enabled')]
+        all_proxy_routes = proxy_manager.load_routes()
     except Exception:
-        proxy_routes = []
+        all_proxy_routes = []
+    proxy_routes = [route for route in all_proxy_routes if route.get('enabled')]
+    service_map = _build_service_map(hosts, all_proxy_routes)
+    server_service_map = _build_server_service_map(hosts, service_map)
     home_pages = _home_page_catalog(is_admin)
     manageability = _home_manageability_summary(hosts)
 
@@ -1049,6 +1125,8 @@ def index():
         recent_history=recent_history,
         home_pages=home_pages,
         proxy_routes=proxy_routes,
+        service_map=service_map,
+        server_service_map=server_service_map,
         manageability=manageability,
     )
 
