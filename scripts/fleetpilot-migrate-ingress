@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+# Controlled FleetPilot ingress migration: pve03 HAProxy -> Raspberry Pi HAProxy.
+# This script is intended to run as root on the Raspberry Pi.
+set -euo pipefail
+
+APP_DIR=/opt/fleetpilot
+PVE03_HOST=192.168.1.52
+VIP=192.168.1.100/24
+INTERFACE=eth0
+
+require() {
+  command -v "$1" >/dev/null 2>&1 || { echo "Missing command: $1" >&2; exit 1; }
+}
+
+[ "$(id -u)" -eq 0 ] || { echo "Run as root." >&2; exit 1; }
+[ -n "${PVE03_PASSWORD:-}" ] || { echo "PVE03_PASSWORD is required." >&2; exit 1; }
+require sshpass
+require curl
+require nginx
+
+stamp=$(date +%Y%m%d%H%M%S)
+mkdir -p /root/fleetpilot-migration-backups
+
+apt-get update -qq
+DEBIAN_FRONTEND=noninteractive apt-get install -y -qq haproxy iputils-arping
+
+cd "$APP_DIR"
+git pull --ff-only
+
+# Install the fixed root-owned HAProxy renderer and only the two required sudo actions.
+install -d -o root -g root -m 0755 /usr/local/lib/fleetpilot
+install -o root -g root -m 0750 "$APP_DIR/scripts/fleetpilot-proxy-apply" /usr/local/lib/fleetpilot/proxy-apply
+cat > /etc/sudoers.d/fleetpilot-proxy-apply <<'EOF'
+# FleetPilot may validate and apply only its fixed HAProxy profile.
+fleetpilot ALL=(root) NOPASSWD: /usr/local/lib/fleetpilot/proxy-apply apply, /usr/local/lib/fleetpilot/proxy-apply status
+EOF
+chmod 0440 /etc/sudoers.d/fleetpilot-proxy-apply
+visudo -cf /etc/sudoers.d/fleetpilot-proxy-apply >/dev/null
+
+# Put Nginx behind the Pi-local HAProxy and validate it before activating it.
+cp -a /etc/nginx /root/fleetpilot-migration-backups/nginx-$stamp
+install -o root -g root -m 0644 "$APP_DIR/deploy/nginx-fleetpilot.conf" /etc/nginx/sites-available/fleetpilot
+ln -sfn /etc/nginx/sites-available/fleetpilot /etc/nginx/sites-enabled/fleetpilot
+rm -f /etc/nginx/sites-enabled/default
+nginx -t
+
+# Keep the service IP across boots without hard-coding the DHCP address.
+cat > /etc/systemd/system/fleetpilot-vip.service <<EOF
+[Unit]
+Description=FleetPilot virtual ingress IP
+Wants=network-online.target
+After=network-online.target
+Before=haproxy.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/ip address add $VIP dev $INTERFACE
+ExecStartPost=/usr/bin/arping -q -A -c 3 -I $INTERFACE 192.168.1.100
+ExecStop=/usr/sbin/ip address del $VIP dev $INTERFACE
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+
+# Move FleetPilot's Nginx listener first. Restarting (rather than reloading)
+# guarantees that port 80 is released before HAProxy binds the LAN ingress.
+systemctl restart nginx
+curl -fsS --max-time 8 http://127.0.0.1:8080/healthz >/dev/null
+
+# Render the fixed HAProxy profile and start it on Pi port 80.
+systemctl disable haproxy >/dev/null 2>&1 || true
+sudo -u fleetpilot sudo -n /usr/local/lib/fleetpilot/proxy-apply apply
+systemctl enable haproxy
+curl -fsS --max-time 8 http://127.0.0.1/healthz >/dev/null
+
+# Release the address from pve03 before enabling it here; duplicate IP ownership
+# is never allowed. Stop the old HAProxy only after the Pi port-80 frontend works.
+sshpass -p "$PVE03_PASSWORD" ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8 root@$PVE03_HOST \
+  "set -e; ip address del $VIP dev vmbr0; systemctl disable --now haproxy"
+
+systemctl enable --now fleetpilot-vip
+curl -fsS --max-time 10 http://192.168.1.100/healthz >/dev/null
+
+# Ensure the application itself has the latest code and remains available.
+systemctl restart fleetpilot
+sleep 5
+systemctl is-active --quiet fleetpilot
+systemctl is-active --quiet nginx
+systemctl is-active --quiet haproxy
+systemctl is-active --quiet fleetpilot-vip
+curl -fsS --max-time 10 http://192.168.1.100/healthz
+printf '\nFleetPilot ingress migration completed successfully.\n'
