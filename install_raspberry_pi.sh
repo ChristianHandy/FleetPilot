@@ -88,6 +88,7 @@ apt-get install -y -qq \
     net-tools \
     nmap \
     nginx \
+    haproxy \
     libhidapi-hidraw0 \
     libhidapi-libusb0 \
     python3-hid \
@@ -146,6 +147,7 @@ info "Installing protected FleetPilot helpers..."
 install -d -o root -g root -m 0755 /usr/local/lib/fleetpilot
 install -o root -g root -m 0750 "$INSTALL_DIR/scripts/fleetpilot-disk-action" /usr/local/lib/fleetpilot/disk-action
 install -o root -g root -m 0750 "$INSTALL_DIR/scripts/fleetpilot-update" /usr/local/lib/fleetpilot/update
+install -o root -g root -m 0750 "$INSTALL_DIR/scripts/fleetpilot-proxy-apply" /usr/local/lib/fleetpilot/proxy-apply
 cat > /etc/sudoers.d/fleetpilot-disk-action << EOF
 # FleetPilot may invoke only the root-owned, argument-validating disk helper.
 $FP_USER ALL=(root) NOPASSWD: /usr/local/lib/fleetpilot/disk-action *
@@ -154,9 +156,14 @@ cat > /etc/sudoers.d/fleetpilot-update << EOF
 # FleetPilot may only run the fixed-target release updater actions below.
 $FP_USER ALL=(root) NOPASSWD: /usr/local/lib/fleetpilot/update check, /usr/local/lib/fleetpilot/update apply, /usr/local/lib/fleetpilot/update restart
 EOF
-chmod 0440 /etc/sudoers.d/fleetpilot-disk-action /etc/sudoers.d/fleetpilot-update
+cat > /etc/sudoers.d/fleetpilot-proxy-apply << EOF
+# FleetPilot may validate and apply only its fixed HAProxy profile.
+$FP_USER ALL=(root) NOPASSWD: /usr/local/lib/fleetpilot/proxy-apply apply, /usr/local/lib/fleetpilot/proxy-apply status
+EOF
+chmod 0440 /etc/sudoers.d/fleetpilot-disk-action /etc/sudoers.d/fleetpilot-update /etc/sudoers.d/fleetpilot-proxy-apply
 visudo -cf /etc/sudoers.d/fleetpilot-disk-action >/dev/null || error "Invalid Disk Tools sudo rule"
 visudo -cf /etc/sudoers.d/fleetpilot-update >/dev/null || error "Invalid self-update sudo rule"
+visudo -cf /etc/sudoers.d/fleetpilot-proxy-apply >/dev/null || error "Invalid proxy helper sudo rule"
 success "Protected FleetPilot helpers installed"
 
 # Step 10: Create a protected runtime configuration. Existing values are preserved.

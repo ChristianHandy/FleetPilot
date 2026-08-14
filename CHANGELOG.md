@@ -2,6 +2,23 @@
 
 Alle bemerkenswerten Änderungen an FleetPilot werden in diesem Dokument festgehalten. Die Versionsnummern folgen dem Prinzip der semantischen Versionierung.
 
+## [1.1.0] — 2026-08-14
+
+Dieses Feature-Release verlagert den zentralen HTTP-Ingress auf den Raspberry Pi und ergänzt eine kontrollierte Verwaltung interner Dienste und Pfadrouten direkt in FleetPilot.
+
+### Hinzugefügt
+
+- Eine admin-geschützte Seite **Proxy Services** zum Hinzufügen, Testen und Entfernen interner HTTP-Dienstrouten.
+- Eine persistent gespeicherte, validierte Routenregistrierung für Dienstname, öffentlichem Pfad, Backend-Ziel, Port und Health-Check.
+- Einen root-eigenen HAProxy-Renderer, der die Registry erneut prüft, eine feste Konfiguration erzeugt, diese validiert und nur dann atomar neu lädt.
+- Automatisches Rollback der FleetPilot-Routenregistrierung, wenn ein HAProxy-Reload nicht erfolgreich ist.
+- Eine private Nginx-Upstream-Konfiguration auf `127.0.0.1:8080`; HAProxy besitzt den LAN-Ingress auf Port 80.
+
+### Sicherheit
+
+- Die Proxy-Kette entfernt klientengelieferte Weiterleitungsheader und setzt vertrauenswürdige Header neu, bevor die Anfrage an FleetPilot weitergegeben wird.
+- Der FleetPilot-Webdienst erhält nur die eng begrenzten Sudo-Rechte `proxy-apply apply` und `proxy-apply status`; er kann keine beliebigen HAProxy-Befehle, Pfade oder Backends als Root ausführen.
+
 ## [1.0.1] — 2026-08-14
 
 Dieses Patch-Release behebt die fehlgeschlagene Aktualisierung aus der FleetPilot-Weboberfläche, ohne dem Webdienst Schreibzugriff auf den Anwendungscode zu geben.
@@ -38,5 +55,6 @@ Dies ist das erste formale, produktionsorientierte FleetPilot-Release für klein
 - Das Umgebungsdatei-Recht auf dem Raspberry Pi ist auf `root:fleetpilot` mit Modus `0640` eingeschränkt.
 - HTTPS, sichere Cookies und die globale CSRF-Erzwingung bleiben bewusst als nächste, separat testbare Produktionsschritte ausstehend.
 
+[1.1.0]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.1.0
 [1.0.1]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.0.1
 [1.0.0]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.0.0

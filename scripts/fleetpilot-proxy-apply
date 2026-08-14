@@ -1,0 +1,204 @@
+#!/usr/bin/python3
+"""Root-owned FleetPilot HAProxy configuration helper.
+
+The FleetPilot web process may write only a structured route registry. This
+helper independently validates that registry, renders a fixed HAProxy profile,
+syntax-checks it, then atomically replaces the live configuration and reloads
+HAProxy. It never accepts paths, commands, routes, or backends as arguments.
+"""
+from __future__ import annotations
+
+import ipaddress
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+APP_DIR = Path('/opt/fleetpilot')
+REGISTRY = APP_DIR / 'data' / 'proxy_routes.json'
+CONFIG = Path('/etc/haproxy/haproxy.cfg')
+SERVICE = 'haproxy'
+FLEETPILOT_BACKEND = '127.0.0.1:8080'
+NAME_RE = re.compile(r'^[A-Za-z][A-Za-z0-9_-]{0,47}$')
+HOST_RE = re.compile(r'^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)*[A-Za-z0-9][A-Za-z0-9-]*$')
+PATH_RE = re.compile(r'^/[A-Za-z0-9._~/%-]*$')
+
+
+def fail(message: str, code: int = 1) -> None:
+    print(message, file=sys.stderr)
+    raise SystemExit(code)
+
+
+def valid_host(value: str) -> bool:
+    try:
+        ipaddress.ip_address(value)
+        return True
+    except ValueError:
+        return bool(HOST_RE.fullmatch(value)) and '..' not in value and not value.endswith('.')
+
+
+def valid_path(value: str, allow_root: bool = False) -> bool:
+    return bool(PATH_RE.fullmatch(value)) and (allow_root or value != '/') and '//' not in value and '..' not in value
+
+
+def load_routes() -> list[dict[str, object]]:
+    if not REGISTRY.exists():
+        return []
+    try:
+        raw = json.loads(REGISTRY.read_text(encoding='utf-8'))
+    except (OSError, ValueError) as error:
+        fail(f'Invalid FleetPilot proxy registry: {error}')
+    if not isinstance(raw, list):
+        fail('Invalid FleetPilot proxy registry: expected a list.')
+
+    routes: list[dict[str, object]] = []
+    names: set[str] = set()
+    prefixes: set[str] = set()
+    for item in raw:
+        if not isinstance(item, dict):
+            fail('Invalid FleetPilot proxy registry entry.')
+        name = str(item.get('name', '')).strip()
+        route_id = str(item.get('id', '')).strip()
+        prefix = str(item.get('path_prefix', '')).strip().rstrip('/') or '/'
+        host = str(item.get('backend_host', '')).strip().lower()
+        health_path = str(item.get('health_path', '/')).strip() or '/'
+        enabled = item.get('enabled') is True
+        try:
+            port = int(item.get('backend_port', 0))
+        except (TypeError, ValueError):
+            fail(f'Invalid port for service {name or "<unknown>"}.')
+        if not NAME_RE.fullmatch(name) or not re.fullmatch(r'[a-f0-9]{12}', route_id):
+            fail('Invalid service identifier in FleetPilot proxy registry.')
+        if not valid_path(prefix) or prefix in {'/healthz', '/proxy'}:
+            fail(f'Invalid or reserved route prefix for {name}.')
+        if not valid_host(host) or not 1 <= port <= 65535 or not valid_path(health_path, allow_root=True):
+            fail(f'Invalid backend configuration for {name}.')
+        if name.lower() in names or prefix in prefixes:
+            fail('Duplicate service name or path prefix in FleetPilot proxy registry.')
+        names.add(name.lower())
+        prefixes.add(prefix)
+        routes.append({'id': route_id, 'name': name, 'prefix': prefix, 'host': host, 'port': port, 'health_path': health_path, 'enabled': enabled})
+    return sorted(routes, key=lambda route: (-len(str(route['prefix'])), str(route['name']).lower()))
+
+
+def render(routes: list[dict[str, object]]) -> str:
+    lines = [
+        '# Managed by FleetPilot. Do not edit manually; use Proxy Services.',
+        'global',
+        '    log /dev/log local0',
+        '    log /dev/log local1 notice',
+        '    maxconn 2048',
+        '',
+        'defaults',
+        '    log global',
+        '    mode http',
+        '    option httplog',
+        '    option dontlognull',
+        '    timeout connect 5s',
+        '    timeout client 60s',
+        '    timeout server 60s',
+        '',
+        'frontend fleetpilot_ingress',
+        '    bind :80',
+        '    http-request del-header X-Forwarded-For',
+        '    http-request del-header X-Real-IP',
+        '    http-request del-header X-Forwarded-Proto',
+        '    option forwardfor',
+        '    http-request set-header X-Real-IP %[src]',
+        '    http-request set-header X-Forwarded-Proto http',
+    ]
+    for route in routes:
+        if route['enabled']:
+            lines.append(f"    use_backend fp_{route['id']} if {{ path_beg {route['prefix']} }}")
+    lines.extend([
+        '    default_backend fp_fleetpilot',
+        '',
+        'backend fp_fleetpilot',
+        '    option httpchk GET /healthz',
+        '    http-check expect status 200',
+        f'    server fleetpilot_nginx {FLEETPILOT_BACKEND} check inter 5s fall 2 rise 2',
+    ])
+    for route in routes:
+        if not route['enabled']:
+            continue
+        lines.extend([
+            '',
+            f"backend fp_{route['id']}",
+            f"    option httpchk GET {route['health_path']}",
+            '    http-check expect status 200',
+            f"    server {route['name']} {route['host']}:{route['port']} check inter 5s fall 2 rise 2",
+        ])
+    lines.extend([
+        '',
+        'listen fleetpilot_stats',
+        '    bind 127.0.0.1:8404',
+        '    stats enable',
+        '    stats uri /stats',
+        '    stats refresh 5s',
+        '    stats show-legends',
+        '    stats show-node',
+        '',
+    ])
+    return '\n'.join(lines)
+
+
+def command(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+
+
+def apply() -> None:
+    routes = load_routes()
+    content = render(routes)
+    CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, candidate_path = tempfile.mkstemp(prefix='haproxy.fleetpilot.', suffix='.cfg', dir=CONFIG.parent)
+    candidate = Path(candidate_path)
+    backup = CONFIG.with_suffix('.cfg.fleetpilot.bak')
+    try:
+        with os.fdopen(descriptor, 'w', encoding='utf-8') as handle:
+            handle.write(content)
+        os.chmod(candidate, 0o640)
+        check = command(['haproxy', '-c', '-f', str(candidate)])
+        if check.returncode != 0:
+            fail(check.stdout + check.stderr, 2)
+        if CONFIG.exists():
+            shutil.copy2(CONFIG, backup)
+        os.replace(candidate, CONFIG)
+        reloaded = command(['systemctl', 'reload', SERVICE])
+        if reloaded.returncode != 0:
+            if backup.exists():
+                shutil.copy2(backup, CONFIG)
+                command(['systemctl', 'reload', SERVICE])
+            fail(reloaded.stdout + reloaded.stderr, 3)
+        print(f'Applied HAProxy configuration with {sum(1 for route in routes if route["enabled"])} managed route(s).')
+    finally:
+        if candidate.exists():
+            candidate.unlink()
+
+
+def status() -> None:
+    active = command(['systemctl', 'is-active', SERVICE])
+    if active.returncode != 0:
+        fail('HAProxy is not active.', 4)
+    check = command(['haproxy', '-c', '-f', str(CONFIG)])
+    if check.returncode != 0:
+        fail(check.stdout + check.stderr, 5)
+    print('HAProxy is active and its FleetPilot-managed configuration is valid.')
+
+
+def main() -> None:
+    if os.geteuid() != 0:
+        fail('This helper must run as root.', 77)
+    if len(sys.argv) != 2 or sys.argv[1] not in {'apply', 'status'}:
+        fail('Usage: fleetpilot-proxy-apply {apply|status}', 64)
+    if sys.argv[1] == 'apply':
+        apply()
+    else:
+        status()
+
+
+if __name__ == '__main__':
+    main()

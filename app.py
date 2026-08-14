@@ -7,6 +7,7 @@ import json, threading, paramiko, os, secrets
 import audit_log
 import fleetpilot_version
 import production_runtime
+import proxy_manager
 import ssh_helper
 from updater import run_update
 import scheduler
@@ -58,6 +59,7 @@ except ImportError:
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get('FLEETPILOT_DATA_DIR', os.path.join(_APP_DIR, 'data'))
 os.makedirs(DATA_DIR, exist_ok=True)
+proxy_manager.configure(DATA_DIR)
 ssh_helper.init(DATA_DIR)
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
@@ -453,6 +455,90 @@ def production_status():
         flash('Administrator role required to view production status.', 'error')
         return redirect(url_for('index'))
     return render_template('production_status.html', production=PRODUCTION_STATUS, audit_health=audit_log.health())
+
+
+def _proxy_admin_required():
+    if current_user_has_role('admin'):
+        return None
+    flash('Administrator role required for proxy management.', 'error')
+    return redirect(url_for('index'))
+
+
+@app.route('/system/proxy')
+@user_management.login_required
+def proxy_services():
+    denied = _proxy_admin_required()
+    if denied:
+        return denied
+    try:
+        routes = proxy_manager.load_routes()
+    except Exception as error:
+        routes = []
+        flash(str(error), 'error')
+    helper_ok, helper_status = proxy_manager.status()
+    return render_template('proxy_services.html', routes=routes, helper_ok=helper_ok, helper_status=helper_status)
+
+
+@app.route('/system/proxy/add', methods=['POST'])
+@user_management.login_required
+def proxy_add_service():
+    denied = _proxy_admin_required()
+    if denied:
+        return denied
+    previous = proxy_manager.load_routes()
+    try:
+        route = proxy_manager.add_route({
+            'name': request.form.get('name', ''),
+            'path_prefix': request.form.get('path_prefix', ''),
+            'backend_host': request.form.get('backend_host', ''),
+            'backend_port': request.form.get('backend_port', ''),
+            'health_path': request.form.get('health_path', '/'),
+            'enabled': request.form.get('enabled') == 'on',
+        })
+        applied, detail = proxy_manager.apply()
+        if not applied:
+            proxy_manager.restore_routes(previous)
+            proxy_manager.apply()
+            raise RuntimeError(detail)
+        flash(f"Service route '{route['name']}' applied successfully.", 'success')
+    except (ValueError, RuntimeError) as error:
+        flash(f'Proxy route was not changed: {error}', 'error')
+    return redirect(url_for('proxy_services'))
+
+
+@app.route('/system/proxy/<route_id>/delete', methods=['POST'])
+@user_management.login_required
+def proxy_delete_service(route_id):
+    denied = _proxy_admin_required()
+    if denied:
+        return denied
+    previous = proxy_manager.load_routes()
+    try:
+        route = proxy_manager.remove_route(route_id)
+        applied, detail = proxy_manager.apply()
+        if not applied:
+            proxy_manager.restore_routes(previous)
+            proxy_manager.apply()
+            raise RuntimeError(detail)
+        flash(f"Service route '{route['name']}' removed successfully.", 'success')
+    except (ValueError, RuntimeError) as error:
+        flash(f'Proxy route was not changed: {error}', 'error')
+    return redirect(url_for('proxy_services'))
+
+
+@app.route('/system/proxy/<route_id>/test', methods=['POST'])
+@user_management.login_required
+def proxy_test_service(route_id):
+    denied = _proxy_admin_required()
+    if denied:
+        return denied
+    route = next((item for item in proxy_manager.load_routes() if item['id'] == route_id), None)
+    if route is None:
+        flash('Proxy route was not found.', 'error')
+    else:
+        healthy, detail = proxy_manager.test_route(route)
+        flash(detail, 'success' if healthy else 'error')
+    return redirect(url_for('proxy_services'))
 
 
 @app.route('/healthz')
