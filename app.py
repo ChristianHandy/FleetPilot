@@ -2391,20 +2391,30 @@ def _fp_log(msg, level='info'):
     import datetime
     _fp_update_log.append({'ts': datetime.datetime.now().strftime('%H:%M:%S'), 'msg': msg, 'level': level})
 
-def _run_fp_update_bg(channel, do_restart):
+def _run_fp_update_bg(channel, do_restart, check_only=False):
+    """Run the root-owned, fixed-target update helper from the admin UI.
+
+    The Gunicorn service intentionally cannot write to /opt/fleetpilot/.git.
+    Keeping the repository root-owned protects application code from a
+    compromised web worker; the sudo helper is the sole update privilege path.
+    """
     global _fp_update_running, _fp_update_log, _fp_restart_pending
-    import subprocess, datetime
+    import subprocess
+
     _fp_update_log = []
     _fp_restart_pending = False
+    if channel != 'main':
+        _fp_log('Only the protected main release channel is supported.', 'error')
+        _fp_update_running = False
+        return
 
-    app_dir = _APP_DIR
+    helper = '/usr/local/lib/fleetpilot/update'
 
-    def run(cmd, label):
-        _fp_log(f'$ {" ".join(cmd)}')
+    def run_helper(action, label, timeout=360):
+        command = ['sudo', '-n', helper, action]
+        _fp_log('$ sudo fleetpilot-update ' + action)
         try:
-            proc = subprocess.run(
-                cmd, capture_output=True, text=True, timeout=120, cwd=app_dir
-            )
+            proc = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
             for line in (proc.stdout + proc.stderr).splitlines():
                 if line.strip():
                     _fp_log(line)
@@ -2415,83 +2425,32 @@ def _run_fp_update_bg(channel, do_restart):
         except subprocess.TimeoutExpired:
             _fp_log(f'{label} timed out', 'error')
             return False
-        except Exception as e:
-            _fp_log(f'{label} error: {e}', 'error')
+        except Exception as error:
+            _fp_log(f'{label} error: {error}', 'error')
             return False
 
     _fp_log('Starting FleetPilot update…')
-    _fp_log(f'App directory: {app_dir}')
-
-    # Step 1: git fetch + check
-    run(['git', 'fetch', '--all'], 'git fetch')
-    try:
-        proc = subprocess.run(['git', 'log', 'HEAD..origin/' + channel, '--oneline'],
-                              capture_output=True, text=True, timeout=30, cwd=app_dir)
-        pending = [l for l in proc.stdout.splitlines() if l.strip()]
-        if pending:
-            _fp_log(f'Found {len(pending)} new commit(s):', 'info')
-            for c in pending[:10]:
-                _fp_log('  ' + c)
-        else:
-            _fp_log('Already up to date — no new commits on ' + channel, 'success')
-            _fp_update_running = False
-            return
-    except Exception:
-        pass
-
-    # Step 2: discard any local modifications to tracked files so git pull always wins
-    # (user data is safe in data/ which is .gitignored)
-    run(['git', 'checkout', '--', '.'], 'git checkout -- .')
-
-    # Step 2b: remove untracked files that would conflict with the incoming pull
-    # These are files that exist locally but are not yet tracked by git,
-    # yet are part of the incoming commit (e.g. manually deployed files).
-    try:
-        proc_dry = subprocess.run(
-            ['git', 'pull', '--ff-only', '--dry-run', 'origin', channel],
-            capture_output=True, text=True, timeout=30, cwd=app_dir
-        )
-        if 'would be overwritten' in proc_dry.stderr or 'untracked working tree' in proc_dry.stderr:
-            _fp_log('Untracked files conflict detected — stashing before pull…', 'warn')
-            subprocess.run(['git', 'add', '-A'], capture_output=True, cwd=app_dir)
-            subprocess.run(['git', 'stash'], capture_output=True, cwd=app_dir)
-            _fp_log('Stashed local untracked files.', 'info')
-    except Exception as e:
-        _fp_log(f'Pre-pull stash check error (non-fatal): {e}', 'warn')
-
-    # Step 3: git pull
-    ok = run(['git', 'pull', 'origin', channel], 'git pull')
-    if not ok:
-        _fp_log('git pull failed — aborting update.', 'error')
+    _fp_log('Using the protected main-release update channel.')
+    if check_only:
+        run_helper('check', 'Update check', timeout=120)
         _fp_update_running = False
         return
 
-    # Step 3: pip install requirements
-    req_file = os.path.join(app_dir, 'requirements.txt')
-    if os.path.exists(req_file):
-        venv_pip = os.path.join(app_dir, 'venv', 'bin', 'pip')
-        pip_cmd = venv_pip if os.path.exists(venv_pip) else 'pip3'
-        run([pip_cmd, 'install', '-r', req_file, '-q'], 'pip install')
-    else:
-        _fp_log('No requirements.txt found — skipping pip install', 'warn')
+    updated = run_helper('apply', 'Code update')
+    if not updated:
+        _fp_update_running = False
+        return
 
-    _fp_log('✅ Code update complete!', 'success')
-
-    # Step 4: restart service
+    _fp_log('Code update complete.', 'success')
     if do_restart:
-        _fp_log('Restarting FleetPilot service…', 'warn')
+        _fp_log('Scheduling FleetPilot service restart…', 'warn')
         _fp_restart_pending = True
+        if not run_helper('restart', 'Service restart scheduling', timeout=30):
+            _fp_restart_pending = False
         _fp_update_running = False
-        import time
-        time.sleep(1)
-        try:
-            subprocess.Popen(['sudo', 'systemctl', 'restart', 'fleetpilot'])
-        except Exception as e:
-            _fp_log(f'Could not restart service: {e}', 'error')
         return
-    else:
-        _fp_log('Skipping service restart (manual restart required).', 'warn')
 
+    _fp_log('Skipping service restart (manual restart required).', 'warn')
     _fp_update_running = False
 
 
@@ -2514,7 +2473,7 @@ def fleetpilot_update():
                 _fp_update_running = True
                 t = threading.Thread(
                     target=_run_fp_update_bg,
-                    args=(channel, False),
+                    args=(channel, False, True),
                     daemon=True
                 )
                 t.start()

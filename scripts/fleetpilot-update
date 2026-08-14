@@ -1,0 +1,88 @@
+#!/bin/sh
+# FleetPilot controlled self-update helper.
+# This file is installed root-owned and called only through a narrowly scoped
+# sudo rule. It deliberately accepts no branch, path, repository, or command
+# supplied by a web request.
+set -eu
+
+APP_DIR="/opt/fleetpilot"
+VENV_PIP="$APP_DIR/venv/bin/pip"
+SERVICE_NAME="fleetpilot"
+REMOTE_NAME="origin"
+BRANCH_NAME="main"
+EXPECTED_REMOTE="https://github.com/ChristianHandy/FleetPilot.git"
+
+usage() {
+    echo "Usage: fleetpilot-update {check|apply|restart}" >&2
+    exit 64
+}
+
+[ "$(id -u)" -eq 0 ] || {
+    echo "This helper must run as root." >&2
+    exit 77
+}
+
+[ "$#" -eq 1 ] || usage
+ACTION="$1"
+case "$ACTION" in
+    check|apply|restart) ;;
+    *) usage ;;
+esac
+
+[ -d "$APP_DIR/.git" ] || {
+    echo "FleetPilot repository is missing: $APP_DIR/.git" >&2
+    exit 78
+}
+
+if [ "$ACTION" = "restart" ]; then
+    # Queue the restart outside the web worker so the HTTP response and update
+    # log state can be persisted before Gunicorn is replaced.
+    UNIT="fleetpilot-restart-$(date +%s)"
+    systemd-run --quiet --collect --unit="$UNIT" --on-active=2s \
+        /bin/systemctl restart "$SERVICE_NAME"
+    echo "Scheduled FleetPilot service restart."
+    exit 0
+fi
+
+REMOTE_URL="$(git -C "$APP_DIR" remote get-url "$REMOTE_NAME" 2>/dev/null || true)"
+[ "$REMOTE_URL" = "$EXPECTED_REMOTE" ] || {
+    echo "Unexpected FleetPilot origin remote; update refused." >&2
+    exit 79
+}
+
+# Fetch only the trusted release branch.  No argument from the web request can
+# influence Git's repository, remote, branch, hook, or executable selection.
+GIT_CONFIG_NOSYSTEM=1 git -C "$APP_DIR" -c core.hooksPath=/dev/null \
+    fetch --prune "$REMOTE_NAME" "$BRANCH_NAME"
+
+PENDING="$(git -C "$APP_DIR" rev-list --count "HEAD..$REMOTE_NAME/$BRANCH_NAME")"
+CURRENT="$(git -C "$APP_DIR" rev-parse --short HEAD)"
+TARGET="$(git -C "$APP_DIR" rev-parse --short "$REMOTE_NAME/$BRANCH_NAME")"
+echo "Current revision: $CURRENT"
+echo "Target revision: $TARGET"
+echo "Pending commits: $PENDING"
+
+if [ "$ACTION" = "check" ]; then
+    if [ "$PENDING" -eq 0 ]; then
+        echo "FleetPilot is already up to date."
+    else
+        echo "FleetPilot update is available."
+    fi
+    exit 0
+fi
+
+if [ "$PENDING" -eq 0 ]; then
+    echo "FleetPilot is already up to date; no files changed."
+    exit 0
+fi
+
+# Application data is outside the tracked source tree. Discard only tracked
+# source changes and fast-forward from the pre-approved origin/main target.
+git -C "$APP_DIR" -c core.hooksPath=/dev/null reset --hard HEAD
+git -C "$APP_DIR" -c core.hooksPath=/dev/null pull --ff-only "$REMOTE_NAME" "$BRANCH_NAME"
+
+if [ -x "$VENV_PIP" ] && [ -f "$APP_DIR/requirements.txt" ]; then
+    "$VENV_PIP" install --disable-pip-version-check --no-input -q -r "$APP_DIR/requirements.txt"
+fi
+
+echo "FleetPilot code update completed successfully."

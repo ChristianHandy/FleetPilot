@@ -141,18 +141,23 @@ chown -R root:root "$INSTALL_DIR"
 chown -R "$FP_USER:$FP_USER" "$INSTALL_DIR/data" "$INSTALL_DIR/logs"
 chmod 0750 "$INSTALL_DIR/data" "$INSTALL_DIR/logs"
 
-# Step 9: Install the restricted local Disk Tools helper and its sudo rule.
-# The helper is root-owned, validates mode/filesystem/device, and blocks mounted system disks.
-info "Installing protected Disk Tools helper..."
+# Step 9: Install root-owned helpers with narrowly scoped sudo policies.
+info "Installing protected FleetPilot helpers..."
 install -d -o root -g root -m 0755 /usr/local/lib/fleetpilot
 install -o root -g root -m 0750 "$INSTALL_DIR/scripts/fleetpilot-disk-action" /usr/local/lib/fleetpilot/disk-action
+install -o root -g root -m 0750 "$INSTALL_DIR/scripts/fleetpilot-update" /usr/local/lib/fleetpilot/update
 cat > /etc/sudoers.d/fleetpilot-disk-action << EOF
 # FleetPilot may invoke only the root-owned, argument-validating disk helper.
 $FP_USER ALL=(root) NOPASSWD: /usr/local/lib/fleetpilot/disk-action *
 EOF
-chmod 0440 /etc/sudoers.d/fleetpilot-disk-action
+cat > /etc/sudoers.d/fleetpilot-update << EOF
+# FleetPilot may only run the fixed-target release updater actions below.
+$FP_USER ALL=(root) NOPASSWD: /usr/local/lib/fleetpilot/update check, /usr/local/lib/fleetpilot/update apply, /usr/local/lib/fleetpilot/update restart
+EOF
+chmod 0440 /etc/sudoers.d/fleetpilot-disk-action /etc/sudoers.d/fleetpilot-update
 visudo -cf /etc/sudoers.d/fleetpilot-disk-action >/dev/null || error "Invalid Disk Tools sudo rule"
-success "Protected Disk Tools helper installed"
+visudo -cf /etc/sudoers.d/fleetpilot-update >/dev/null || error "Invalid self-update sudo rule"
+success "Protected FleetPilot helpers installed"
 
 # Step 10: Create a protected runtime configuration. Existing values are preserved.
 touch "$INSTALL_DIR/.env"
