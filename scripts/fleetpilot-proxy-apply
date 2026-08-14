@@ -26,7 +26,7 @@ FLEETPILOT_BACKEND = '127.0.0.1:8080'
 NAME_RE = re.compile(r'^[A-Za-z][A-Za-z0-9_-]{0,47}$')
 HOST_RE = re.compile(r'^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)*[A-Za-z0-9][A-Za-z0-9-]*$')
 PATH_RE = re.compile(r'^/[A-Za-z0-9._~/%-]*$')
-ROUTE_TYPES = {'http_path', 'proxmox_tls'}
+ROUTE_TYPES = {'http_path', 'proxmox_tls', 'unraid_tls'}
 RESERVED_PUBLIC_PORTS = {80, 443, 8080, 8404}
 
 
@@ -90,12 +90,15 @@ def load_routes() -> list[dict[str, object]]:
         if route_type == 'proxmox_tls':
             if port != 8006 or not 1024 <= public_port <= 65535 or public_port in RESERVED_PUBLIC_PORTS:
                 fail(f'Invalid dedicated Proxmox TLS configuration for {name}.')
+        elif route_type == 'unraid_tls':
+            if port != 443 or public_port != 8200:
+                fail(f'Invalid dedicated Unraid TLS configuration for {name}.')
         else:
             public_port = 0
         if name.lower() in names or (route_type == 'http_path' and prefix in prefixes):
             fail('Duplicate service name or HTTP path prefix in FleetPilot proxy registry.')
-        if route_type == 'proxmox_tls' and public_port in public_ports:
-            fail('Duplicate dedicated Proxmox TLS public port in FleetPilot proxy registry.')
+        if route_type in {'proxmox_tls', 'unraid_tls'} and public_port in public_ports:
+            fail('Duplicate dedicated TLS public port in FleetPilot proxy registry.')
         names.add(name.lower())
         if route_type == 'http_path':
             prefixes.add(prefix)
@@ -153,7 +156,7 @@ def render(routes: list[dict[str, object]]) -> str:
             f"    server {route['name']} {route['host']}:{route['port']} check inter 5s fall 2 rise 2",
         ])
     for route in routes:
-        if not route['enabled'] or route['route_type'] != 'proxmox_tls':
+        if not route['enabled'] or route['route_type'] not in {'proxmox_tls', 'unraid_tls'}:
             continue
         lines.extend([
             '',

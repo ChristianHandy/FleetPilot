@@ -38,6 +38,25 @@ def test_normalize_proxmox_tls_route():
         raise AssertionError(f'invalid Proxmox TLS {field} was accepted')
 
 
+def test_normalize_unraid_tls_route():
+    route = proxy_manager.normalize_route({
+        'id': 'c' * 12, 'name': 'unraid', 'path_prefix': '/unraid',
+        'backend_host': '192.168.1.133', 'backend_port': 443,
+        'health_path': '/', 'route_type': 'unraid_tls', 'public_port': 8200,
+        'enabled': True,
+    })
+    assert route['route_type'] == 'unraid_tls'
+    assert route['public_port'] == 8200
+    for field, invalid in {'backend_port': 80, 'public_port': 8201}.items():
+        candidate = dict(route)
+        candidate[field] = invalid
+        try:
+            proxy_manager.normalize_route(candidate)
+        except ValueError:
+            continue
+        raise AssertionError(f'invalid Unraid TLS {field} was accepted')
+
+
 def test_rejects_unsafe_route_inputs():
     base = {
         'name': 'Service', 'path_prefix': '/service', 'backend_host': '192.168.1.20',
@@ -98,6 +117,7 @@ def test_registry_round_trip_and_duplicate_protection():
 if __name__ == '__main__':
     test_normalize_route()
     test_normalize_proxmox_tls_route()
+    test_normalize_unraid_tls_route()
     test_rejects_unsafe_route_inputs()
     test_registry_round_trip_and_duplicate_protection()
     print('proxy manager tests: OK')

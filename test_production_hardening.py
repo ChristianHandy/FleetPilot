@@ -50,9 +50,9 @@ def test_templates_render():
 
 def test_release_metadata():
     release = fleetpilot_version.release_metadata()
-    assert release['version'] == '1.5.3'
-    assert release['tag'] == 'v1.5.3'
-    assert release['display_name'] == 'FleetPilot v1.5.3'
+    assert release['version'] == '1.6.0'
+    assert release['tag'] == 'v1.6.0'
+    assert release['display_name'] == 'FleetPilot v1.6.0'
 
 
 def test_audit_log():

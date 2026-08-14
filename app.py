@@ -476,9 +476,11 @@ def proxy_services():
     except Exception as error:
         routes = []
         flash(str(error), 'error')
-    proxmox_candidates = _proxmox_route_candidates(load_hosts(), routes)
+    hosts = load_hosts()
+    proxmox_candidates = _proxmox_route_candidates(hosts, routes)
+    unraid_candidate = _unraid_route_candidate(hosts, routes)
     helper_ok, helper_status = proxy_manager.status()
-    return render_template('proxy_services.html', routes=routes, proxmox_candidates=proxmox_candidates, helper_ok=helper_ok, helper_status=helper_status)
+    return render_template('proxy_services.html', routes=routes, proxmox_candidates=proxmox_candidates, unraid_candidate=unraid_candidate, helper_ok=helper_ok, helper_status=helper_status)
 
 
 def _proxmox_route_candidates(hosts, routes):
@@ -496,6 +498,16 @@ def _proxmox_route_candidates(hosts, routes):
             continue
         candidates.append({'name': name, 'host': host, 'public_port': public_port})
     return candidates
+
+
+def _unraid_route_candidate(hosts, routes):
+    """Return the registered Unraid host if it has not received its fixed TLS route."""
+    existing = {(route.get('route_type'), str(route.get('backend_host', '')).lower()) for route in routes}
+    for name, data in sorted(hosts.items(), key=lambda item: item[0].lower()):
+        host = str(data.get('host', '')).strip()
+        if str(name).lower() == 'unraid' and host and ('unraid_tls', host.lower()) not in existing:
+            return {'name': name, 'host': host, 'public_port': 8200}
+    return None
 
 
 def _apply_proxy_routes_or_rollback(previous):
@@ -542,6 +554,37 @@ def proxy_add_proxmox_routes():
         proxy_manager.restore_routes(previous)
         proxy_manager.apply()
         flash(f'Proxmox routes were not changed: {error}', 'error')
+    return redirect(url_for('proxy_services'))
+
+
+@app.route('/system/proxy/unraid/add', methods=['POST'])
+@user_management.login_required
+def proxy_add_unraid_route():
+    denied = _proxy_admin_required()
+    if denied:
+        return denied
+    previous = proxy_manager.load_routes()
+    candidate = _unraid_route_candidate(load_hosts(), previous)
+    if candidate is None:
+        flash('The registered Unraid host already has a route, or no host named unraid is configured.', 'error')
+        return redirect(url_for('proxy_services'))
+    try:
+        proxy_manager.add_route({
+            'name': 'unraid',
+            'path_prefix': '/unraid',
+            'backend_host': candidate['host'],
+            'backend_port': 443,
+            'health_path': '/',
+            'route_type': 'unraid_tls',
+            'public_port': candidate['public_port'],
+            'enabled': True,
+        })
+        _apply_proxy_routes_or_rollback(previous)
+        flash('Applied the dedicated Unraid TLS route: https://192.168.1.100:8200/', 'success')
+    except (ValueError, RuntimeError) as error:
+        proxy_manager.restore_routes(previous)
+        proxy_manager.apply()
+        flash(f'Unraid route was not changed: {error}', 'error')
     return redirect(url_for('proxy_services'))
 
 
@@ -1166,12 +1209,12 @@ def _build_service_map(hosts, routes):
         if target_name:
             backend = f"{target_name} · {backend}"
         route_type = route.get('route_type', 'http_path')
-        is_proxmox_tls = route_type == 'proxmox_tls'
-        public_url = (f"https://192.168.1.100:{route.get('public_port')}/" if is_proxmox_tls
+        is_dedicated_tls = route_type in {'proxmox_tls', 'unraid_tls'}
+        public_url = (f"https://192.168.1.100:{route.get('public_port')}/" if is_dedicated_tls
                       else f"http://192.168.1.100{route.get('path_prefix', '')}")
         item = {
             'name': route.get('name', 'Unnamed service'),
-            'path_prefix': ('Dedicated TLS port ' + str(route.get('public_port')) if is_proxmox_tls else route.get('path_prefix', '')),
+            'path_prefix': ('Dedicated TLS port ' + str(route.get('public_port')) if is_dedicated_tls else route.get('path_prefix', '')),
             'public_url': public_url,
             'route_type': route_type,
             'backend': backend,
@@ -1216,7 +1259,7 @@ def _public_status_snapshot():
     public_services = [{
         'name': item['name'],
         'url': item['public_url'],
-        'kind': 'Proxmox console' if item.get('route_type') == 'proxmox_tls' else 'Published service',
+        'kind': ('Proxmox console' if item.get('route_type') == 'proxmox_tls' else ('Unraid console' if item.get('route_type') == 'unraid_tls' else 'Published service')),
         'status': item['status'],
         'detail': 'Reachable' if item['status'] == 'healthy' else ('Disabled' if item['status'] == 'disabled' else 'Needs attention'),
     } for item in services]

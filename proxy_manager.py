@@ -23,7 +23,7 @@ HELPER = "/usr/local/lib/fleetpilot/proxy-apply"
 _NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,47}$")
 _HOST_RE = re.compile(r"^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)*[A-Za-z0-9][A-Za-z0-9-]*$")
 _PATH_RE = re.compile(r"^/[A-Za-z0-9._~/%-]*$")
-_ROUTE_TYPES = {'http_path', 'proxmox_tls'}
+_ROUTE_TYPES = {'http_path', 'proxmox_tls', 'unraid_tls'}
 _RESERVED_PUBLIC_PORTS = {80, 443, 8080, 8404}
 
 
@@ -82,6 +82,11 @@ def normalize_route(payload: dict[str, Any]) -> dict[str, Any]:
             raise ValueError('A Proxmox TLS route must use the standard Proxmox HTTPS port 8006.')
         if not 1024 <= public_port <= 65535 or public_port in _RESERVED_PUBLIC_PORTS:
             raise ValueError('Choose a dedicated unprivileged public port that is not reserved by FleetPilot.')
+    elif route_type == 'unraid_tls':
+        if port != 443:
+            raise ValueError('An Unraid TLS route must use the standard Unraid HTTPS port 443.')
+        if public_port != 8200:
+            raise ValueError('The managed Unraid TLS route uses the fixed public port 8200.')
     else:
         public_port = 0
 
@@ -120,7 +125,7 @@ def save_routes(routes: list[dict[str, Any]]) -> None:
     normalized = [normalize_route(route) for route in routes]
     names = [item["name"].lower() for item in normalized]
     prefixes = [item["path_prefix"] for item in normalized if item['route_type'] == 'http_path']
-    public_ports = [item['public_port'] for item in normalized if item['route_type'] == 'proxmox_tls']
+    public_ports = [item['public_port'] for item in normalized if item['route_type'] in {'proxmox_tls', 'unraid_tls'}]
     if len(names) != len(set(names)):
         raise ValueError("Each proxy service needs a unique name.")
     if len(prefixes) != len(set(prefixes)):
@@ -189,7 +194,7 @@ def status() -> tuple[bool, str]:
 
 
 def test_route(route: dict[str, Any]) -> tuple[bool, str]:
-    scheme = 'https' if route.get('route_type') == 'proxmox_tls' else 'http'
+    scheme = 'https' if route.get('route_type') in {'proxmox_tls', 'unraid_tls'} else 'http'
     url = f"{scheme}://{route['backend_host']}:{route['backend_port']}{route['health_path']}"
     try:
         result = subprocess.run(

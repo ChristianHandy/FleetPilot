@@ -2,6 +2,14 @@
 
 Alle bemerkenswerten Änderungen an FleetPilot werden in diesem Dokument festgehalten. Die Versionsnummern folgen dem Prinzip der semantischen Versionierung.
 
+## [1.6.0] — 2026-08-14
+
+### Added
+
+- Dedicated **Unraid TLS passthrough** route for the centrally registered Unraid server at `https://192.168.1.100:8200/`.
+- Administrator-only Unraid route installation with fixed destination port `443`, fixed public port `8200`, HAProxy validation, and automatic registry rollback if configuration activation fails.
+- Unraid console labeling in both the authenticated service map and the read-only public status overview.
+
 ## [1.5.3] — 2026-08-14
 
 ### Fixed
@@ -144,6 +152,7 @@ Dies ist das erste formale, produktionsorientierte FleetPilot-Release für klein
 - Das Umgebungsdatei-Recht auf dem Raspberry Pi ist auf `root:fleetpilot` mit Modus `0640` eingeschränkt.
 - HTTPS, sichere Cookies und die globale CSRF-Erzwingung bleiben bewusst als nächste, separat testbare Produktionsschritte ausstehend.
 
+[1.6.0]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.6.0
 [1.5.3]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.5.3
 [1.5.2]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.5.2
 [1.5.1]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.5.1
