@@ -28,7 +28,7 @@ SupplementaryGroups=plugdev input
 # dedicated root-owned sudo helper. Do not set NoNewPrivileges here: sudo must
 # retain its normal privilege transition for that tightly restricted helper.
 ProtectSystem=full
-ReadWritePaths=/opt/fleetpilot/data /opt/fleetpilot/logs
+ReadWritePaths=/opt/fleetpilot/data /opt/fleetpilot/logs /etc/haproxy
 PrivateTmp=true
 ProtectHome=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

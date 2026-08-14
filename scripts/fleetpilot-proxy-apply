@@ -196,10 +196,13 @@ def main() -> None:
         fail('This helper must run as root.', 77)
     if len(sys.argv) != 2 or sys.argv[1] not in {'apply', 'status'}:
         fail('Usage: fleetpilot-proxy-apply {apply|status}', 64)
-    if sys.argv[1] == 'apply':
-        apply()
-    else:
-        status()
+    try:
+        if sys.argv[1] == 'apply':
+            apply()
+        else:
+            status()
+    except (OSError, subprocess.SubprocessError, ValueError) as error:
+        fail(f'HAProxy helper failed safely: {error}', 6)
 
 
 if __name__ == '__main__':

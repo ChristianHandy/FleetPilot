@@ -2,6 +2,13 @@
 
 Alle bemerkenswerten Änderungen an FleetPilot werden in diesem Dokument festgehalten. Die Versionsnummern folgen dem Prinzip der semantischen Versionierung.
 
+## [1.1.2] — 2026-08-14
+
+### Behoben
+
+- Die FleetPilot-Service-Sandbox lässt dem streng begrenzten root-eigenen Proxy-Helper nun ausschließlich Schreibzugriff auf `/etc/haproxy` zu. Dadurch funktionieren Route-Änderungen aus der Weboberfläche, ohne den restlichen Hostschutz aufzuweichen.
+- Fehler des Proxy-Helpers werden als sichere Kurzmeldung statt als internem Python-Traceback zurückgegeben.
+
 ## [1.1.1] — 2026-08-14
 
 ### Behoben
@@ -61,6 +68,7 @@ Dies ist das erste formale, produktionsorientierte FleetPilot-Release für klein
 - Das Umgebungsdatei-Recht auf dem Raspberry Pi ist auf `root:fleetpilot` mit Modus `0640` eingeschränkt.
 - HTTPS, sichere Cookies und die globale CSRF-Erzwingung bleiben bewusst als nächste, separat testbare Produktionsschritte ausstehend.
 
+[1.1.2]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.1.2
 [1.1.1]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.1.1
 [1.1.0]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.1.0
 [1.0.1]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.0.1
