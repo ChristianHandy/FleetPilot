@@ -177,6 +177,12 @@
           <span class="sidebar-icon">&#x1F465;</span> {{ _('User Management') }}
         </a>
         {% endif %}
+        <form method="post" action="/logout" style="margin:0;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is callable else '' }}">
+          <button type="submit" class="sidebar-link" style="width:100%;border:0;background:transparent;text-align:left;color:#fca5a5;cursor:pointer;">
+            <span class="sidebar-icon">&#x21AA;</span> Log out
+          </button>
+        </form>
       </div>
 
     </nav>
@@ -228,9 +234,12 @@
 
     <div class="sidebar-footer">
       <div style="padding:0.35rem 0.75rem 0.55rem;font-size:0.68rem;color:var(--text-muted);letter-spacing:0.04em;">{{ fleetpilot_release.display_name }}</div>
-      <a class="sidebar-link" href="/logout">
-        <span class="sidebar-icon">&#x1F6AA;</span> {{ _('Logout') }}
-      </a>
+      <form method="post" action="/logout" style="margin:0;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is callable else '' }}">
+        <button type="submit" class="sidebar-link" style="width:100%;border:0;background:transparent;text-align:left;cursor:pointer;">
+          <span class="sidebar-icon">&#x1F6AA;</span> {{ _('Logout') }}
+        </button>
+      </form>
     </div>
   </aside>
 

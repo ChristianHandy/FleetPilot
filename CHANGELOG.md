@@ -2,6 +2,20 @@
 
 Alle bemerkenswerten Änderungen an FleetPilot werden in diesem Dokument festgehalten. Die Versionsnummern folgen dem Prinzip der semantischen Versionierung.
 
+## [1.4.0] — 2026-08-14
+
+### Added
+
+- A visible, POST-only **Log out** control in the Account navigation; it clears the complete FleetPilot browser session.
+- Browser-native **WebAuthn/FIDO2 security-key** enrolment and second-factor verification for YubiKey and compatible security keys.
+- Persistent public-key credential records, replay-resistant server challenges, per-credential signature counters, security-key removal, and security-key audit events.
+- Explicit separation between browser-native WebAuthn security keys and the existing legacy YubiKey OTP option.
+
+### Security
+
+- WebAuthn enrolment and authentication are deliberately available only through a trusted HTTPS origin with a relying-party ID that matches the current host.
+- Existing TOTP, legacy YubiKey OTP, password login, and one-time backup-code recovery remain available as independent break-glass paths.
+
 ## [1.3.2] — 2026-08-14
 
 ### Geändert
@@ -99,6 +113,7 @@ Dies ist das erste formale, produktionsorientierte FleetPilot-Release für klein
 - Das Umgebungsdatei-Recht auf dem Raspberry Pi ist auf `root:fleetpilot` mit Modus `0640` eingeschränkt.
 - HTTPS, sichere Cookies und die globale CSRF-Erzwingung bleiben bewusst als nächste, separat testbare Produktionsschritte ausstehend.
 
+[1.4.0]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.4.0
 [1.3.2]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.3.2
 [1.3.1]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.3.1
 [1.3.0]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.3.0

@@ -28,8 +28,11 @@ gunicorn>=21.2.0
 # 2FA / TOTP support
 pyotp>=2.9.0
 
-# YubiKey support (optional)
+# Legacy YubiKey OTP support (optional)
 yubico-client>=1.11
+
+# Browser-native FIDO2/WebAuthn security keys (YubiKey, Windows Hello, passkeys)
+webauthn>=2.2,<3.0
 
 # USB HID (for Arctic Fan Controller and other USB devices)
 # Note: on Raspberry Pi install via: sudo apt install python3-hid

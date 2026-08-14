@@ -743,6 +743,31 @@ try:
 except Exception as _hw_reg_err:
     print(f"[HW Monitor] Route registration error: {_hw_reg_err}")
 
+def _complete_authenticated_login(user_id, username, next_url, method='password'):
+    """Create a fresh authenticated session after password or verified second factor."""
+    session.clear()
+    session.permanent = True
+    session['user_id'] = user_id
+    session['username'] = username
+    session['login'] = True
+    flash(f'Logged in successfully ({method})' if method != 'password' else 'Logged in successfully')
+    return redirect(next_url)
+
+
+def _webauthn_request_context():
+    """Return the strict RP/origin pair for this request, or a safe error for HTTP access."""
+    if not _2FA_AVAILABLE or not getattr(_2fa, 'WEBAUTHN_AVAILABLE', False):
+        return None, None, 'WebAuthn support is not installed on this FleetPilot server.'
+    if not request.is_secure:
+        return None, None, 'A security key needs HTTPS. Open FleetPilot through its configured HTTPS address before registering or using a YubiKey.'
+    request_host = request.host.split(':', 1)[0].lower()
+    rp_id = os.environ.get('FLEETPILOT_WEBAUTHN_RP_ID', request_host).strip().lower()
+    origin = os.environ.get('FLEETPILOT_WEBAUTHN_ORIGIN', f'https://{request.host}').strip().rstrip('/')
+    if not origin.startswith('https://') or not (request_host == rp_id or request_host.endswith('.' + rp_id)):
+        return None, None, 'The configured WebAuthn relying-party ID or origin does not match this HTTPS address.'
+    return rp_id, origin, None
+
+
 @app.route("/", methods=["GET", "POST"])
 def login():
     _raw_next = request.args.get('next', '')
@@ -775,21 +800,15 @@ def login():
                 session['_2fa_pending_username'] = username
                 session['_2fa_next'] = next_url
                 return redirect(url_for('tfa_verify'))
-            session.clear()
-            session.permanent = True
-            session["user_id"] = user_id
-            session["username"] = username
-            session["login"] = True
-            flash('Logged in successfully')
-            return redirect(next_url)
+            return _complete_authenticated_login(user_id, username, next_url)
         
         # Fallback to environment variable authentication for backward compatibility
         if username == USERNAME and password == PASSWORD:
             _clear_login_attempts(ip)
             session.clear()
             session.permanent = True
-            session["login"] = True
-            session["username"] = username
+            session['login'] = True
+            session['username'] = username
             flash('Logged in successfully (legacy mode)')
             return redirect(next_url)
         
@@ -813,14 +832,7 @@ def tfa_verify():
         next_url = session.get('_2fa_next', url_for('index'))
         result = _2fa.verify_2fa(user_id, code)
         if result['success']:
-            session.pop('_2fa_pending_user_id', None)
-            session.pop('_2fa_pending_username', None)
-            session.pop('_2fa_next', None)
-            session['user_id'] = user_id
-            session['username'] = username
-            session['login'] = True
-            flash(f'Logged in successfully (2FA: {result["method"]})')
-            return redirect(next_url)
+            return _complete_authenticated_login(user_id, username, next_url, f'2FA: {result["method"]}')
         flash('Invalid authentication code. Please try again.', 'error')
     methods = _2fa.get_2fa_methods(user_id) if _2FA_AVAILABLE else {}
     return render_template('2fa_verify.html', username=username,
@@ -837,6 +849,9 @@ def tfa_setup():
     methods = _2fa.get_2fa_methods(user_id)
     totp_status = _2fa.get_totp_status(user_id)
     yubikeys = _2fa.get_yubikeys(user_id)
+    webauthn_credentials = _2fa.get_webauthn_credentials(user_id) if getattr(_2fa, 'WEBAUTHN_AVAILABLE', False) else []
+    webauthn_available = bool(getattr(_2fa, 'WEBAUTHN_AVAILABLE', False))
+    webauthn_https_ready = bool(request.is_secure)
     totp_secret = totp_status.get('secret') if not totp_status.get('enabled') else None
     qr_code = None
     if totp_secret:
@@ -847,6 +862,9 @@ def tfa_setup():
     backup_codes_list = session.pop('_backup_codes_list', None)
     return render_template('2fa_setup.html', methods=methods, totp_secret=totp_secret,
                            qr_code=qr_code, yubikeys=yubikeys,
+                           webauthn_credentials=webauthn_credentials,
+                           webauthn_available=webauthn_available,
+                           webauthn_https_ready=webauthn_https_ready,
                            backup_codes_list=backup_codes_list)
 
 @app.route('/2fa/totp/setup', methods=['POST'])
@@ -903,6 +921,94 @@ def tfa_yubikey_delete(key_id):
         flash('YubiKey not found.', 'error')
     return redirect(url_for('tfa_setup'))
 
+@app.route('/2fa/webauthn/register/options', methods=['POST'])
+@login_required
+def webauthn_register_options():
+    rp_id, origin, error = _webauthn_request_context()
+    if error:
+        return jsonify({'ok': False, 'error': error}), 400
+    user_id = session.get('user_id')
+    try:
+        registration = _2fa.generate_webauthn_registration(user_id, session.get('username', 'user'), rp_id)
+    except RuntimeError as exception:
+        return jsonify({'ok': False, 'error': str(exception)}), 400
+    session['_webauthn_register'] = {
+        'challenge': registration['challenge'], 'rp_id': rp_id, 'origin': origin,
+        'created': int(_time.time()),
+    }
+    return jsonify({'ok': True, 'publicKey': registration['options']})
+
+
+@app.route('/2fa/webauthn/register/verify', methods=['POST'])
+@login_required
+def webauthn_register_verify():
+    pending = session.pop('_webauthn_register', None)
+    if not pending or int(_time.time()) - int(pending.get('created', 0)) > 300:
+        return jsonify({'ok': False, 'error': 'The registration challenge expired. Start again.'}), 400
+    rp_id, origin, error = _webauthn_request_context()
+    if error or rp_id != pending.get('rp_id') or origin != pending.get('origin'):
+        return jsonify({'ok': False, 'error': error or 'The HTTPS origin changed during registration.'}), 400
+    payload = request.get_json(silent=True) or {}
+    label = sanitize_input(payload.get('label', 'YubiKey Security Key'), max_len=64)
+    credential = payload.get('credential') or {}
+    result = _2fa.verify_webauthn_registration(session.get('user_id'), credential, pending['challenge'], rp_id, origin, label)
+    if result.get('success') and _2fa.get_backup_codes(session.get('user_id')) == 0:
+        session['_backup_codes_list'] = _2fa.regenerate_backup_codes(session.get('user_id'))
+    return jsonify({'ok': bool(result.get('success')), 'error': result.get('error', '')}), (200 if result.get('success') else 400)
+
+
+@app.route('/2fa/webauthn/<int:credential_id>/delete', methods=['POST'])
+@login_required
+def webauthn_delete_credential(credential_id):
+    if _2fa.delete_webauthn_credential(session.get('user_id'), credential_id):
+        flash('Security key removed.', 'success')
+    else:
+        flash('Security key not found.', 'error')
+    return redirect(url_for('tfa_setup'))
+
+
+@app.route('/2fa/webauthn/authentication/options', methods=['POST'])
+def webauthn_authentication_options():
+    user_id = session.get('_2fa_pending_user_id')
+    if not user_id:
+        return jsonify({'ok': False, 'error': 'Password login is required before using a security key.'}), 401
+    rp_id, origin, error = _webauthn_request_context()
+    if error:
+        return jsonify({'ok': False, 'error': error}), 400
+    try:
+        authentication = _2fa.generate_webauthn_authentication(user_id, rp_id)
+    except RuntimeError as exception:
+        return jsonify({'ok': False, 'error': str(exception)}), 400
+    session['_webauthn_authenticate'] = {
+        'challenge': authentication['challenge'], 'rp_id': rp_id, 'origin': origin,
+        'created': int(_time.time()),
+    }
+    return jsonify({'ok': True, 'publicKey': authentication['options']})
+
+
+@app.route('/2fa/webauthn/authentication/verify', methods=['POST'])
+def webauthn_authentication_verify():
+    user_id = session.get('_2fa_pending_user_id')
+    username = session.get('_2fa_pending_username', '')
+    next_url = session.get('_2fa_next', url_for('index'))
+    pending = session.pop('_webauthn_authenticate', None)
+    if not user_id or not pending or int(_time.time()) - int(pending.get('created', 0)) > 300:
+        return jsonify({'ok': False, 'error': 'The security-key challenge expired. Sign in again.'}), 400
+    rp_id, origin, error = _webauthn_request_context()
+    if error or rp_id != pending.get('rp_id') or origin != pending.get('origin'):
+        return jsonify({'ok': False, 'error': error or 'The HTTPS origin changed during authentication.'}), 400
+    credential = (request.get_json(silent=True) or {}).get('credential') or {}
+    result = _2fa.verify_webauthn_authentication(user_id, credential, pending['challenge'], rp_id, origin)
+    if not result.get('success'):
+        return jsonify({'ok': False, 'error': result.get('error', 'Security-key authentication failed.')}), 400
+    session.clear()
+    session.permanent = True
+    session['user_id'] = user_id
+    session['username'] = username
+    session['login'] = True
+    return jsonify({'ok': True, 'next': next_url})
+
+
 @app.route('/2fa/backup/regenerate', methods=['POST'])
 @login_required
 def tfa_backup_regenerate():
@@ -920,12 +1026,11 @@ def api_tfa_status():
         return jsonify({'available': False})
     return jsonify({'available': True, 'methods': _2fa.get_2fa_methods(user_id)})
 
-@app.route("/logout")
+@app.route('/logout', methods=['POST'])
 def logout():
-    session.pop("login", None)
-    session.pop("user_id", None)
-    session.pop("username", None)
-    flash('Logged out')
+    """End the complete browser session through the visible account control."""
+    session.clear()
+    flash('Logged out successfully.', 'success')
     return redirect(url_for('login'))
 
 def _home_page_catalog(is_admin):

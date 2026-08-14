@@ -44,10 +44,12 @@ try:
         options_to_json,
     )
     from webauthn.helpers.structs import (
+        AuthenticatorAttachment,
         AuthenticatorSelectionCriteria,
         UserVerificationRequirement,
         ResidentKeyRequirement,
         PublicKeyCredentialDescriptor,
+        PublicKeyCredentialType,
     )
     WEBAUTHN_AVAILABLE = True
 except ImportError:
@@ -419,6 +421,161 @@ def delete_yubikey(user_id: int, key_db_id: int) -> bool:
         cur = db.execute("DELETE FROM yubikeys WHERE id=? AND user_id=?",
                          (key_db_id, user_id))
         return cur.rowcount > 0
+
+# ── WebAuthn / FIDO2 Security Keys ─────────────────────────────────────────────
+
+def _bytes_to_b64url(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).decode('ascii').rstrip('=')
+
+
+def _b64url_to_bytes(value: str) -> bytes:
+    value = str(value or '').strip()
+    return base64.urlsafe_b64decode(value + '=' * (-len(value) % 4))
+
+
+def get_webauthn_credentials(user_id: int) -> list:
+    """Return public security-key metadata only; private credential material never leaves the database."""
+    with get_db() as db:
+        rows = db.execute("""
+            SELECT id, credential_id, label, sign_count, created_at, last_used
+            FROM webauthn_credentials WHERE user_id=? ORDER BY created_at DESC
+        """, (user_id,)).fetchall()
+        return [dict(row) for row in rows]
+
+
+def delete_webauthn_credential(user_id: int, credential_db_id: int) -> bool:
+    with get_db() as db:
+        cursor = db.execute(
+            "DELETE FROM webauthn_credentials WHERE id=? AND user_id=?",
+            (credential_db_id, user_id),
+        )
+        return cursor.rowcount > 0
+
+
+def generate_webauthn_registration(user_id: int, username: str, rp_id: str,
+                                    rp_name: str = 'FleetPilot') -> dict:
+    """Create browser registration options for an external FIDO2/WebAuthn key."""
+    if not WEBAUTHN_AVAILABLE:
+        raise RuntimeError('WebAuthn support is not installed on this FleetPilot server.')
+    credentials = get_webauthn_credentials(user_id)
+    exclude = [
+        PublicKeyCredentialDescriptor(
+            id=_b64url_to_bytes(item['credential_id']),
+            type=PublicKeyCredentialType.PUBLIC_KEY,
+        )
+        for item in credentials
+    ]
+    selection = AuthenticatorSelectionCriteria(
+        authenticator_attachment=AuthenticatorAttachment.CROSS_PLATFORM,
+        resident_key=ResidentKeyRequirement.PREFERRED,
+        user_verification=UserVerificationRequirement.PREFERRED,
+    )
+    options = generate_registration_options(
+        rp_id=rp_id,
+        rp_name=rp_name,
+        user_id=str(user_id).encode('utf-8'),
+        user_name=username,
+        user_display_name=username,
+        authenticator_selection=selection,
+        exclude_credentials=exclude or None,
+    )
+    return {
+        'options': json.loads(options_to_json(options)),
+        'challenge': _bytes_to_b64url(options.challenge),
+    }
+
+
+def verify_webauthn_registration(user_id: int, credential: dict, challenge: str,
+                                  rp_id: str, origin: str, label: str) -> dict:
+    """Validate an attestation response and persist only its public verification data."""
+    if not WEBAUTHN_AVAILABLE:
+        return {'success': False, 'error': 'WebAuthn support is unavailable.'}
+    try:
+        verified = verify_registration_response(
+            credential=credential,
+            expected_challenge=_b64url_to_bytes(challenge),
+            expected_rp_id=rp_id,
+            expected_origin=origin,
+            require_user_presence=True,
+            require_user_verification=False,
+        )
+        credential_id = _bytes_to_b64url(verified.credential_id)
+        public_key = _bytes_to_b64url(verified.credential_public_key)
+        with get_db() as db:
+            db.execute("""
+                INSERT INTO webauthn_credentials(user_id, credential_id, public_key, sign_count, label)
+                VALUES (?, ?, ?, ?, ?)
+            """, (user_id, credential_id, public_key, verified.sign_count, label or 'Security Key'))
+        _log_2fa(user_id, 'webauthn_register', True)
+        return {'success': True, 'credential_id': credential_id}
+    except sqlite3.IntegrityError:
+        return {'success': False, 'error': 'This security key is already registered.'}
+    except Exception:
+        _log_2fa(user_id, 'webauthn_register', False, 'Registration verification failed')
+        return {'success': False, 'error': 'Security-key registration could not be verified.'}
+
+
+def generate_webauthn_authentication(user_id: int, rp_id: str) -> dict:
+    """Create a challenge tied to the pending user and that user’s registered credentials."""
+    if not WEBAUTHN_AVAILABLE:
+        raise RuntimeError('WebAuthn support is not installed on this FleetPilot server.')
+    credentials = get_webauthn_credentials(user_id)
+    if not credentials:
+        raise RuntimeError('No security key is registered for this account.')
+    allow = [
+        PublicKeyCredentialDescriptor(
+            id=_b64url_to_bytes(item['credential_id']),
+            type=PublicKeyCredentialType.PUBLIC_KEY,
+        )
+        for item in credentials
+    ]
+    options = generate_authentication_options(
+        rp_id=rp_id,
+        allow_credentials=allow,
+        user_verification=UserVerificationRequirement.PREFERRED,
+    )
+    return {
+        'options': json.loads(options_to_json(options)),
+        'challenge': _bytes_to_b64url(options.challenge),
+    }
+
+
+def verify_webauthn_authentication(user_id: int, credential: dict, challenge: str,
+                                    rp_id: str, origin: str) -> dict:
+    """Verify a signed assertion and rotate the stored authenticator counter safely."""
+    if not WEBAUTHN_AVAILABLE:
+        return {'success': False, 'error': 'WebAuthn support is unavailable.'}
+    credential_id = credential.get('id') or credential.get('rawId')
+    if not credential_id:
+        return {'success': False, 'error': 'The browser did not return a credential identifier.'}
+    with get_db() as db:
+        row = db.execute("""
+            SELECT id, credential_id, public_key, sign_count FROM webauthn_credentials
+            WHERE user_id=? AND credential_id=?
+        """, (user_id, str(credential_id))).fetchone()
+    if not row:
+        _log_2fa(user_id, 'webauthn', False, 'Unknown credential')
+        return {'success': False, 'error': 'This security key is not registered for the account.'}
+    try:
+        verified = verify_authentication_response(
+            credential=credential,
+            expected_challenge=_b64url_to_bytes(challenge),
+            expected_rp_id=rp_id,
+            expected_origin=origin,
+            credential_public_key=_b64url_to_bytes(row['public_key']),
+            credential_current_sign_count=int(row['sign_count'] or 0),
+            require_user_verification=False,
+        )
+        with get_db() as db:
+            db.execute("""
+                UPDATE webauthn_credentials SET sign_count=?, last_used=CURRENT_TIMESTAMP WHERE id=?
+            """, (verified.new_sign_count, row['id']))
+        _log_2fa(user_id, 'webauthn', True)
+        return {'success': True, 'method': 'Security key'}
+    except Exception:
+        _log_2fa(user_id, 'webauthn', False, 'Authentication verification failed')
+        return {'success': False, 'error': 'Security-key authentication could not be verified.'}
+
 
 # ── 2FA Status ────────────────────────────────────────────────────────────────
 

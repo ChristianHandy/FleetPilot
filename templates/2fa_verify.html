@@ -19,8 +19,17 @@
       {% endwith %}
 
       <p class="text-muted text-center mb-4">
-        Enter your authentication code to continue.
+        Use your preferred second factor to continue.
       </p>
+      {% if methods.webauthn > 0 %}
+      <div class="d-grid mb-3">
+        <button type="button" id="webauthn-authenticate" class="btn btn-outline-primary">
+          <i class="bi bi-usb-symbol"></i> Use registered security key
+        </button>
+        <div id="webauthn-authentication-status" class="form-text text-center mt-2"></div>
+      </div>
+      <div class="text-center text-muted small mb-3">or use a code below</div>
+      {% endif %}
 
       <form method="POST" action="/2fa/verify" id="tfa-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is callable else '' }}">
@@ -51,7 +60,7 @@
           Lost access?
           <a href="/2fa/backup" class="text-decoration-none">Use a backup code</a>
           &nbsp;|&nbsp;
-          <a href="/logout" class="text-decoration-none text-danger">Cancel</a>
+          <form method="POST" action="/logout" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is callable else '' }}"><button type="submit" class="btn btn-link p-0 text-decoration-none text-danger">Cancel</button></form>
         </small>
       </div>
 
@@ -66,6 +75,9 @@
         <span class="badge bg-warning-subtle text-warning border border-warning">
           <i class="bi bi-usb-symbol"></i> YubiKey
         </span>
+        {% endif %}
+        {% if methods.webauthn > 0 %}
+        <span class="badge bg-primary-subtle text-primary border border-primary"><i class="bi bi-shield-key"></i> Security Key</span>
         {% endif %}
         {% if methods.backup_codes > 0 %}
         <span class="badge bg-secondary-subtle text-secondary border border-secondary">
@@ -85,5 +97,29 @@ document.getElementById('tfa-code').addEventListener('input', function() {
     document.getElementById('tfa-form').submit();
   }
 });
+  const securityKeyButton = document.getElementById('webauthn-authenticate');
+  const securityKeyStatus = document.getElementById('webauthn-authentication-status');
+  if (securityKeyButton) {
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+    const base64url = (buffer) => btoa(String.fromCharCode(...new Uint8Array(buffer))).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+    const decode = (value) => { const data = value.replace(/-/g, '+').replace(/_/g, '/'); const raw = atob(data + '='.repeat((4 - data.length % 4) % 4)); return Uint8Array.from(raw, c => c.charCodeAt(0)).buffer; };
+    const requestOptions = (options) => {
+      if (PublicKeyCredential.parseRequestOptionsFromJSON) return PublicKeyCredential.parseRequestOptionsFromJSON(options);
+      options.challenge = decode(options.challenge); (options.allowCredentials || []).forEach(item => item.id = decode(item.id)); return options;
+    };
+    const credentialJSON = (credential) => ({ id: credential.id, rawId: base64url(credential.rawId), type: credential.type, response: { clientDataJSON: base64url(credential.response.clientDataJSON), authenticatorData: base64url(credential.response.authenticatorData), signature: base64url(credential.response.signature), userHandle: credential.response.userHandle ? base64url(credential.response.userHandle) : null }, clientExtensionResults: credential.getClientExtensionResults() });
+    securityKeyButton.addEventListener('click', async () => {
+      if (!window.isSecureContext || !window.PublicKeyCredential) { securityKeyStatus.textContent = 'Security-key sign-in requires a supported browser and trusted HTTPS.'; return; }
+      securityKeyButton.disabled = true; securityKeyStatus.textContent = 'Waiting for your security key…';
+      try {
+        const first = await fetch('/2fa/webauthn/authentication/options', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf }, body: '{}' });
+        const options = await first.json(); if (!first.ok || !options.ok) throw new Error(options.error || 'Could not start security-key sign-in.');
+        const credential = await navigator.credentials.get({ publicKey: requestOptions(options.publicKey) });
+        const second = await fetch('/2fa/webauthn/authentication/verify', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf }, body: JSON.stringify({ credential: credentialJSON(credential) }) });
+        const result = await second.json(); if (!second.ok || !result.ok) throw new Error(result.error || 'Security-key verification failed.');
+        window.location.assign(result.next || '/index');
+      } catch (error) { securityKeyStatus.textContent = error.message || 'Security-key sign-in was cancelled or failed.'; securityKeyButton.disabled = false; }
+    });
+  }
 </script>
 {% endblock %}

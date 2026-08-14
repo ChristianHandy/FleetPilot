@@ -55,6 +55,9 @@ def test_templates_compile():
     environment = Environment(loader=FileSystemLoader('templates'))
     environment.get_template('index.html')
     environment.get_template('proxy_services.html')
+    environment.get_template('base.html')
+    environment.get_template('2fa_setup.html')
+    environment.get_template('2fa_verify.html')
 
 
 if __name__ == '__main__':
