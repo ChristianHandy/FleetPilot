@@ -2,6 +2,12 @@
 
 Alle bemerkenswerten Änderungen an FleetPilot werden in diesem Dokument festgehalten. Die Versionsnummern folgen dem Prinzip der semantischen Versionierung.
 
+## [1.1.1] — 2026-08-14
+
+### Behoben
+
+- Der root-eigene Proxy-Apply-Helper verwendet beim ersten Einsatz `systemctl reload-or-restart`, sodass HAProxy nach der Migration auch dann zuverlässig startet, wenn zuvor noch kein Dienst aktiv war.
+
 ## [1.1.0] — 2026-08-14
 
 Dieses Feature-Release verlagert den zentralen HTTP-Ingress auf den Raspberry Pi und ergänzt eine kontrollierte Verwaltung interner Dienste und Pfadrouten direkt in FleetPilot.
@@ -55,6 +61,7 @@ Dies ist das erste formale, produktionsorientierte FleetPilot-Release für klein
 - Das Umgebungsdatei-Recht auf dem Raspberry Pi ist auf `root:fleetpilot` mit Modus `0640` eingeschränkt.
 - HTTPS, sichere Cookies und die globale CSRF-Erzwingung bleiben bewusst als nächste, separat testbare Produktionsschritte ausstehend.
 
+[1.1.1]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.1.1
 [1.1.0]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.1.0
 [1.0.1]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.0.1
 [1.0.0]: https://github.com/ChristianHandy/FleetPilot/releases/tag/v1.0.0

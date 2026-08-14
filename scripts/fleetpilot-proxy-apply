@@ -167,11 +167,13 @@ def apply() -> None:
         if CONFIG.exists():
             shutil.copy2(CONFIG, backup)
         os.replace(candidate, CONFIG)
-        reloaded = command(['systemctl', 'reload', SERVICE])
+        # `reload-or-restart` supports the first controlled migration as well
+        # as later zero-downtime configuration reloads.
+        reloaded = command(['systemctl', 'reload-or-restart', SERVICE])
         if reloaded.returncode != 0:
             if backup.exists():
                 shutil.copy2(backup, CONFIG)
-                command(['systemctl', 'reload', SERVICE])
+                command(['systemctl', 'reload-or-restart', SERVICE])
             fail(reloaded.stdout + reloaded.stderr, 3)
         print(f'Applied HAProxy configuration with {sum(1 for route in routes if route["enabled"])} managed route(s).')
     finally:
