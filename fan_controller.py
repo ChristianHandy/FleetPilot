@@ -24,6 +24,7 @@ Package installation:
   install_packages(dev_id) installs them via SSH (apt / pip).
 """
 
+import safe_errors
 import json
 import logging
 import os
@@ -251,6 +252,25 @@ def delete_device(dev_id: int):
 
 # ── SSH helpers ───────────────────────────────────────────────────────────────
 
+def _allowed_key_path(key_path: str):
+    """Return ``key_path`` if it is an existing file in FleetPilot's data folder or ~/.ssh.
+
+    Key paths are entered in the web interface; limiting them to these folders
+    stops the setting from being used to probe other files on the server.
+    """
+    if not key_path:
+        return None
+    roots = [os.path.realpath(os.path.expanduser("~/.ssh"))]
+    if _DB_FILE is not None:
+        roots.append(os.path.realpath(os.path.dirname(str(_DB_FILE))))
+    candidate = os.path.realpath(os.path.expanduser(str(key_path)))
+    for root in roots:
+        if candidate.startswith(root + os.sep) and os.path.isfile(candidate):
+            return candidate
+    logger.warning("[FanController] Ignoring SSH key outside the allowed folders: %s", key_path)
+    return None
+
+
 def _ssh_connect(dev: Dict):
     import paramiko
     kwargs = dict(
@@ -260,8 +280,8 @@ def _ssh_connect(dev: Dict):
         timeout=15,
     )
     pw = dev.get("password_plain") or dev.get("password", "")
-    key_path = dev.get("ssh_key", "")
-    if key_path and Path(key_path).exists():
+    key_path = _allowed_key_path(dev.get("ssh_key", ""))
+    if key_path:
         kwargs["key_filename"] = key_path
     elif pw:
         kwargs["password"] = pw
@@ -535,7 +555,7 @@ def _fetch_lm_sensors(dev: Dict) -> Dict:
 
         result["ok"] = True
     except Exception as exc:
-        result["error"] = str(exc)
+        result["error"] = safe_errors.public_error(exc)
         logger.warning("[fan_controller] lm_sensors fetch error for %s: %s", dev.get("name"), exc)
     finally:
         if ssh:
@@ -600,7 +620,7 @@ def _fetch_ipmi(dev: Dict) -> Dict:
 
         result["ok"] = True
     except Exception as exc:
-        result["error"] = str(exc)
+        result["error"] = safe_errors.public_error(exc)
         logger.warning("[fan_controller] ipmi fetch error for %s: %s", dev.get("name"), exc)
     finally:
         if ssh:
@@ -668,7 +688,7 @@ def _fetch_nbfc(dev: Dict) -> Dict:
 
         result["ok"] = True
     except Exception as exc:
-        result["error"] = str(exc)
+        result["error"] = safe_errors.public_error(exc)
         logger.warning("[fan_controller] nbfc fetch error for %s: %s", dev.get("name"), exc)
     finally:
         if ssh:
@@ -745,7 +765,7 @@ def _fetch_liquidctl(dev: Dict) -> Dict:
 
         result["ok"] = True
     except Exception as exc:
-        result["error"] = str(exc)
+        result["error"] = safe_errors.public_error(exc)
         logger.warning("[fan_controller] liquidctl fetch error for %s: %s", dev.get("name"), exc)
     finally:
         if ssh:
@@ -841,7 +861,7 @@ done
 
         result["ok"] = True
     except Exception as exc:
-        result["error"] = str(exc)
+        result["error"] = safe_errors.public_error(exc)
         logger.warning("[fan_controller] pwm_sysfs fetch error for %s: %s", dev.get("name"), exc)
     finally:
         if ssh:
@@ -929,7 +949,7 @@ printf 'MODEL|%s\\nTEMP|%s\\nOVERLAY|%s\\n' "$model" "$temp" "$overlay"
         result["cooling_max_state"] = max_state
         result["ok"] = True
     except Exception as exc:
-        result["error"] = str(exc)
+        result["error"] = safe_errors.public_error(exc)
         logger.warning("[fan_controller] rpi_gpio_fan fetch error for %s: %s", dev.get("name"), exc)
     finally:
         if ssh:
@@ -1153,7 +1173,7 @@ def _fetch_arctic_usb(dev: Dict) -> Dict:
         if not result["ok"] and not result["error"]:
             result["error"] = "No fan data received. Check USB connection and permissions."
     except Exception as exc:
-        result["error"] = str(exc)
+        result["error"] = safe_errors.public_error(exc)
         logger.warning("[fan_controller] arctic_usb fetch error for %s: %s", dev.get("name"), exc)
     finally:
         if ssh:
@@ -1208,7 +1228,7 @@ def _set_fan_arctic_usb(dev: Dict, channel: str, speed, extra: dict) -> Dict:
         result["ok"] = "OK:" in combined
         result["message"] = combined.strip() or ("OK" if result["ok"] else "No output")
     except Exception as exc:
-        result["message"] = str(exc)
+        result["message"] = safe_errors.public_error(exc)
     finally:
         if ssh:
             try: ssh.close()
@@ -1280,7 +1300,7 @@ def _set_fan_lm_sensors(dev: Dict, channel: str, speed, extra: dict) -> Dict:
         result["ok"] = (c2 == 0)
         result["message"] = f"Set {pwm_path} to {pwm_val}/255 ({speed}%). {out2 or err2}"
     except Exception as exc:
-        result["message"] = str(exc)
+        result["message"] = safe_errors.public_error(exc)
     finally:
         if ssh:
             try: ssh.close()
@@ -1340,7 +1360,7 @@ def _set_fan_ipmi(dev: Dict, channel: str, speed, extra: dict) -> Dict:
         result["ok"] = True
         result["message"] = "\n".join(output_lines)
     except Exception as exc:
-        result["message"] = str(exc)
+        result["message"] = safe_errors.public_error(exc)
     finally:
         if ssh:
             try: ssh.close()
@@ -1369,7 +1389,7 @@ def _set_fan_nbfc(dev: Dict, channel: str, speed, extra: dict) -> Dict:
         result["ok"] = (code == 0)
         result["message"] = out or err or ("OK" if code == 0 else "Error")
     except Exception as exc:
-        result["message"] = str(exc)
+        result["message"] = safe_errors.public_error(exc)
     finally:
         if ssh:
             try: ssh.close()
@@ -1403,7 +1423,7 @@ def _set_fan_liquidctl(dev: Dict, channel: str, speed, extra: dict) -> Dict:
         result["ok"] = (code == 0)
         result["message"] = out or err or ("OK" if code == 0 else "Error")
     except Exception as exc:
-        result["message"] = str(exc)
+        result["message"] = safe_errors.public_error(exc)
     finally:
         if ssh:
             try: ssh.close()
@@ -1449,7 +1469,7 @@ def _set_fan_pwm_sysfs(dev: Dict, channel: str, speed, extra: dict) -> Dict:
         result["ok"] = (code == 0)
         result["message"] = f"Set {pwm_path} → {pwm_val}/255 ({round(pwm_val/255*100)}%). {out or err}"
     except Exception as exc:
-        result["message"] = str(exc)
+        result["message"] = safe_errors.public_error(exc)
     finally:
         if ssh:
             try: ssh.close()
@@ -1515,7 +1535,7 @@ def test_connection(dev_id: int) -> Dict:
                 "message": f"✘ Tool not found on remote host.\n{tool_msg}\n\n{install_hint}"
             }
     except Exception as exc:
-        return {"ok": False, "message": f"SSH connection failed: {exc}"}
+        return {"ok": False, "message": safe_errors.public_error(exc, "SSH connection")}
     finally:
         if ssh:
             try: ssh.close()
@@ -1884,7 +1904,7 @@ def detect_controllers(host: str, port: int = 22, username: str = "root",
         result["ok"] = True
 
     except Exception as exc:
-        result["error"] = str(exc)
+        result["error"] = safe_errors.public_error(exc)
         logger.warning("[fan_controller] detect_controllers error for %s: %s", host, exc)
     finally:
         if ssh:

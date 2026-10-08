@@ -19,6 +19,7 @@ Architecture:
 Database: DATA_DIR/backup_controller.db
 """
 
+import safe_errors
 import json
 import logging
 import os
@@ -428,7 +429,7 @@ def poll_server(server_id: int) -> Dict:
         else:
             result = {"ok": False, "error": f"Unknown server type: {stype}"}
     except Exception as e:
-        result = {"ok": False, "error": str(e)}
+        result = {"ok": False, "error": safe_errors.public_error(e)}
 
     # Update last_poll and last_status
     status_str = "ok" if result.get("ok") else "error"
@@ -592,7 +593,8 @@ def _duplicati_auth(srv: Dict) -> Optional[str]:
         nonce_data = r.json()
         nonce = nonce_data.get("Nonce", "")
         salt = nonce_data.get("Salt", "")
-        # Hash password
+        # The server's login protocol defines this salted SHA-256 challenge-response;
+        # FleetPilot cannot choose a different hash. The password itself is never stored this way.
         import hashlib, base64
         salted = base64.b64decode(salt) + password.encode()
         pwd_hash = base64.b64encode(hashlib.sha256(salted).digest()).decode()
@@ -624,7 +626,7 @@ def _poll_duplicati(srv: Dict) -> Dict:
                          headers=headers, timeout=15, verify=True)
         backups = r.json() if r.ok else []
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        return {"ok": False, "error": safe_errors.public_error(e)}
 
     with _db_lock:
         conn = _db()
@@ -687,7 +689,7 @@ def trigger_duplicati_backup(srv: Dict, backup_id: str) -> Dict:
                           headers=headers, timeout=15, verify=True)
         return {"ok": r.ok, "status_code": r.status_code, "message": r.text[:200]}
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        return {"ok": False, "error": safe_errors.public_error(e)}
 
 # ── Restic REST-Server ────────────────────────────────────────────────────────
 
@@ -706,7 +708,7 @@ def _poll_restic(srv: Dict) -> Dict:
             return {"ok": False, "error": f"HTTP {r.status_code}: {r.text[:100]}"}
         repos = r.json() if r.headers.get("content-type", "").startswith("application/json") else []
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        return {"ok": False, "error": safe_errors.public_error(e)}
 
     with _db_lock:
         conn = _db()
@@ -760,7 +762,7 @@ def _poll_borgwarehouse(srv: Dict) -> Dict:
             return {"ok": False, "error": f"HTTP {r.status_code}: {r.text[:100]}"}
         repos = r.json().get("repoList", [])
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        return {"ok": False, "error": safe_errors.public_error(e)}
 
     jobs_ok = jobs_warn = jobs_error = 0
     now_ts = int(time.time())
@@ -851,7 +853,7 @@ def _poll_urbackup(srv: Dict) -> Dict:
         data = r.json()
         clients = data.get("clients", [])
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        return {"ok": False, "error": safe_errors.public_error(e)}
 
     with _db_lock:
         conn = _db()
@@ -1054,7 +1056,7 @@ def test_connection(server_id: int) -> Dict:
                 "message": f"HTTP {r.status_code}",
             }
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        return {"ok": False, "error": safe_errors.public_error(e)}
 
 # ── Trigger backup ────────────────────────────────────────────────────────────
 
@@ -1079,7 +1081,7 @@ def trigger_backup(server_id: int, job_id: str = "") -> Dict:
             r = sess.post(f"{base}/nodes/localhost/backup", json={"job-id": job_id}, timeout=15)
             return {"ok": r.ok, "message": r.text[:200]}
         except Exception as e:
-            return {"ok": False, "error": str(e)}
+            return {"ok": False, "error": safe_errors.public_error(e)}
     elif stype == "bacula":
         cmd = f"printf 'run job=%s yes\\nquit\\n' {shlex.quote(job_id)} | bconsole 2>&1"
         rc, out, err = _ssh_run(

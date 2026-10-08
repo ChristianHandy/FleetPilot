@@ -11,6 +11,7 @@ All connections are stored in the SQLite database (vm_endpoints table).
 Credentials are stored encrypted with Fernet (symmetric key in SECRET_KEY env var).
 """
 
+import safe_errors
 import os
 import json
 import sqlite3
@@ -208,6 +209,7 @@ def _http(method: str, url: str, headers: Dict = None,
 
     last_error: str = ""
     attempt = 0
+    last_exc = None
     while attempt <= retries:
         try:
             with urllib.request.urlopen(req, context=ctx, timeout=timeout) as resp:
@@ -221,6 +223,7 @@ def _http(method: str, url: str, headers: Dict = None,
             raw = e.read().decode("utf-8", errors="replace")
             return {"ok": False, "status": e.code, "error": raw}
         except Exception as exc:
+            last_exc = exc
             last_error = str(exc)
             # Only retry on transient network/timeout errors
             is_transient = (
@@ -242,7 +245,9 @@ def _http(method: str, url: str, headers: Dict = None,
             # Non-transient error or retries exhausted
             break
 
-    return {"ok": False, "status": 0, "error": last_error}
+    if last_exc is None:
+        return {"ok": False, "status": 0, "error": "The request failed."}
+    return {"ok": False, "status": 0, "error": safe_errors.public_error(last_exc, "The request")}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -461,7 +466,7 @@ def test_connection(ep_id: int) -> Dict:
             jobs = client.get_jobs()
             return {"ok": True, "message": f"Connected — {len(jobs)} backup job(s) found"}
     except Exception as exc:
-        return {"ok": False, "message": str(exc)}
+        return {"ok": False, "message": safe_errors.public_error(exc)}
 
 
 def get_all_vms(ep_id: int) -> List[Dict]:

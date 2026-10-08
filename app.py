@@ -18,6 +18,7 @@ import metrics
 import easy_language
 import config_backup
 import account_security
+import safe_errors
 import notify
 from updater import run_update
 import scheduler
@@ -201,6 +202,39 @@ def _clear_login_attempts(ip, username=None):
         for kind, value in _attempt_keys(ip, username):
             _login_attempts.pop(f'{kind}:{value}', None)
 
+# ── Safe redirects ────────────────────────────────────────────────────────────
+from urllib.parse import urlparse as _urlparse
+
+
+def _local_url(target, fallback=None):
+    """Return ``target`` if it is a path on this site, otherwise ``fallback``.
+
+    Browsers ignore tabs/newlines in URLs and treat backslashes as slashes, so
+    both are normalised before checking that there is no scheme or host.
+    """
+    fallback = fallback or url_for('index')
+    if not target:
+        return fallback
+    target = ''.join(ch for ch in str(target) if ch >= ' ').replace('\\', '/')
+    if (not _urlparse(target).netloc and not _urlparse(target).scheme
+            and target.startswith('/') and not target.startswith('//')):
+        return target
+    return fallback
+
+
+def _back(fallback=None):
+    """Where a "go back" redirect may go: the referring page if it is on this site."""
+    ref = _urlparse(request.referrer or '')
+    if ref.netloc != request.host:
+        return fallback or url_for('index')
+    return _local_url(ref.path + ('?' + ref.query if ref.query else ''), fallback)
+
+
+def _error_message(exc, action='The request'):
+    """Log ``exc`` and return a browser-safe message (see safe_errors.py)."""
+    return safe_errors.public_error(exc, action)
+
+
 # ── CSRF Protection ────────────────────────────────────────────────────────────
 # On by default. WTF_CSRF_ENABLED=false is meant for local debugging only.
 _CSRF_ENABLED = os.environ.get('WTF_CSRF_ENABLED', 'true').lower() not in ('false', '0', 'no', 'off')
@@ -246,7 +280,7 @@ if _CSRF_ENABLED and _CSRFProtect is not None:
         if request.path.startswith('/api/') or request.is_json:
             return jsonify({'error': 'CSRF token missing or invalid'}), 400
         flash('Your form expired. Please try again.', 'error')
-        return redirect(request.referrer if request.referrer and request.referrer.startswith(request.host_url) else url_for('index'))
+        return redirect(_back())
 
     @app.context_processor
     def _inject_csrf():
@@ -1062,11 +1096,7 @@ def recent_auth_required(f):
     def wrapped(*args, **kwargs):
         if _recently_authenticated():
             return f(*args, **kwargs)
-        if request.method == 'GET':
-            back = request.full_path.rstrip('?')
-        else:
-            ref = request.referrer or ''
-            back = ref[len(request.host_url) - 1:] if ref.startswith(request.host_url) else url_for('index')
+        back = _local_url(request.full_path.rstrip('?')) if request.method == 'GET' else _back()
         if request.path.startswith('/api/') or request.is_json:
             return jsonify({'error': 'Confirm your password first.', 'reauth': url_for('reauth', next=back)}), 401
         flash('Please confirm your password to continue.', 'warning')
@@ -1158,8 +1188,8 @@ def _complete_authenticated_login(user_id, username, next_url, method='password'
     if notice:
         flash(notice, 'info')
     if json_response:
-        return jsonify({'ok': True, 'next': next_url})
-    return redirect(next_url)
+        return jsonify({'ok': True, 'next': _local_url(next_url)})
+    return redirect(_local_url(next_url))
 
 
 def _webauthn_request_context():
@@ -1187,7 +1217,7 @@ def login():
     # exists, returning the login form at '/' is confusing and hides the
     # Service Hub. Redirect authenticated users to the requested page or home.
     if request.method == "GET" and session.get("user_id"):
-        return redirect(next_url)
+        return redirect(_local_url(next_url))
     if request.method == "POST":
         ip = request.remote_addr or '127.0.0.1'  # Use loopback as fallback, not all-interfaces
         username = sanitize_input(request.form.get("user", ""), max_len=128)
@@ -1344,8 +1374,11 @@ def webauthn_register_options():
     user_id = session.get('user_id')
     try:
         registration = _2fa.generate_webauthn_registration(user_id, session.get('username', 'user'), rp_id)
-    except RuntimeError as exception:
-        return jsonify({'ok': False, 'error': str(exception)}), 400
+    except RuntimeError:
+        message = ('No security key is registered for this account.'
+                   if getattr(_2fa, 'WEBAUTHN_AVAILABLE', False) else
+                   'WebAuthn support is not installed on this FleetPilot server.')
+        return jsonify({'ok': False, 'error': message}), 400
     session['_webauthn_register'] = {
         'challenge': registration['challenge'], 'rp_id': rp_id, 'origin': origin,
         'created': int(_time.time()),
@@ -1391,8 +1424,11 @@ def webauthn_authentication_options():
         return jsonify({'ok': False, 'error': error}), 400
     try:
         authentication = _2fa.generate_webauthn_authentication(user_id, rp_id)
-    except RuntimeError as exception:
-        return jsonify({'ok': False, 'error': str(exception)}), 400
+    except RuntimeError:
+        message = ('No security key is registered for this account.'
+                   if getattr(_2fa, 'WEBAUTHN_AVAILABLE', False) else
+                   'WebAuthn support is not installed on this FleetPilot server.')
+        return jsonify({'ok': False, 'error': message}), 400
     session['_webauthn_authenticate'] = {
         'challenge': authentication['challenge'], 'rp_id': rp_id, 'origin': origin,
         'created': int(_time.time()),
@@ -1445,18 +1481,11 @@ def logout():
     return redirect(url_for('login'))
 
 
-def _safe_next(raw, default=None):
-    """Only allow same-site relative paths as redirect targets."""
-    if raw and raw.startswith('/') and not raw.startswith('//') and '\\' not in raw and '//' not in raw:
-        return raw
-    return default or url_for('index')
-
-
 @app.route('/reauth', methods=['GET', 'POST'])
 @login_required
 def reauth():
     """Confirm the password before a sensitive action."""
-    next_url = _safe_next(request.values.get('next'))
+    next_url = _local_url(request.values.get('next'))
     if session.get('api_token_id'):
         abort(403)
     if request.method == 'POST':
@@ -1470,7 +1499,7 @@ def reauth():
             _clear_login_attempts(ip, username)
             session['auth_time'] = _time.time()
             _audit('reauth')
-            return redirect(next_url)
+            return redirect(_local_url(next_url))
         _record_failed_login(ip, username)
         _audit('reauth', outcome='failure')
         flash('That password is not correct.', 'error')
@@ -1735,7 +1764,7 @@ def system_security_sign_out_user(uid):
     count = account_security.revoke_user_sessions(uid, keep_sid=keep)
     _audit('user_signed_out_by_admin', str(uid))
     flash(f'Signed out {count} session{"s" if count != 1 else ""}.')
-    return redirect(request.referrer if (request.referrer or '').startswith(request.host_url) else url_for('system_security'))
+    return redirect(_back(url_for('system_security')))
 
 
 @app.route('/system/security/tokens/<int:token_id>/revoke', methods=['POST'])
@@ -2065,8 +2094,8 @@ def api_dashboard_layout_save():
     try:
         user_management.save_dashboard_layout(user_id, data)
         return jsonify({"ok": True})
-    except ValueError as e:
-        return jsonify({"ok": False, "error": str(e)}), 400
+    except ValueError:
+        return jsonify({"ok": False, "error": "Invalid layout structure"}), 400
 
 
 @app.route("/api/dashboard/layout/reset", methods=["POST"])
@@ -2120,7 +2149,7 @@ def update(name):
         args=(hosts[name]["host"], hosts[name]["user"], name, logs[name])
     ).start()
     _safe_name = re.sub(r'[^a-zA-Z0-9_-]', '', str(name))
-    return redirect(f"/progress/{_safe_name}")
+    return redirect(_local_url(f"/progress/{_safe_name}"))
 
 @app.route("/progress/<name>")
 @login_required
@@ -2258,11 +2287,7 @@ def check_dashboard_version():
 def dismiss_dashboard_notification():
     """Dismiss the current update notification"""
     version_manager.dismiss_notification()
-    _ref = request.referrer or ''
-    # Security: Only allow relative paths to prevent open redirect
-    if _ref and (not _ref.startswith('/') or '//' in _ref or _ref.startswith('//')):
-        _ref = ''
-    return redirect(_ref or url_for('index'))
+    return redirect(_back())
 
 @app.route("/dashboard_version/update", methods=["GET", "POST"])
 @login_required
@@ -2308,7 +2333,7 @@ def update_repo(name):
         args=(hosts[name]["host"], hosts[name]["user"], name, logs[name], True)
     ).start()
     _safe_name = re.sub(r'[^a-zA-Z0-9_-]', '', str(name))
-    return redirect(f"/progress/{_safe_name}")
+    return redirect(_local_url(f"/progress/{_safe_name}"))
 
 # Host management routes
 @app.route("/hosts", methods=["GET", "POST"])
@@ -2605,10 +2630,10 @@ def detect_mac(name):
 def detect_os(name):
     """Auto-detect OS type for a host via SSH (reads /etc/os-release or uname)."""
     if session.get("user_id") and not current_user_has_role('operator', 'admin'):
-        return json.dumps({"ok": False, "error": "Permission denied"}), 403, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "Permission denied"}), 403
     hosts = load_hosts()
     if name not in hosts:
-        return json.dumps({"ok": False, "error": "Host not found"}), 404, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "Host not found"}), 404
     h = hosts[name]
     ip   = h.get("host", "")
     user = h.get("user", "root")
@@ -2635,7 +2660,7 @@ def detect_os(name):
             ssh.close()
             os_info = _parse_os_release(output)
         except Exception as e:
-            return json.dumps({"ok": False, "error": str(e)}), 500, {"Content-Type": "application/json"}
+            return jsonify({"ok": False, "error": _error_message(e)}), 500
     # Update host os_profiles
     existing = h.get("os_profiles", [])
     profile = {"name": os_info["name"], "type": os_info["type"], "version": os_info.get("version", ""), "default": True, "auto_detected": True}
@@ -2645,7 +2670,7 @@ def detect_os(name):
     h["os_profiles"] = new_profiles
     hosts[name] = h
     save_hosts(hosts)
-    return json.dumps({"ok": True, "os": os_info}), 200, {"Content-Type": "application/json"}
+    return jsonify({"ok": True, "os": os_info}), 200
 
 
 def _parse_os_release(text: str) -> dict:
@@ -2687,39 +2712,39 @@ def _parse_os_release(text: str) -> dict:
 def upload_host_image(name):
     """Upload a custom image for a host."""
     if session.get("user_id") and not current_user_has_role('operator', 'admin'):
-        return json.dumps({"ok": False, "error": "Permission denied"}), 403, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "Permission denied"}), 403
     hosts = load_hosts()
     if name not in hosts:
-        return json.dumps({"ok": False, "error": "Host not found"}), 404, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "Host not found"}), 404
     if 'image' not in request.files:
-        return json.dumps({"ok": False, "error": "No file uploaded"}), 400, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "No file uploaded"}), 400
     f = request.files['image']
     if not f.filename:
-        return json.dumps({"ok": False, "error": "Empty filename"}), 400, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "Empty filename"}), 400
     # Validate file type
     allowed_ext = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'}
     import pathlib
     ext = pathlib.Path(f.filename).suffix.lower()
     if ext not in allowed_ext:
-        return json.dumps({"ok": False, "error": f"File type {ext} not allowed"}), 400, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": f"File type {ext} not allowed"}), 400
     # Save to static/host_images/
     img_dir = os.path.join(_APP_DIR, "static", "host_images")
     os.makedirs(img_dir, exist_ok=True)
     safe_name = "".join(c for c in name if c.isalnum() or c in "_-")
     if not safe_name:
-        return json.dumps({"ok": False, "error": "Invalid host name"}), 400, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "Invalid host name"}), 400
     filename = f"{safe_name}{ext}"
     filepath = os.path.join(img_dir, filename)
     # Security: Ensure resolved path stays within img_dir (prevent path traversal)
     real_img_dir = os.path.realpath(img_dir)
     real_filepath = os.path.realpath(filepath)
     if not real_filepath.startswith(real_img_dir + os.sep):
-        return json.dumps({"ok": False, "error": "Invalid path"}), 400, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "Invalid path"}), 400
     f.save(real_filepath)
     # Update host record
     hosts[name]["custom_image"] = f"/static/host_images/{filename}"
     save_hosts(hosts)
-    return json.dumps({"ok": True, "image_url": f"/static/host_images/{filename}"}), 200, {"Content-Type": "application/json"}
+    return jsonify({"ok": True, "image_url": f"/static/host_images/{filename}"}), 200
 
 
 @app.route("/hosts/scan_ip_changes")
@@ -2793,7 +2818,7 @@ def toggle_auto():
 @login_required
 def format_route(device):
     try:
-        device = disktool_core.sanitize_device_name(device)
+        device = disktool_core.local_block_device(device)
     except ValueError as e:
         flash(f'Invalid device name: {e}')
         return redirect(url_for('disks_index'))
@@ -2834,7 +2859,7 @@ def smart_start_route(device, mode):
         return redirect(url_for('disks_index'))
     
     try:
-        device = disktool_core.sanitize_device_name(device)
+        device = disktool_core.local_block_device(device)
     except ValueError as e:
         flash(f'Invalid device name: {e}')
         return redirect(url_for('disks_index'))
@@ -2849,7 +2874,7 @@ def smart_start_route(device, mode):
 @login_required
 def smart_view_route(device):
     try:
-        device = disktool_core.sanitize_device_name(device)
+        device = disktool_core.local_block_device(device)
     except ValueError as e:
         flash(f'Invalid device name: {e}')
         return redirect(url_for('disks_index'))
@@ -2860,7 +2885,7 @@ def smart_view_route(device):
 @login_required
 def validate_route(device):
     try:
-        device = disktool_core.sanitize_device_name(device)
+        device = disktool_core.local_block_device(device)
     except ValueError as e:
         flash(f'Invalid device name: {e}')
         return redirect(url_for('disks_index'))
@@ -2984,9 +3009,7 @@ def render_plugin_page(plugin, device):
         return redirect(url_for('disks_index'))
     
     # Check if the plugin template exists
-    from pathlib import Path
-    template_path = Path(app.template_folder) / 'addons' / f'{plugin}.html'
-    if not template_path.exists():
+    if _existing_file(_ADDON_TEMPLATE_DIR, f'{plugin}.html') is None:
         flash(f'Plugin {plugin} not found')
         return redirect(url_for('disks_index'))
     
@@ -3335,8 +3358,7 @@ def _handle_integrity_error(exc):
     if _wants_json():
         return jsonify({'ok': False, 'error': message}), 409
     flash(message, 'error')
-    ref = request.referrer
-    return redirect(ref if ref and ref.startswith(request.host_url) else url_for('index'))
+    return redirect(_back())
 
 
 @app.errorhandler(500)
@@ -3495,7 +3517,7 @@ def discover_host_capabilities(name):
         flash(f'Checking management interfaces for {name} in the background.', 'success')
     else:
         flash(f'A capability check for {name} is already running.', 'warning')
-    return redirect(request.referrer or url_for('manage_hosts'))
+    return redirect(_back(url_for('manage_hosts')))
 
 
 @app.route('/hosts/discover_all', methods=['POST'])
@@ -3507,7 +3529,7 @@ def discover_all_host_capabilities():
         return redirect(url_for('index'))
     scheduled = sum(1 for name in load_hosts() if schedule_host_discovery(name))
     flash(f'Capability checks scheduled for {scheduled} configured host(s).', 'success')
-    return redirect(request.referrer or url_for('index'))
+    return redirect(_back())
 
 
 @app.route('/hosts/quick_add', methods=['POST'])
@@ -3929,11 +3951,8 @@ def set_language():
         lang = 'en'
     session['lang'] = lang
     session.modified = True          # force session save even if nothing else changed
-    next_url = request.args.get('next') or request.form.get('next') or request.referrer or '/index'
-    # Security: Only allow relative paths to prevent open redirect attacks
-    if not next_url or not next_url.startswith('/') or '//' in next_url or next_url.startswith('//') or '\\' in next_url:
-        next_url = '/index'
-    return redirect(next_url)
+    next_url = request.args.get('next') or request.form.get('next')
+    return redirect(_local_url(next_url) if next_url else _back())
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Plugin Manager Routes
@@ -3961,15 +3980,38 @@ EXAMPLE_PLUGINS = [
 ]
 
 
-def _sanitize_addon_path(filename: str):
-    """Return a safe absolute path inside addons/ or None if invalid."""
-    base = Path("addons").resolve()
-    target = (base / filename).resolve()
+_ADDON_DIR = os.path.join(_APP_DIR, 'addons')
+_ADDON_TEMPLATE_DIR = os.path.join(_APP_DIR, 'templates', 'addons')
+
+
+def _existing_file(folder, filename):
+    """Path of the file in ``folder`` whose name equals ``filename``, else None.
+
+    The returned path is built from the directory listing, so a request value
+    never becomes part of a file path.
+    """
     try:
-        target.relative_to(base)
-        return target
-    except ValueError:
+        entries = os.listdir(folder)
+    except OSError:
         return None
+    for entry in entries:
+        if entry == filename:
+            path = os.path.join(folder, entry)
+            return path if os.path.isfile(path) else None
+    return None
+
+
+def _new_addon_path(filename: str):
+    """Absolute path for a new add-on file, or None if the name is not a plain module name."""
+    from werkzeug.utils import secure_filename
+    name = secure_filename(filename or '')
+    if not re.fullmatch(r'[A-Za-z0-9_]+\.py', name):
+        return None
+    base = os.path.realpath(_ADDON_DIR)
+    path = os.path.realpath(os.path.join(base, name))
+    if not path.startswith(base + os.sep):
+        return None
+    return path
 
 
 @app.route("/plugins")
@@ -4005,15 +4047,12 @@ def plugin_upload():
     if not f or not f.filename.endswith(".py"):
         flash("Please upload a valid .py file.", "error")
         return redirect("/plugins")
-    fname = re.sub(r"[^a-zA-Z0-9_.\/]", "_", f.filename)
-    if not re.match(r"^[a-zA-Z0-9_]+\.py$", fname):
-        flash("Invalid filename.", "error")
-        return redirect("/plugins")
-    dest = _sanitize_addon_path(fname)
+    dest = _new_addon_path(f.filename)
     if dest is None:
-        flash("Invalid path.", "error")
+        flash("Invalid filename. Use letters, digits and underscores, ending in .py.", "error")
         return redirect("/plugins")
-    f.save(str(dest))
+    fname = os.path.basename(dest)
+    f.save(dest)
     flash(f"Plugin '{fname}' uploaded. Restart FleetPilot to activate it.", "success")
     return redirect("/plugins")
 
@@ -4031,14 +4070,14 @@ def plugin_uninstall(plugin_file):
     if not re.match(r"^[a-zA-Z0-9_]+\.py$", plugin_file):
         flash("Invalid filename.", "error")
         return redirect("/plugins")
-    path = _sanitize_addon_path(plugin_file)
-    if path is None or not path.exists():
+    path = _existing_file(_ADDON_DIR, plugin_file)
+    if path is None:
         flash("Plugin not found.", "error")
         return redirect("/plugins")
     os.remove(path)
     # Remove associated template if present
-    tpl = Path("templates/addons") / plugin_file.replace(".py", ".html")
-    if tpl.exists():
+    tpl = _existing_file(_ADDON_TEMPLATE_DIR, plugin_file[:-3] + ".html")
+    if tpl:
         os.remove(tpl)
     flash(f"Plugin '{plugin_file}' removed. Restart FleetPilot to deactivate it.", "success")
     return redirect("/plugins")
@@ -4051,11 +4090,12 @@ def plugin_view_source(plugin_file):
     if not re.match(r"^[a-zA-Z0-9_]+\.py$", plugin_file):
         flash("Invalid filename.", "error")
         return redirect("/plugins")
-    path = _sanitize_addon_path(plugin_file)
-    if path is None or not path.exists():
+    path = _existing_file(_ADDON_DIR, plugin_file)
+    if path is None:
         flash("Plugin not found.", "error")
         return redirect("/plugins")
-    source = path.read_text(encoding="utf-8")
+    with open(path, encoding="utf-8") as fh:
+        source = fh.read()
     return render_template(
         "plugin_source.html",
         filename=plugin_file,
@@ -4115,18 +4155,18 @@ def plugin_install_remote(plugin_id):
         resp = requests.get(plugin_url, timeout=10)
         resp.raise_for_status()
         code = resp.text
-        fname = f"{plugin_id}.py"
-        dest = _sanitize_addon_path(fname)
+        dest = _new_addon_path(f"{plugin_id}.py")
         if dest is None:
-            flash("Invalid path.", "error")
+            flash("Invalid plugin ID.", "error")
             return redirect("/plugins")
-        if dest.exists():
+        if os.path.exists(dest):
             flash(f"Plugin '{plugin_id}' is already installed.", "warning")
             return redirect("/plugins")
-        dest.write_text(code, encoding="utf-8")
+        with open(dest, "w", encoding="utf-8") as fh:
+            fh.write(code)
         flash(f"Plugin '{plugin_id}' installed. Restart FleetPilot to activate it.", "success")
     except Exception as exc:
-        flash(f"Install failed: {exc}", "error")
+        flash(_error_message(exc, "Install"), "error")
     return redirect("/plugins")
 
 
@@ -4184,7 +4224,7 @@ def vm_delete(ep_id):
 @login_required
 def vm_test(ep_id):
     result = vm_controller.test_connection(ep_id)
-    return json.dumps(result), 200, {"Content-Type": "application/json"}
+    return jsonify(result), 200
 
 
 @app.route("/vm/<int:ep_id>/update", methods=["POST"])
@@ -4214,7 +4254,7 @@ def vm_update(ep_id):
         daemon=True
     ).start()
     _safe_log_key = re.sub(r'[^a-zA-Z0-9_-]', '', str(log_key))
-    return redirect(f"/progress/{_safe_log_key}")
+    return redirect(_local_url(f"/progress/{_safe_log_key}"))
 
 
 @app.route("/vm/<int:ep_id>")
@@ -4238,7 +4278,7 @@ def vm_detail(ep_id):
         elif ep["platform"] == "veeam":
             jobs = vm_controller.get_all_jobs(ep_id)
     except Exception as exc:
-        error = str(exc)
+        error = _error_message(exc, "Loading this endpoint")
     return render_template("vm/detail.html",
                            ep=ep, vms=vms, jobs=jobs, nodes=nodes, error=error)
 
@@ -4248,30 +4288,30 @@ def vm_detail(ep_id):
 def vm_action(ep_id):
     """Perform a power action on a Proxmox VM."""
     if not current_user_has_role("admin"):
-        return json.dumps({"ok": False, "error": "Permission denied"}), 403, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "Permission denied"}), 403
     node   = request.form.get("node", "")
     vmid   = int(request.form.get("vmid", 0))
     action = request.form.get("action", "")
     rtype  = request.form.get("rtype", "qemu")
     if action not in ("start", "stop", "shutdown", "reboot", "suspend", "resume"):
-        return json.dumps({"ok": False, "error": "Invalid action"}), 400, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "Invalid action"}), 400
     result = vm_controller.vm_power_action(ep_id, node, vmid, action, rtype)
-    return json.dumps(result), 200, {"Content-Type": "application/json"}
+    return jsonify(result), 200
 
 
 @app.route("/vm/<int:ep_id>/veeam/job/<job_id>/start", methods=["POST"])
 @login_required
 def veeam_start_job(ep_id, job_id):
     if not current_user_has_role("admin"):
-        return json.dumps({"ok": False, "error": "Permission denied"}), 403, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "Permission denied"}), 403
     try:
         client = vm_controller.connect(ep_id)
         result = client.start_job(job_id)
         vm_controller.log_event(ep_id, job_id, job_id, "START_JOB",
                                  "ok" if result.get("ok") else "error")
-        return json.dumps(result), 200, {"Content-Type": "application/json"}
+        return jsonify(result), 200
     except Exception as exc:
-        return json.dumps({"ok": False, "error": str(exc)}), 502, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": _error_message(exc)}), 502
 
 
 @app.route("/vm/<int:ep_id>/disks")
@@ -4296,7 +4336,7 @@ def vm_disks(ep_id):
                     source_id=str(ep_id)
                 )
     except Exception as exc:
-        error = str(exc)
+        error = _error_message(exc, "Loading this endpoint")
     return render_template("vm/disks.html", ep_id=ep_id, node=node, disks=disks, error=error)
 
 
@@ -4352,7 +4392,7 @@ def storage_delete(ep_id):
 @login_required
 def storage_test(ep_id):
     result = storage_controller.test_connection(ep_id)
-    return json.dumps(result), 200, {"Content-Type": "application/json"}
+    return jsonify(result), 200
 
 
 @app.route("/storage/<int:ep_id>")
@@ -4374,7 +4414,7 @@ def storage_detail(ep_id):
                 source_id=str(ep_id)
             )
     except Exception as exc:
-        error = str(exc)
+        error = _error_message(exc, "Loading this endpoint")
         overview = {"error": error}
     return render_template("storage/detail.html", ep_id=ep_id, overview=overview, error=error)
 
@@ -4384,12 +4424,12 @@ def storage_detail(ep_id):
 def storage_poll(ep_id):
     """Manually trigger a disk health poll for a storage endpoint."""
     if not current_user_has_role("admin"):
-        return json.dumps({"ok": False, "error": "Permission denied"}), 403, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "Permission denied"}), 403
     try:
         storage_controller.poll_and_log_disks(ep_id)
-        return json.dumps({"ok": True, "message": "Poll complete"}), 200, {"Content-Type": "application/json"}
+        return jsonify({"ok": True, "message": "Poll complete"}), 200
     except Exception as exc:
-        return json.dumps({"ok": False, "error": str(exc)}), 500, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": _error_message(exc)}), 500
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -4470,10 +4510,10 @@ def smart_poll_now():
 def smart_import_host(host_name):
     """Import disks from a single SSH-configured host into the SMART registry."""
     if not current_user_has_role("admin"):
-        return json.dumps({"ok": False, "error": "Permission denied"}), 403, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "Permission denied"}), 403
     hosts = load_hosts()
     if host_name not in hosts:
-        return json.dumps({"ok": False, "error": "Host not found"}), 404, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "Host not found"}), 404
     h = hosts[host_name]
     ip = h.get("host", "")
     user = h.get("user", "root")
@@ -4544,7 +4584,7 @@ def smart_ack_alert(alert_id):
 @login_required
 def api_smart_summary():
     """JSON API: disk health summary for widgets."""
-    return json.dumps(smart_manager.get_health_summary()), 200, {"Content-Type": "application/json"}
+    return jsonify(smart_manager.get_health_summary()), 200
 
 
 @app.route("/api/smart/disks")
@@ -4552,7 +4592,7 @@ def api_smart_summary():
 def api_smart_disks():
     """JSON API: full disk list with latest health status."""
     disks = smart_manager.get_all_disks()
-    return json.dumps(disks, default=str), 200, {"Content-Type": "application/json"}
+    return app.response_class(json.dumps(disks, default=str), mimetype="application/json")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -4739,7 +4779,7 @@ def api_checkmk_host(host_name):
         return "Unauthorized", 401
     hosts = load_hosts()
     if host_name not in hosts:
-        return f"Host '{host_name}' not found", 404
+        abort(404)
     output = _cmk.build_host_piggyback(
         host_name, hosts[host_name], smart_manager=smart_manager
     )
@@ -5076,8 +5116,9 @@ def commander_set_fan(dev_id):
                     t, r = pair.split(',')
                     pairs.append((int(t.strip()), int(r.strip())))
             speed = pairs
-        except Exception as exc:
-            return jsonify({'ok': False, 'error': f'Invalid profile: {exc}'}), 400
+        except (ValueError, TypeError):
+            return jsonify({'ok': False, 'error': 'Invalid profile. Use temperature,speed pairs separated by '
+                                                  'semicolons, for example 40,30; 60,60; 80,100.'}), 400
 
     result = corsair_commander.set_fan_speed(dev, channel, speed)
     return jsonify(result)
@@ -5376,8 +5417,9 @@ def fc_set_fan(dev_id):
                 if pair:
                     t, r = pair.split(',')
                     speed.append((int(t.strip()), int(r.strip())))
-        except Exception as exc:
-            return jsonify({'ok': False, 'error': f'Invalid profile: {exc}'}), 400
+        except (ValueError, TypeError):
+            return jsonify({'ok': False, 'error': 'Invalid profile. Use temperature,speed pairs separated by '
+                                                  'semicolons, for example 40,30; 60,60; 80,100.'}), 400
 
     extra = {}
     for k in ['zone']:
@@ -5410,7 +5452,7 @@ def fc_install(dev_id):
 
     threading.Thread(target=_run, daemon=True).start()
     _safe_progress_key = re.sub(r'[^a-zA-Z0-9_-]', '', str(progress_key))
-    return redirect(f"/progress/{_safe_progress_key}")
+    return redirect(_local_url(f"/progress/{_safe_progress_key}"))
 
 
 # ── Fan Controller JSON API ───────────────────────────────────────────────────
@@ -5820,7 +5862,7 @@ def api_disks_scan():
         disks = disktool_core.list_disks()
         return jsonify({'disks': disks, 'count': len(disks)})
     except Exception as e:
-        return jsonify({'error': str(e), 'disks': []}), 200
+        return jsonify({'error': _error_message(e), 'disks': []}), 200
 
 
 @app.route('/api/smart/status')
@@ -5831,7 +5873,7 @@ def api_smart_status():
         summary = smart_manager.get_summary()
         return jsonify(summary)
     except Exception as e:
-        return jsonify({'error': str(e), 'hosts': [], 'total_disks': 0}), 200
+        return jsonify({'error': _error_message(e), 'hosts': [], 'total_disks': 0}), 200
 
 
 @app.route('/api/fans/list')
@@ -5842,7 +5884,7 @@ def api_fans_list_alias():
         devices = _fc.list_devices()
         return jsonify({'devices': devices, 'count': len(devices)})
     except Exception as e:
-        return jsonify({'devices': [], 'error': str(e)})
+        return jsonify({'devices': [], 'error': _error_message(e)})
 
 
 @app.route('/api/backup/list')
@@ -5853,7 +5895,7 @@ def api_backup_list_alias():
         servers = _bc.list_servers()
         return jsonify({'servers': servers})
     except Exception as e:
-        return jsonify({'servers': [], 'error': str(e)})
+        return jsonify({'servers': [], 'error': _error_message(e)})
 
 
 @app.route('/api/monitor/data')
@@ -5864,7 +5906,7 @@ def api_monitor_data_alias():
         data = system_monitor.get_latest()
         return jsonify(data if data else {})
     except Exception as e:
-        return jsonify({'error': str(e)})
+        return jsonify({'error': _error_message(e)})
 
 
 @app.route('/api/hw_overview')
@@ -5877,7 +5919,7 @@ def api_hw_overview_alias():
             return jsonify({'servers': servers})
         return jsonify({'servers': [], 'error': 'HW Info not available'})
     except Exception as e:
-        return jsonify({'servers': [], 'error': str(e)}), 200
+        return jsonify({'servers': [], 'error': _error_message(e)}), 200
 
 
 @app.route('/api/fp_version')
@@ -5964,7 +6006,7 @@ def api_host_metrics():
             })
         return jsonify({'error': 'parse error', 'raw': out})
     except Exception as e:
-        return jsonify({'error': str(e)}), 503
+        return jsonify({'error': _error_message(e)}), 503
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -5997,7 +6039,7 @@ def host_wol(name):
         app.logger.info(f'WOL magic packet sent to {name} ({mac})')
         return jsonify({'ok': True, 'message': f'Magic packet sent to {name} ({mac}). Server should wake up within 30 seconds.'})
     except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        return jsonify({'ok': False, 'error': _error_message(e)}), 500
 
 
 @app.route('/api/hosts/<name>/wol', methods=['POST'])
@@ -6094,7 +6136,7 @@ def host_shutdown(name):
         return jsonify({'ok': True, 'message': f'{name} is shutting down via SSH.'})
     except Exception as e:
         app.logger.error(f'Shutdown failed for {name}: {e}')
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        return jsonify({'ok': False, 'error': _error_message(e)}), 500
 
 
 @app.route('/api/hosts/<name>/shutdown', methods=['POST'])

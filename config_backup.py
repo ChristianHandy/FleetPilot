@@ -111,8 +111,13 @@ def backup_path(data_dir, name):
     """Return the path of an existing backup, or None for anything else."""
     if not name or not _NAME_RE.fullmatch(name) or not name.endswith(".tar.gz"):
         return None
-    path = os.path.join(_backup_dir(data_dir), name)
-    return path if os.path.isfile(path) else None
+    folder = _backup_dir(data_dir)
+    # Use the name as listed on disk, so nothing from the request ends up in the path.
+    for entry in os.listdir(folder):
+        if entry == name:
+            path = os.path.join(folder, entry)
+            return path if os.path.isfile(path) else None
+    return None
 
 
 def prune(data_dir, keep=7, label="auto"):

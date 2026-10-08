@@ -11,6 +11,7 @@ Usage:
     info = collector.collect(host, port, user, password, ssh_key)
 """
 
+import safe_errors
 import sqlite3
 import json
 import os
@@ -382,7 +383,7 @@ class HwInfoCollector:
 
         except Exception as e:
             logger.error(f"[HwInfo] Collection failed for {host}: {e}")
-            return {'error': str(e), '_host': host}
+            return {'error': safe_errors.public_error(e, 'Hardware scan'), '_host': host}
         finally:
             try:
                 client.close()

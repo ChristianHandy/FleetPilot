@@ -7,6 +7,7 @@ executes the shutdown command via SSH.
 """
 
 import sqlite3
+import safe_errors
 import threading
 import time
 import logging
@@ -164,7 +165,7 @@ def _execute_action(schedule: Dict) -> tuple:
         client.close()
         return True, f'Command: {cmd} | out: {out} | err: {err}'
     except Exception as e:
-        return False, str(e)
+        return False, safe_errors.public_error(e, 'Scheduled action')
     finally:
         client.close()
 

@@ -11,6 +11,7 @@ New in this version:
 - Correct CPU temp: prefer Tdie/Tctl over generic max
 """
 
+import safe_errors
 import paramiko
 import ssh_helper, threading, time, json, os, re, shlex, sqlite3, datetime, uuid
 
@@ -158,7 +159,7 @@ def ssh_run(ip, port, user, pw, cmd, timeout=12):
         c.close()
         return True, out
     except Exception as e:
-        return False, str(e)
+        return False, safe_errors.public_error(e, 'SSH command')
 
 def ssh_run_script(ip, port, user, pw, script_content, timeout=15):
     try:
@@ -173,7 +174,7 @@ def ssh_run_script(ip, port, user, pw, script_content, timeout=15):
         c.close()
         return True, out
     except Exception as e:
-        return False, str(e)
+        return False, safe_errors.public_error(e, 'SSH command')
 
 # ─── Collect Script ──────────────────────────────────────────────────────────
 # Fixes:
@@ -417,9 +418,9 @@ def _task_run(task_id, server, action_fn, title):
         result = action_fn(server, append_log)
         status = "success"
     except Exception as e:
-        result = str(e)
+        result = safe_errors.public_error(e, "Task")
         status = "failed"
-        append_log(f"ERROR: {e}")
+        append_log(f"ERROR: {result}")
 
     conn3 = get_db()
     conn3.execute("UPDATE hw_tasks SET status=?,finished_ts=?,result=? WHERE id=?",

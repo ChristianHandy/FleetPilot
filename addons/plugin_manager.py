@@ -15,37 +15,29 @@ addon_meta = {
 # Default plugin repository (GitHub repo or API endpoint)
 REMOTE_PLUGIN_REPO = "https://raw.githubusercontent.com/ChristianHandy/Linux-Management-Dashboard-Plugins/main/plugins.json"
 
+_APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
 def sanitize_path(base_dir, filename):
     """
     Safely construct and validate a path within the base directory.
-    
+
     Args:
-        base_dir (str): The base directory (e.g., 'addons', 'templates/addons')
+        base_dir (str): The base directory relative to the FleetPilot folder (e.g. 'addons')
         filename (str): The filename to join with the base directory
-        
+
     Returns:
         Path: Path object if valid
         None: If the path would escape the base directory or if an error occurs
     """
     try:
-        # Convert base_dir to absolute path
-        base_path = Path(base_dir).resolve()
-        
-        # Join with filename and resolve
-        target_path = (base_path / filename).resolve()
-        
-        # Verify the target path is within the base directory
-        # Use a more secure check that handles edge cases
-        try:
-            # Check if base_path is a parent of target_path
-            target_path.relative_to(base_path)
-            return target_path
-        except ValueError:
-            # target_path is not relative to base_path, so it's outside
-            return None
-            
-    except (ValueError, OSError):
+        base = os.path.realpath(os.path.join(_APP_DIR, base_dir))
+        target = os.path.realpath(os.path.join(base, str(filename)))
+    except (ValueError, OSError, TypeError):
         return None
+    if not target.startswith(base + os.sep):
+        return None
+    return Path(target)
 
 def current_user_has_role(*roles):
     """Check if the current logged-in user has any of the specified roles."""
@@ -161,7 +153,8 @@ def install_plugin(plugin_id):
         flash(f'Plugin {plugin_id} installed successfully! Please restart the application to activate.')
         
     except Exception as e:
-        flash(f'Error installing plugin: {str(e)}')
+        current_app.logger.warning('Plugin install failed: %s', e)
+        flash('Error installing plugin. Details are in the FleetPilot log.')
     
     return redirect(url_for('plugin_manager.plugin_manager_index'))
 
@@ -211,6 +204,7 @@ def uninstall_plugin(plugin_file):
         flash(f'Plugin {plugin_file} uninstalled successfully! Please restart the application.')
         
     except Exception as e:
-        flash(f'Error uninstalling plugin: {str(e)}')
+        current_app.logger.warning('Plugin uninstall failed: %s', e)
+        flash('Error uninstalling plugin. Details are in the FleetPilot log.')
     
     return redirect(url_for('plugin_manager.plugin_manager_index'))

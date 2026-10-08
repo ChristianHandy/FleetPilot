@@ -9,6 +9,8 @@ import fleetpilot_version
 import ui_icons
 
 original_subprocess_run = disktool_core.subprocess.run
+original_devices = disktool_core._present_block_devices
+disktool_core._present_block_devices = lambda: ['sda', 'sdb']
 try:
     disktool_core.subprocess.run = lambda *args, **kwargs: SimpleNamespace(
         returncode=0,
@@ -21,6 +23,7 @@ try:
     assert summary["bad_count"] == 0
 finally:
     disktool_core.subprocess.run = original_subprocess_run
+    disktool_core._present_block_devices = original_devices
 
 app = Flask(__name__, template_folder="templates")
 app.jinja_env.globals["_"] = lambda value: value

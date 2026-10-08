@@ -10,6 +10,7 @@ Supported platforms:
 All connections are stored in the SQLite database (storage_controller.db).
 """
 
+import safe_errors
 import os
 import json
 import sqlite3
@@ -225,7 +226,7 @@ def _http(method: str, url: str, headers: Dict = None,
         raw = e.read().decode("utf-8", errors="replace")
         return {"ok": False, "status": e.code, "error": raw}
     except Exception as exc:
-        return {"ok": False, "status": 0, "error": str(exc)}
+        return {"ok": False, "status": 0, "error": safe_errors.public_error(exc)}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -704,7 +705,7 @@ def test_connection(ep_id: int) -> Dict:
             ver = info.get("version", info.get("VERSION", "?"))
             return {"ok": True, "message": f"Connected — Unraid {ver}"}
     except Exception as exc:
-        return {"ok": False, "message": str(exc)}
+        return {"ok": False, "message": safe_errors.public_error(exc)}
 
 
 def get_storage_overview(ep_id: int) -> Dict:
@@ -732,7 +733,7 @@ def get_storage_overview(ep_id: int) -> Dict:
             overview["vms"] = client.get_vms()
             overview["alerts"] = client.get_notifications()
     except Exception as exc:
-        overview["error"] = str(exc)
+        overview["error"] = safe_errors.public_error(exc)
     return overview
 
 

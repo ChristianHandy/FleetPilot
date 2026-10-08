@@ -19,6 +19,7 @@ Usage:
     data_sync.init(app, data_dir, peer_url='http://192.168.1.173:5000')
 """
 
+import safe_errors
 import os
 import json
 import sqlite3
@@ -252,8 +253,7 @@ def _sync_once():
             logger.info(f"[Sync] Cycle complete — pushed: {pushed}, pulled: {pulled}")
 
     except Exception as e:
-        msg = f"{datetime.utcnow().isoformat()[:19]} Sync error: {e}"
-        logger.warning(f"[Sync] {msg}")
+        msg = f"{datetime.utcnow().isoformat()[:19]} {safe_errors.public_error(e, 'Sync')}"
         _sync_errors.append(msg)
         _sync_errors = _sync_errors[-20:]
 
