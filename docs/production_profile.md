@@ -46,3 +46,26 @@ Destructive disk operations require an Operator or Administrator role, explicit 
 3. Map validated directory groups to FleetPilot Viewer, Operator, and Administrator roles.
 4. Enforce Microsoft MFA with Conditional Access for OIDC users, or retain FleetPilot MFA for local/LDAP users.
 5. Only then disable normal local user provisioning for non-break-glass accounts.
+
+## Production checklist
+
+Work through this before handing FleetPilot over. Everything here is configuration; no code changes are needed.
+
+| Item | How |
+|---|---|
+| Service runs under gunicorn with one worker | `deploy/fleetpilot.service` or the installers; `gunicorn.conf.py` pins `workers = 1` |
+| Not reachable directly from other networks | gunicorn binds to `127.0.0.1` by default; publish it through Nginx/HAProxy |
+| HTTPS with secure cookies | TLS on the proxy, then `FLEETPILOT_COOKIE_SECURE=true` and `FLEETPILOT_TRUST_PROXY=true` |
+| Strong secrets | Leave `SECRET_KEY` empty to have one generated in the data folder, or set 64 random hex characters |
+| First admin password | Read `data/initial_admin_password`, sign in, change it under **My Profile**, then delete the file |
+| CSRF protection on | `WTF_CSRF_ENABLED=true` (default; older `.env` files may still say `false`) |
+| MFA for administrators | **My Profile → Two-factor authentication** |
+| Backups | **System → Backups**. Daily backups run at 03:00 and keep 7 (`FLEETPILOT_AUTO_BACKUP`, `FLEETPILOT_BACKUP_HOUR`, `FLEETPILOT_BACKUP_KEEP`). Copy them off the host regularly; they contain password hashes and encrypted credentials. If `SECRET_KEY` is set in the environment, store it with the backups. |
+| Alerts | **System → Email Config**: SMTP, then enable SMART alerts and error notifications and send a test email |
+| Monitoring | Scrape `/metrics` with the API token from the CheckMK page (`Authorization: Bearer <token>`) |
+| Data folder private | FleetPilot sets the data folder to `0700` and its files to `0600` at start |
+
+### Restoring a backup
+
+1. **System → Backups → Restore**, upload the archive. It is checked against its manifest, checksums and SQLite integrity.
+2. Restart the service (`sudo systemctl restart fleetpilot`). The current files move to `data/pre-restore-<time>/` before the backup is put in place.

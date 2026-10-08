@@ -41,7 +41,7 @@ The present instance is suitable for a trusted internal LAN during the staged ro
 | Priority | Required action | Reason |
 |---|---|---|
 | High | Put FleetPilot behind a stable HTTPS endpoint, then set `FLEETPILOT_COOKIE_SECURE=true`, `FLEETPILOT_PRODUCTION=true`, and validate sign-in. | Secure session cookies require HTTPS. |
-| High | Test all legacy state-changing forms, then enable `WTF_CSRF_ENABLED=true`. | Legacy endpoints must include CSRF tokens before global enforcement. |
+| Done | CSRF is enforced by default; browser fetch() calls send the token automatically. | Set `WTF_CSRF_ENABLED=true` in existing `.env` files that still say `false`. |
 | High | Enable TOTP for the local `admin` account at `/2fa/setup` and retain it as break-glass access. | Preserves recoverable administrator access before SSO rollout. |
 | High | Investigate and update the single GitHub Dependabot alert with owner access. | Resolves the outstanding repository security signal. |
 | Medium | Implement Microsoft Entra ID using OpenID Connect only after a stable HTTPS redirect URI is available. | Supports Conditional Access and Entra MFA without FleetPilot handling user passwords. |

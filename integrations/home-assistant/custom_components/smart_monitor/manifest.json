@@ -1,0 +1,12 @@
+{
+  "domain": "smart_monitor",
+  "name": "SMART Disk Monitor",
+  "codeowners": ["@ChristianHandy"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/ChristianHandy/FleetPilot/tree/main/integrations/home-assistant",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/ChristianHandy/FleetPilot/issues",
+  "requirements": ["paramiko>=5.0.0"],
+  "version": "1.4.0"
+}

@@ -31,7 +31,16 @@ ProtectSystem=full
 ReadWritePaths=/opt/fleetpilot/data /opt/fleetpilot/logs /etc/haproxy
 PrivateTmp=true
 ProtectHome=true
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 
 [Install]
 WantedBy=multi-user.target

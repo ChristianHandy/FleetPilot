@@ -36,7 +36,7 @@ def _render_widget(hosts: list, stats: dict) -> str:
   <div class="card-body" style="padding:1.25rem">
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.75rem">
       <h3 style="margin:0; font-size:0.95rem; font-weight:600; color:var(--text-primary)">
-        Fleet Health <span style="font-size:0.7rem; background:rgba(99,102,241,0.15); color:#6366f1;
+        Fleet Health <span style="font-size:0.7rem; background:var(--tint-blue); color:var(--accent-blue);
           padding:0.15rem 0.5rem; border-radius:4px; margin-left:0.5rem; font-family:monospace">
           example_dashboard_widget
         </span>
