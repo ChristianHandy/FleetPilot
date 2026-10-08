@@ -33,3 +33,7 @@ Thumbs.db
 version_check.json
 email_settings.json
 data/
+
+# .NET build output
+FleetPilotCS/bin/
+FleetPilotCS/obj/
