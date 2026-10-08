@@ -4,6 +4,8 @@ Alle bemerkenswerten Änderungen an FleetPilot werden in diesem Dokument festgeh
 
 ## [Unreleased]
 
+## [1.7.0] — 2026-10-09
+
 ### Added
 
 - **Security center** (System → Security center): checks for HTTPS, admins without 2FA, the first-run password file, secret-key permissions, CSRF, debug mode, failed sign-ins, backup age, never-expiring tokens and unused accounts; sign-in rules (require 2FA for admins, idle timeout, password-confirmation window, longest token life, audit retention, allowed networks); every active session and API token with sign-out/revoke.
@@ -20,6 +22,10 @@ Alle bemerkenswerten Änderungen an FleetPilot werden in diesem Dokument festgeh
 - Styled error pages; production checklist in `docs/production_profile.md`.
 
 ### Security
+
+- Fixed the CodeQL findings: uploaded SMART reports were saved under the browser-supplied filename (a name like `../app.py` could overwrite files); redirects that followed the `Referer` header could leave the site; exception text with paths, hosts or credential-bearing URLs was returned to the browser; the CheckMK host lookup echoed the host name into an HTML page.
+- Disk commands only run for devices that exist on the server; plugin, add-on template and backup files are looked up safely; fan-controller SSH keys must be in the data folder or `~/.ssh`.
+- Removed local databases, build output and old duplicate folders from the repository and ignore them from now on.
 
 - Every request now validates the session centrally. Routes using `user_management.login_required` (audit trail, production status, Storage workspace, plugin manager) accepted sessions of deactivated users and sessions that had ended through a password change.
 - Sessions are recorded on the server: logout really ends a session (a copied cookie no longer works), sessions end after inactivity (default 120 minutes), and resetting a user's password or disabling the account signs out all their devices.
