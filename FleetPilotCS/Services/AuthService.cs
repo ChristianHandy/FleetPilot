@@ -45,10 +45,21 @@ public class AuthService
     {
         if (!await _db.Users.AnyAsync())
         {
-            var defaultPass = _config["Auth:DefaultPassword"] ?? "FleetPilot2025";
+            var username = _config["Auth:DefaultUsername"] ?? "admin";
+            var defaultPass = _config["Auth:DefaultPassword"];
+            if (string.IsNullOrWhiteSpace(defaultPass) || defaultPass == "FleetPilot2025")
+            {
+                // No shared default password: generate one and leave it for the admin to read.
+                defaultPass = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(18));
+                var passPath = Path.Combine(_config["DataDir"] ?? AppContext.BaseDirectory, "initial_admin_password");
+                File.WriteAllText(passPath, $"{username}:{defaultPass}\n");
+                if (!OperatingSystem.IsWindows())
+                    File.SetUnixFileMode(passPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                Console.WriteLine($"INFO: Generated the initial admin password in {passPath}");
+            }
             _db.Users.Add(new User
             {
-                Username = _config["Auth:DefaultUsername"] ?? "admin",
+                Username = username,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(defaultPass),
                 Role = "admin"
             });
@@ -59,7 +70,7 @@ public class AuthService
     private string GenerateToken(User user)
     {
         var key = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(_config["Jwt:Key"] ?? "FleetPilotSecretKey2026ChangeMe!"));
+            Encoding.UTF8.GetBytes(_config["Jwt:Key"]!));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
         var claims = new[]
         {

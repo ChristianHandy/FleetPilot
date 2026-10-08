@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Renci.SshNet;
 using FleetPilot.Models;
 
@@ -13,11 +14,44 @@ public class SshResult
 
 public class SshService
 {
+    private static readonly object KnownHostsLock = new();
     private readonly ILogger<SshService> _logger;
+    private readonly string _knownHostsPath;
 
-    public SshService(ILogger<SshService> logger)
+    public SshService(ILogger<SshService> logger, IConfiguration config)
     {
         _logger = logger;
+        _knownHostsPath = Path.Combine(config["DataDir"] ?? AppContext.BaseDirectory, "ssh_known_hosts.json");
+    }
+
+    /// <summary>Trust a host key the first time it is seen; reject it if it changes later.</summary>
+    private T WithHostKeyCheck<T>(T client, string host, int port) where T : BaseClient
+    {
+        client.HostKeyReceived += (_, e) =>
+        {
+            var id = $"{host}:{port}";
+            var fingerprint = e.FingerPrintSHA256;
+            lock (KnownHostsLock)
+            {
+                var known = File.Exists(_knownHostsPath)
+                    ? JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(_knownHostsPath)) ?? new()
+                    : new Dictionary<string, string>();
+                if (known.TryGetValue(id, out var expected))
+                {
+                    e.CanTrust = expected == fingerprint;
+                    if (!e.CanTrust)
+                        _logger.LogError("SSH host key for {Host} changed (expected {Expected}, got {Actual}); refusing to connect", id, expected, fingerprint);
+                }
+                else
+                {
+                    known[id] = fingerprint;
+                    File.WriteAllText(_knownHostsPath, JsonSerializer.Serialize(known));
+                    e.CanTrust = true;
+                    _logger.LogWarning("Trusting new SSH host key for {Host}: {Fingerprint}", id, fingerprint);
+                }
+            }
+        };
+        return client;
     }
 
     private SshClient CreateClient(string host, int port, string username, string? password, string? keyContent)
@@ -28,9 +62,9 @@ public class SshService
             var keyFile = string.IsNullOrEmpty(password)
                 ? new PrivateKeyFile(keyStream)
                 : new PrivateKeyFile(keyStream, password);
-            return new SshClient(host, port, username, keyFile);
+            return WithHostKeyCheck(new SshClient(host, port, username, keyFile), host, port);
         }
-        return new SshClient(host, port, username, password ?? "");
+        return WithHostKeyCheck(new SshClient(host, port, username, password ?? ""), host, port);
     }
 
     public async Task<SshResult> ExecuteAsync(string host, int port, string username,
@@ -89,7 +123,7 @@ public class SshService
                     : new PasswordAuthenticationMethod(username, password ?? "");
 
                 var connInfo = new Renci.SshNet.ConnectionInfo(host, port, username, auth);
-                using var sftp = new SftpClient(connInfo);
+                using var sftp = WithHostKeyCheck(new SftpClient(connInfo), host, port);
                 sftp.Connect();
                 // Ensure directory exists
                 var dir = Path.GetDirectoryName(remotePath);

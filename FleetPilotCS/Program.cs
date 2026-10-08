@@ -19,7 +19,22 @@ var dbPath = Path.Combine(dataDir, "fleetpilot.db");
 builder.Services.AddDbContext<AppDbContext>(opts =>
     opts.UseSqlite($"Data Source={dbPath}"));
 
-var jwtKey = builder.Configuration["Jwt:Key"] ?? "FleetPilotSecretKey2026ChangeMe!";
+// Never sign tokens with a key that ships in the repository. Without a configured
+// key, generate one per install and keep it in the data directory.
+var jwtKey = builder.Configuration["Jwt:Key"];
+if (string.IsNullOrWhiteSpace(jwtKey) || jwtKey == "FleetPilotSecretKey2026ChangeMe!" || jwtKey.Length < 32)
+{
+    var keyPath = Path.Combine(dataDir, "jwt.key");
+    if (!File.Exists(keyPath))
+    {
+        File.WriteAllText(keyPath, Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(64)));
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(keyPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+    }
+    jwtKey = File.ReadAllText(keyPath).Trim();
+    builder.Configuration["Jwt:Key"] = jwtKey;
+}
+builder.Configuration["DataDir"] = dataDir;
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(opts =>
     {
