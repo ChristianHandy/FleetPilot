@@ -5,6 +5,8 @@ from types import SimpleNamespace
 from flask import Flask, render_template
 
 import disktool_core
+import fleetpilot_version
+import ui_icons
 
 original_subprocess_run = disktool_core.subprocess.run
 try:
@@ -22,9 +24,14 @@ finally:
 
 app = Flask(__name__, template_folder="templates")
 app.jinja_env.globals["_"] = lambda value: value
+app.jinja_env.globals["fleetpilot_release"] = fleetpilot_version.release_metadata()
+ui_icons.register(app)
 app.add_url_rule("/disks", endpoint="disks_index", view_func=lambda: "ok")
 app.add_url_rule("/", endpoint="index", view_func=lambda: "ok")
-app.add_url_rule("/disks/tasks", endpoint="disk_tasks", view_func=lambda: "ok")
+for rule, endpoint in [("/disks/tasks", "disk_tasks"), ("/disks/history", "disk_history"),
+                       ("/disks/dashboard", "disk_dashboard"), ("/disks/remotes", "remotes"),
+                       ("/disks/import-smart", "import_smart")]:
+    app.add_url_rule(rule, endpoint=endpoint, view_func=lambda: "ok")
 with app.test_request_context("/disks/validate/sdb"):
     html = render_template(
         "disks/validate.html", device="sdb", blocks=blocks,

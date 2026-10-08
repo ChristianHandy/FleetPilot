@@ -16,6 +16,7 @@ Features:
 import re
 import json
 import sqlite3
+import shutil
 import logging
 import subprocess
 import threading
@@ -27,7 +28,7 @@ import ssh_helper
 
 logger = logging.getLogger("fleetpilot.smart_manager")
 
-DB_FILE = Path(__file__).parent / "smart_manager.db"
+DB_FILE = None  # set by init_db(data_dir); see migration note there
 
 # ── SMART attribute criticality map ──────────────────────────────────────────
 # Attributes that directly indicate imminent failure when RAW_VALUE > threshold
@@ -64,12 +65,47 @@ POH_CRITICAL = 50_000   # ~5.7 years
 # ── Database ──────────────────────────────────────────────────────────────────
 
 def get_db():
-    conn = sqlite3.connect(str(DB_FILE))
+    conn = sqlite3.connect(str(DB_FILE), timeout=15)
     conn.row_factory = sqlite3.Row
     return conn
 
 
-def init_db():
+def _migrate_legacy_db(new_path: Path):
+    """
+    One-time migration: earlier versions stored this DB next to the
+    module file (repo root) instead of DATA_DIR. If that legacy file
+    exists and nothing has been created at the correct path yet, move
+    it over so already-registered disks survive the upgrade instead of
+    silently reverting to an empty database.
+    """
+    legacy_path = Path(__file__).parent / "smart_manager.db"
+    try:
+        if legacy_path.exists() and legacy_path != new_path and not new_path.exists():
+            new_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(legacy_path), str(new_path))
+            logger.info("Migrated smart_manager.db from repo root to %s", new_path)
+    except Exception as e:
+        logger.warning("Could not migrate legacy smart_manager.db: %s", e)
+
+
+def init_db(data_dir=None):
+    """
+    Point smart_manager at its database inside DATA_DIR.
+
+    Previously this used a DB file hardcoded next to smart_manager.py
+    (the repo checkout itself), which meant registered disks lived
+    outside the app's actual persistent data directory and could be
+    lost on redeploy. `data_dir` should always be passed by the caller
+    (app.py); the fallback below only exists so standalone scripts or
+    tests that import this module directly don't crash.
+    """
+    global DB_FILE
+    if data_dir:
+        DB_FILE = Path(data_dir) / "smart_manager.db"
+        _migrate_legacy_db(DB_FILE)
+    elif DB_FILE is None:
+        DB_FILE = Path(__file__).parent / "smart_manager.db"
+
     with get_db() as db:
         db.executescript("""
         -- Unified disk registry (local + remote)
@@ -134,6 +170,10 @@ def init_db():
             last_poll       TIMESTAMP
         );
         INSERT OR IGNORE INTO poll_config(id) VALUES(1);
+
+        -- Older versions added a new open alert on every poll; keep the newest one.
+        DELETE FROM disk_alerts WHERE acknowledged=0 AND id NOT IN (
+            SELECT MAX(id) FROM disk_alerts WHERE acknowledged=0 GROUP BY disk_id, level);
         """)
 
 
@@ -412,11 +452,55 @@ def _check_and_alert(disk_id: int, health: str, parsed: Dict):
         messages.append("SMART self-assessment: FAILED")
     if not messages:
         messages.append(f"Health degraded: {health}")
+    message = "; ".join(messages)
     with get_db() as db:
+        # One open alert per disk and level; repeat polls of the same problem
+        # must not pile up alerts or send another email.
+        open_alert = db.execute(
+            "SELECT id FROM disk_alerts WHERE disk_id=? AND level=? AND acknowledged=0",
+            (disk_id, health)
+        ).fetchone()
+        if open_alert:
+            db.execute("UPDATE disk_alerts SET message=? WHERE id=?", (message, open_alert[0]))
+            return
         db.execute(
             "INSERT INTO disk_alerts(disk_id,level,message) VALUES (?,?,?)",
-            (disk_id, health, "; ".join(messages))
+            (disk_id, health, message)
         )
+        disk = db.execute(
+            "SELECT source, device, model, serial FROM disk_registry WHERE id=?", (disk_id,)
+        ).fetchone()
+    _notify_new_alert(health, message, dict(disk) if disk else {})
+
+
+def _notify_new_alert(level: str, message: str, disk: Dict):
+    """Send a newly raised disk alert to notification channels and, if enabled, by email."""
+    try:
+        import notify
+        notify.send('smart', f"FleetPilot: disk {disk.get('device', '?')} {level.lower()}",
+                    f"{disk.get('device', '?')} ({disk.get('model') or 'unknown model'}, serial "
+                    f"{disk.get('serial') or '-'}) on {disk.get('source', '?')}: {message}",
+                    'critical' if level.upper() in ('CRITICAL', 'FAILED', 'FAILING') else 'warning')
+    except Exception as exc:
+        logger.warning("[smart_manager] Alert notification failed: %s", exc)
+    try:
+        import email_config
+        import email_notifier
+        if not email_config.get_smart_alerts_enabled():
+            return
+        name = f"{disk.get('device', '?')} ({disk.get('model') or 'unknown model'})"
+        body = (
+            f"FleetPilot raised a {level} alert for disk {name}.\n\n"
+            f"Source: {disk.get('source', '?')}\n"
+            f"Serial: {disk.get('serial') or '-'}\n"
+            f"Details: {message}\n\n"
+            "Acknowledge the alert on the SMART health page once it has been handled."
+        )
+        ok, err = email_notifier.send_email(f"[FleetPilot] {level}: disk {disk.get('device', '?')}", body)
+        if not ok:
+            logger.warning("[smart_manager] Alert email not sent: %s", err)
+    except Exception as exc:
+        logger.warning("[smart_manager] Alert email failed: %s", exc)
 
 
 # ── SSH-Host disk import ─────────────────────────────────────────────────────
@@ -453,7 +537,8 @@ def collect_ssh_host_disks(host_name: str, host_ip: str, user: str,
         raw = stdout.read().decode(errors="replace")
         try:
             devices = [d["name"] for d in json.loads(raw).get("blockdevices", [])
-                       if d.get("type") == "disk"]
+                       if d.get("type") == "disk"
+                       and re.fullmatch(r"[A-Za-z0-9_-]{1,64}", str(d.get("name", "")))]
         except Exception:
             devices = []
 

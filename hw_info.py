@@ -317,12 +317,12 @@ class HwInfoCollector:
         self._lock = threading.Lock()
 
     def _init_db(self):
-        with sqlite3.connect(self._db_path) as conn:
+        with sqlite3.connect(self._db_path, timeout=15) as conn:
             conn.executescript(self.SCHEMA)
             conn.commit()
 
     def _conn(self):
-        conn = sqlite3.connect(self._db_path)
+        conn = sqlite3.connect(self._db_path, timeout=15)
         conn.row_factory = sqlite3.Row
         return conn
 
@@ -342,15 +342,12 @@ class HwInfoCollector:
                 connect_kwargs['password'] = password
             client = ssh_helper.create_client(**connect_kwargs)
 
-            # Upload and run the collection script
-            sftp = client.open_sftp()
-            with sftp.open('/tmp/_hw_collect.py', 'w') as f:
-                f.write(_COLLECT_SCRIPT)
-            sftp.close()
-
+            # Feed the collection script on stdin so nothing is written to a shared /tmp path.
             stdin, stdout, stderr = client.exec_command(
-                'python3 /tmp/_hw_collect.py 2>/dev/null', timeout=30
+                'python3 - 2>/dev/null', timeout=30
             )
+            stdin.write(_COLLECT_SCRIPT)
+            stdin.channel.shutdown_write()
             output = stdout.read().decode(errors='replace').strip()
             client.close()
 

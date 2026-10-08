@@ -26,6 +26,7 @@ import threading
 import time
 import logging
 import hashlib
+import hmac
 import shutil
 import tempfile
 from datetime import datetime
@@ -56,7 +57,28 @@ SYNC_APP_FILES = [
 ]
 
 SYNC_INTERVAL = 30  # seconds between sync checks
-SYNC_TOKEN = os.environ.get('SYNC_TOKEN', 'fleetpilot-sync-2025')
+# Shared secret between peers. There is no default: sync stays disabled until a
+# token of at least 32 characters is configured on both instances.
+SYNC_TOKEN = os.environ.get('SYNC_TOKEN', '')
+_MIN_TOKEN_LEN = 32
+
+
+def _token_configured() -> bool:
+    return len(SYNC_TOKEN) >= _MIN_TOKEN_LEN
+
+
+def _token_ok(request) -> bool:
+    supplied = request.headers.get('X-Sync-Token', '')
+    return _token_configured() and hmac.compare_digest(supplied.encode(), SYNC_TOKEN.encode())
+
+
+def _resolve_sync_path(fname: str) -> Optional[str]:
+    """Map an allow-listed sync filename to its path; anything else is rejected."""
+    if fname in SYNC_APP_FILES:
+        return os.path.join(_app_dir, fname)
+    if fname in SYNC_FILES:
+        return os.path.join(_data_dir, fname)
+    return None
 
 # ── State ─────────────────────────────────────────────────────────────────────
 
@@ -256,6 +278,9 @@ def init(app, data_dir: str, peer_url: str = '', is_primary: bool = True):
     _peer_url = peer_url.rstrip('/') if peer_url else ''
     _is_primary = is_primary
     _sync_enabled = bool(_peer_url)
+    if _sync_enabled and not _token_configured():
+        logger.error("[Sync] SYNC_TOKEN is missing or shorter than %d characters — sync disabled", _MIN_TOKEN_LEN)
+        _sync_enabled = False
 
     if _sync_enabled:
         start()
@@ -319,42 +344,33 @@ def register_routes(app):
 
     @app.route('/api/sync/manifest')
     def sync_manifest():
-        token = request.headers.get('X-Sync-Token', '')
-        if token != SYNC_TOKEN:
+        if not _token_ok(request):
             return jsonify({'error': 'Unauthorized'}), 401
         return jsonify(_get_local_manifest())
 
     @app.route('/api/sync/file')
     def sync_get_file():
-        token = request.headers.get('X-Sync-Token', '')
-        if token != SYNC_TOKEN:
+        if not _token_ok(request):
             return jsonify({'error': 'Unauthorized'}), 401
         fname = request.args.get('filename', '')
-        if not fname or '..' in fname or fname.startswith('/'):
+        path = _resolve_sync_path(fname)
+        if not path:
             return jsonify({'error': 'Invalid filename'}), 400
-        if fname in SYNC_APP_FILES:
-            path = os.path.join(_app_dir, fname)
-        else:
-            path = os.path.join(_data_dir, fname)
         if not os.path.exists(path):
             return jsonify({'error': 'File not found'}), 404
         return flask_send_file(path, as_attachment=True, download_name=fname)
 
     @app.route('/api/sync/receive', methods=['POST'])
     def sync_receive():
-        token = request.headers.get('X-Sync-Token', '')
-        if token != SYNC_TOKEN:
+        if not _token_ok(request):
             return jsonify({'error': 'Unauthorized'}), 401
         fname = request.form.get('filename', '')
-        if not fname or '..' in fname or fname.startswith('/'):
+        dest = _resolve_sync_path(fname)
+        if not dest:
             return jsonify({'error': 'Invalid filename'}), 400
         if 'file' not in request.files:
             return jsonify({'error': 'No file'}), 400
         f = request.files['file']
-        if fname in SYNC_APP_FILES:
-            dest = os.path.join(_app_dir, fname)
-        else:
-            dest = os.path.join(_data_dir, fname)
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         # Write to temp then move (atomic)
         with tempfile.NamedTemporaryFile(delete=False, suffix='.tmp',
@@ -367,11 +383,16 @@ def register_routes(app):
 
     @app.route('/api/sync/status')
     def sync_status_api():
-        # Allow unauthenticated for HAProxy health checks
+        # Unauthenticated callers (HAProxy health checks) only learn whether sync runs.
+        if not _token_ok(request):
+            return jsonify({'enabled': _sync_enabled,
+                            'thread_alive': _sync_thread.is_alive() if _sync_thread else False})
         return jsonify(status())
 
     @app.route('/api/sync/push', methods=['POST'])
     def sync_push_now():
+        if not _token_ok(request):
+            return jsonify({'error': 'Unauthorized'}), 401
         fname = request.json.get('filename') if request.is_json else None
         result = push_now(fname)
         return jsonify(result)

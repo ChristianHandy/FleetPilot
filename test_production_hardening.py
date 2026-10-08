@@ -5,6 +5,7 @@ from flask import Flask
 
 import audit_log
 import fleetpilot_version
+import ui_icons
 import production_runtime
 
 ROOT = Path(__file__).parent
@@ -22,6 +23,7 @@ def test_templates_render():
     app = Flask(__name__, template_folder=str(ROOT / 'templates'))
     app.secret_key = 'test'
     app.jinja_env.globals.update(_=lambda value: value)
+    ui_icons.register(app)
     base = {
         'request': type('Req', (), {'path': '/storage/workspace'})(),
         'current_lang': 'en', 'current_theme': 'dark',
@@ -35,14 +37,16 @@ def test_templates_render():
             disks=[{'device': 'sdb', 'model': 'Test disk', 'size': '1 TB', 'usage': None}],
             tasks=[], storage_endpoints=[], smart_summary={}, can_operate=True, **base
         )
-        audit = app.jinja_env.get_template('system_audit.html').render(
-            events=[], audit_health={'events': 0, 'latest': None}, **base
-        )
         production = app.jinja_env.get_template('production_status.html').render(
             production={'production': False, 'cookie_secure': False, 'trust_proxy': False,
                         'csrf_enabled': False, 'secret_key_configured': True},
             audit_health={'events': 0, 'latest': None}, **base
         )
+    import app as fp
+    from flask import render_template
+    with fp.app.test_request_context('/system/audit'):
+        audit = render_template('system_audit.html', events=[], matching=0, filters={}, event_types=[],
+                                retention=365, audit_health={'events': 0, 'latest': None})
     assert 'Storage Workspace' in storage
     assert 'Audit Trail' in audit
     assert 'Production Status' in production

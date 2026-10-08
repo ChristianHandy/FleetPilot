@@ -22,7 +22,7 @@ USER_DB_FILE = _get_data_dir() / 'users.db'
 
 def get_user_db():
     """Get database connection for user management."""
-    conn = sqlite3.connect(USER_DB_FILE)
+    conn = sqlite3.connect(USER_DB_FILE, timeout=15)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -64,6 +64,14 @@ def init_user_db():
           PRIMARY KEY (user_id),
           FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         );
+
+        -- Per-user accessibility preferences (JSON)
+        CREATE TABLE IF NOT EXISTS user_accessibility(
+          user_id   INTEGER NOT NULL PRIMARY KEY,
+          prefs     TEXT    NOT NULL DEFAULT '{}',
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
         """)
         
         # Create default roles if they don't exist
@@ -80,18 +88,37 @@ def init_user_db():
             )
         db.commit()
 
+# Values shipped in old installers and examples; never use them as a real password.
+_PLACEHOLDER_PASSWORDS = {'', 'password', 'CHANGE_THIS_AFTER_INSTALL',
+                          'your-secure-password-here', 'FleetPilot2025'}
+
+
+def _write_initial_password(username):
+    """Generate a first-run admin password and store it where only the service user can read it."""
+    import secrets
+    password = secrets.token_urlsafe(18)
+    path = os.path.join(_get_data_dir(), 'initial_admin_password')
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'w') as fh:
+        fh.write(f"{username}:{password}\n")
+    print(f"INFO: No DASHBOARD_PASSWORD set. Generated a password for '{username}' in {path}")
+    return password
+
+
 def migrate_env_user_to_db():
     """
     Migrate environment variable user to database if it doesn't exist.
     This ensures backward compatibility.
     """
     username = os.environ.get('DASHBOARD_USERNAME', 'admin')
-    password = os.environ.get('DASHBOARD_PASSWORD', 'password')
-    
+    password = os.environ.get('DASHBOARD_PASSWORD', '')
+
     with get_user_db() as db:
         # Check if user exists
         user = db.execute('SELECT id FROM users WHERE username = ?', (username,)).fetchone()
         if not user:
+            if password in _PLACEHOLDER_PASSWORDS:
+                password = _write_initial_password(username)
             # Create user from environment variables
             password_hash = generate_password_hash(password)
             cursor = db.execute(
@@ -219,7 +246,16 @@ def delete_user(user_id):
     """Delete a user."""
     with get_user_db() as db:
         db.execute('DELETE FROM users WHERE id = ?', (user_id,))
+        # SQLite does not enforce the foreign keys here, so remove dependent rows explicitly.
+        for table in ('user_roles', 'user_dashboard_layouts', 'user_accessibility', 'user_sessions', 'api_tokens'):
+            try:
+                db.execute(f'DELETE FROM {table} WHERE user_id = ?', (user_id,))
+            except sqlite3.OperationalError:
+                pass  # table not created yet
         db.commit()
+
+_DUMMY_HASH = generate_password_hash('fleetpilot-timing-equaliser')
+
 
 def verify_password(username, password):
     """
@@ -229,7 +265,11 @@ def verify_password(username, password):
         user_id if valid, None otherwise
     """
     user = get_user(username)
-    if user and user['active'] and check_password_hash(user['password_hash'], password):
+    if not user:
+        # Spend the same time as a real check so response timing does not reveal usernames.
+        check_password_hash(_DUMMY_HASH, password)
+        return None
+    if user['active'] and check_password_hash(user['password_hash'], password):
         return user['id']
     return None
 
@@ -305,11 +345,7 @@ def login_required(f):
     """Decorator to require login - uses new user management system with backward compatibility."""
     @wraps(f)
     def wrapped(*args, **kwargs):
-        # Check new user_id session first
         if session.get("user_id"):
-            return f(*args, **kwargs)
-        # Fallback to old login session for backward compatibility
-        if session.get("login"):
             return f(*args, **kwargs)
         return redirect(url_for('login', next=request.path))
     return wrapped
@@ -429,3 +465,48 @@ def reset_dashboard_layout(user_id: int) -> None:
             'DELETE FROM user_dashboard_layouts WHERE user_id = ?', (user_id,)
         )
         db.commit()
+
+
+# ── Accessibility preferences ─────────────────────────────────────────────────
+
+# Allowed values for each preference; the first one is the default.
+ACCESSIBILITY_OPTIONS = {
+    "text_size": ("normal", "large", "larger"),
+    "contrast": ("normal", "high"),
+    "motion": ("system", "reduce"),
+    "underline_links": ("off", "on"),
+    "spacing": ("normal", "wide"),
+    "easy_language": ("off", "on"),
+    "font": ("default", "readable"),
+}
+DEFAULT_ACCESSIBILITY = {k: v[0] for k, v in ACCESSIBILITY_OPTIONS.items()}
+
+
+def clean_accessibility(prefs) -> dict:
+    """Keep only known keys with allowed values."""
+    clean = dict(DEFAULT_ACCESSIBILITY)
+    if isinstance(prefs, dict):
+        for key, allowed in ACCESSIBILITY_OPTIONS.items():
+            if prefs.get(key) in allowed:
+                clean[key] = prefs[key]
+    return clean
+
+
+def get_accessibility(user_id) -> dict:
+    with get_user_db() as db:
+        row = db.execute('SELECT prefs FROM user_accessibility WHERE user_id = ?', (user_id,)).fetchone()
+    try:
+        return clean_accessibility(_json.loads(row['prefs'])) if row else dict(DEFAULT_ACCESSIBILITY)
+    except ValueError:
+        return dict(DEFAULT_ACCESSIBILITY)
+
+
+def save_accessibility(user_id, prefs) -> dict:
+    clean = clean_accessibility(prefs)
+    with get_user_db() as db:
+        db.execute(
+            """INSERT INTO user_accessibility(user_id, prefs, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+               ON CONFLICT(user_id) DO UPDATE SET prefs=excluded.prefs, updated_at=CURRENT_TIMESTAMP""",
+            (user_id, _json.dumps(clean)))
+        db.commit()
+    return clean

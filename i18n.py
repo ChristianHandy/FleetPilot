@@ -97,13 +97,13 @@ TRANSLATIONS = {
         'CPU': 'CPU',
         'Node': 'Knoten',
         'Proxmox VE': 'Proxmox VE',
-        'Proxmox default: 8006 &nbsp;|&nbsp; Veeam default: 9419': 'Proxmox Standard: 8006 &nbsp;|&nbsp; Veeam Standard: 9419',
+        'Proxmox default: 8006 · Veeam default: 9419': 'Proxmox Standard: 8006 · Veeam Standard: 9419',
         'RAM': 'RAM',
         'Snapshots': 'Snapshots',
         'Uptime': 'Betriebszeit',
         'VM / Job': 'VM / Job',
         'VMID': 'VMID',
-        'Veeam Backup &amp; Replication 12': 'Veeam Backup &amp; Replication 12',
+        'Veeam Backup & Replication 12': 'Veeam Backup & Replication 12',
 
         # Storage Controller
         'Available Remote Plugins': 'Verfügbare Remote-Plugins',
@@ -111,7 +111,7 @@ TRANSLATIONS = {
         'Pool': 'Pool',
         'SMB Shares': 'SMB-Freigaben',
         'TrueNAS SCALE / CORE': 'TrueNAS SCALE / CORE',
-        'TrueNAS default: 443 &nbsp;|&nbsp; Unraid default: 80 (HTTP)': 'TrueNAS Standard: 443 &nbsp;|&nbsp; Unraid Standard: 80 (HTTP)',
+        'TrueNAS default: 443 · Unraid default: 80 (HTTP)': 'TrueNAS Standard: 443 · Unraid Standard: 80 (HTTP)',
         'Unraid 6.12+': 'Unraid 6.12+',
 
         # CheckMK
@@ -446,7 +446,7 @@ TRANSLATIONS = {
         'Enable Error Notifications': 'Fehlerbenachrichtigungen aktivieren',
         'Enable Scheduled Reports': 'Geplante Berichte aktivieren',
         'Enable Update Notifications': 'Update-Benachrichtigungen aktivieren',
-        'Enable in Update Settings &rarr;': 'In den Update-Einstellungen aktivieren &rarr;',
+        'Enable in Update Settings →': 'In den Update-Einstellungen aktivieren →',
         'End IP': 'End-IP',
         'Endpoint': 'Endpoint',
         'Ensure sudo privileges': 'Sudo-Rechte sicherstellen',
@@ -662,7 +662,7 @@ TRANSLATIONS = {
         # Messages & Tooltips
         '&#x23F3; Running Update...': '&#x23F3; Update läuft...',
         'A button appears automatically behind each disk.': 'Hinter jeder Festplatte erscheint automatisch eine Schaltfläche.',
-        'Add a Proxmox VE or Veeam Backup &amp; Replication server to get started.': 'Fügen Sie einen Proxmox VE- oder Veeam Backup &amp; Replication-Server hinzu, um zu starten.',
+        'Add a Proxmox VE or Veeam Backup & Replication server to get started.': 'Fügen Sie einen Proxmox VE- oder Veeam Backup & Replication-Server hinzu, um zu starten.',
         'Add a TrueNAS SCALE/CORE or Unraid server to monitor pools, disks, and shares.': 'Fügen Sie einen TrueNAS SCALE/CORE- oder Unraid-Server hinzu, um Pools, Festplatten und Freigaben zu überwachen.',
         'Add a host first.': 'Fügen Sie zuerst einen Host hinzu.',
         'Add your first host below to start managing remote systems.': 'Fügen Sie unten Ihren ersten Host hinzu, um mit der Verwaltung entfernter Systeme zu beginnen.',
@@ -812,13 +812,13 @@ TRANSLATIONS = {
         'CPU': 'CPU',
         'Node': 'Nœud',
         'Proxmox VE': 'Proxmox VE',
-        'Proxmox default: 8006 &nbsp;|&nbsp; Veeam default: 9419': 'Proxmox par défaut : 8006 &nbsp;|&nbsp; Veeam par défaut : 9419',
+        'Proxmox default: 8006 · Veeam default: 9419': 'Proxmox par défaut : 8006 · Veeam par défaut : 9419',
         'RAM': 'RAM',
         'Snapshots': 'Instantanés',
         'Uptime': 'Temps de fonctionnement',
         'VM / Job': 'VM / Tâche',
         'VMID': 'VMID',
-        'Veeam Backup &amp; Replication 12': 'Veeam Backup &amp; Replication 12',
+        'Veeam Backup & Replication 12': 'Veeam Backup & Replication 12',
 
         # Storage Controller
         'Available Remote Plugins': 'Plugins distants disponibles',
@@ -826,7 +826,7 @@ TRANSLATIONS = {
         'Pool': 'Pool',
         'SMB Shares': 'Partages SMB',
         'TrueNAS SCALE / CORE': 'TrueNAS SCALE / CORE',
-        'TrueNAS default: 443 &nbsp;|&nbsp; Unraid default: 80 (HTTP)': 'TrueNAS par défaut : 443 &nbsp;|&nbsp; Unraid par défaut : 80 (HTTP)',
+        'TrueNAS default: 443 · Unraid default: 80 (HTTP)': 'TrueNAS par défaut : 443 · Unraid par défaut : 80 (HTTP)',
         'Unraid 6.12+': 'Unraid 6.12+',
 
         # CheckMK
@@ -1116,7 +1116,7 @@ TRANSLATIONS = {
         'Enable Error Notifications': 'Activer les notifications d\'erreur',
         'Enable Scheduled Reports': 'Activer les rapports planifiés',
         'Enable Update Notifications': 'Activer les notifications de mise à jour',
-        'Enable in Update Settings &rarr;': 'Activer dans les paramètres de mise à jour &rarr;',
+        'Enable in Update Settings →': 'Activer dans les paramètres de mise à jour →',
         'End IP': 'IP de fin',
         'Endpoint': 'Endpoint',
         'Ensure sudo privileges': 'Assurer les privilèges sudo',
@@ -1332,7 +1332,7 @@ TRANSLATIONS = {
         # Messages & Tooltips
         '&#x23F3; Running Update...': '&#x23F3; Mise à jour en cours...',
         'A button appears automatically behind each disk.': 'Un bouton apparaît automatiquement derrière chaque disque.',
-        'Add a Proxmox VE or Veeam Backup &amp; Replication server to get started.': 'Ajoutez un serveur Proxmox VE ou Veeam Backup &amp; Replication pour commencer.',
+        'Add a Proxmox VE or Veeam Backup & Replication server to get started.': 'Ajoutez un serveur Proxmox VE ou Veeam Backup & Replication pour commencer.',
         'Add a TrueNAS SCALE/CORE or Unraid server to monitor pools, disks, and shares.': 'Ajoutez un serveur TrueNAS SCALE/CORE ou Unraid pour surveiller les pools, disques et partages.',
         'Add a host first.': 'Ajoutez d\'abord un hôte.',
         'Add your first host below to start managing remote systems.': 'Ajoutez votre premier hôte ci-dessous pour commencer à gérer les systèmes distants.',
@@ -1482,13 +1482,13 @@ TRANSLATIONS = {
         'CPU': 'CPU',
         'Node': 'Nodo',
         'Proxmox VE': 'Proxmox VE',
-        'Proxmox default: 8006 &nbsp;|&nbsp; Veeam default: 9419': 'Proxmox por defecto: 8006 &nbsp;|&nbsp; Veeam por defecto: 9419',
+        'Proxmox default: 8006 · Veeam default: 9419': 'Proxmox por defecto: 8006 · Veeam por defecto: 9419',
         'RAM': 'RAM',
         'Snapshots': 'Instantáneas',
         'Uptime': 'Tiempo activo',
         'VM / Job': 'VM / Tarea',
         'VMID': 'VMID',
-        'Veeam Backup &amp; Replication 12': 'Veeam Backup &amp; Replication 12',
+        'Veeam Backup & Replication 12': 'Veeam Backup & Replication 12',
 
         # Storage Controller
         'Available Remote Plugins': 'Plugins Remotos Disponibles',
@@ -1496,7 +1496,7 @@ TRANSLATIONS = {
         'Pool': 'Pool',
         'SMB Shares': 'Comparticiones SMB',
         'TrueNAS SCALE / CORE': 'TrueNAS SCALE / CORE',
-        'TrueNAS default: 443 &nbsp;|&nbsp; Unraid default: 80 (HTTP)': 'TrueNAS por defecto: 443 &nbsp;|&nbsp; Unraid por defecto: 80 (HTTP)',
+        'TrueNAS default: 443 · Unraid default: 80 (HTTP)': 'TrueNAS por defecto: 443 · Unraid por defecto: 80 (HTTP)',
         'Unraid 6.12+': 'Unraid 6.12+',
 
         # CheckMK
@@ -1786,7 +1786,7 @@ TRANSLATIONS = {
         'Enable Error Notifications': 'Habilitar notificaciones de errores',
         'Enable Scheduled Reports': 'Habilitar informes programados',
         'Enable Update Notifications': 'Habilitar notificaciones de actualización',
-        'Enable in Update Settings &rarr;': 'Habilitar en configuración de actualizaciones &rarr;',
+        'Enable in Update Settings →': 'Habilitar en configuración de actualizaciones →',
         'End IP': 'IP final',
         'Endpoint': 'Endpoint',
         'Ensure sudo privileges': 'Asegurar privilegios sudo',
@@ -2002,7 +2002,7 @@ TRANSLATIONS = {
         # Messages & Tooltips
         '&#x23F3; Running Update...': '&#x23F3; Ejecutando Actualización...',
         'A button appears automatically behind each disk.': 'Un botón aparece automáticamente detrás de cada disco.',
-        'Add a Proxmox VE or Veeam Backup &amp; Replication server to get started.': 'Añade un servidor Proxmox VE o Veeam Backup &amp; Replication para comenzar.',
+        'Add a Proxmox VE or Veeam Backup & Replication server to get started.': 'Añade un servidor Proxmox VE o Veeam Backup & Replication para comenzar.',
         'Add a TrueNAS SCALE/CORE or Unraid server to monitor pools, disks, and shares.': 'Añade un servidor TrueNAS SCALE/CORE o Unraid para monitorizar pools, discos y comparticiones.',
         'Add a host first.': 'Añade primero un host.',
         'Add your first host below to start managing remote systems.': 'Añade tu primer host abajo para comenzar a gestionar sistemas remotos.',
@@ -2152,13 +2152,13 @@ TRANSLATIONS = {
         'CPU': 'CPU',
         'Node': 'Node',
         'Proxmox VE': 'Proxmox VE',
-        'Proxmox default: 8006 &nbsp;|&nbsp; Veeam default: 9419': 'Proxmox standaard: 8006 &nbsp;|&nbsp; Veeam standaard: 9419',
+        'Proxmox default: 8006 · Veeam default: 9419': 'Proxmox standaard: 8006 · Veeam standaard: 9419',
         'RAM': 'RAM',
         'Snapshots': 'Snapshots',
         'Uptime': 'Uptime',
         'VM / Job': 'VM / Taak',
         'VMID': 'VMID',
-        'Veeam Backup &amp; Replication 12': 'Veeam Backup &amp; Replication 12',
+        'Veeam Backup & Replication 12': 'Veeam Backup & Replication 12',
 
         # Storage Controller
         'Available Remote Plugins': 'Beschikbare Remote Plugins',
@@ -2166,7 +2166,7 @@ TRANSLATIONS = {
         'Pool': 'Pool',
         'SMB Shares': 'SMB Shares',
         'TrueNAS SCALE / CORE': 'TrueNAS SCALE / CORE',
-        'TrueNAS default: 443 &nbsp;|&nbsp; Unraid default: 80 (HTTP)': 'TrueNAS standaard: 443 &nbsp;|&nbsp; Unraid standaard: 80 (HTTP)',
+        'TrueNAS default: 443 · Unraid default: 80 (HTTP)': 'TrueNAS standaard: 443 · Unraid standaard: 80 (HTTP)',
         'Unraid 6.12+': 'Unraid 6.12+',
 
         # CheckMK
@@ -2456,7 +2456,7 @@ TRANSLATIONS = {
         'Enable Error Notifications': 'Foutmeldingen inschakelen',
         'Enable Scheduled Reports': 'Geplande rapporten inschakelen',
         'Enable Update Notifications': 'Update meldingen inschakelen',
-        'Enable in Update Settings &rarr;': 'Inschakelen in update-instellingen &rarr;',
+        'Enable in Update Settings →': 'Inschakelen in update-instellingen →',
         'End IP': 'Eind IP',
         'Endpoint': 'Endpoint',
         'Ensure sudo privileges': 'Zorg voor sudo-rechten',
@@ -2672,7 +2672,7 @@ TRANSLATIONS = {
         # Messages & Tooltips
         '&#x23F3; Running Update...': '&#x23F3; Update wordt uitgevoerd...',
         'A button appears automatically behind each disk.': 'Er verschijnt automatisch een knop achter elke schijf.',
-        'Add a Proxmox VE or Veeam Backup &amp; Replication server to get started.': 'Voeg een Proxmox VE- of Veeam Backup &amp; Replication-server toe om te beginnen.',
+        'Add a Proxmox VE or Veeam Backup & Replication server to get started.': 'Voeg een Proxmox VE- of Veeam Backup & Replication-server toe om te beginnen.',
         'Add a TrueNAS SCALE/CORE or Unraid server to monitor pools, disks, and shares.': 'Voeg een TrueNAS SCALE/CORE- of Unraid-server toe om pools, schijven en shares te monitoren.',
         'Add a host first.': 'Voeg eerst een host toe.',
         'Add your first host below to start managing remote systems.': 'Voeg hieronder je eerste host toe om remote systemen te beheren.',

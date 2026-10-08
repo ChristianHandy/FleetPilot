@@ -175,12 +175,16 @@ ensure_env() {
     grep -q "^${key}=" "$INSTALL_DIR/.env" || echo "${key}=${value}" >> "$INSTALL_DIR/.env"
 }
 ensure_env SECRET_KEY "$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
-ensure_env DASHBOARD_PASSWORD "CHANGE_THIS_AFTER_INSTALL"
+GENERATED_ADMIN_PASSWORD=""
+if ! grep -q "^DASHBOARD_PASSWORD=" "$INSTALL_DIR/.env"; then
+    GENERATED_ADMIN_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_urlsafe(18))')"
+    ensure_env DASHBOARD_PASSWORD "$GENERATED_ADMIN_PASSWORD"
+fi
 ensure_env FLEETPILOT_PRODUCTION "false"
 ensure_env FLEETPILOT_TRUST_PROXY "true"
 ensure_env FLEETPILOT_COOKIE_SECURE "false"
 ensure_env FLEETPILOT_SESSION_MINUTES "480"
-ensure_env WTF_CSRF_ENABLED "false"
+ensure_env WTF_CSRF_ENABLED "true"
 success "Protected runtime configuration prepared"
 
 # Step 11: Create systemd service
@@ -197,6 +201,7 @@ User=$FP_USER
 WorkingDirectory=$INSTALL_DIR
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONPATH=$INSTALL_DIR
+EnvironmentFile=-$INSTALL_DIR/.env
 ExecStart=$INSTALL_DIR/venv/bin/gunicorn --config $INSTALL_DIR/gunicorn.conf.py app:app
 Restart=on-failure
 RestartSec=5
@@ -211,7 +216,16 @@ ProtectSystem=full
 ReadWritePaths=$INSTALL_DIR/data $INSTALL_DIR/logs /etc/haproxy
 PrivateTmp=true
 ProtectHome=true
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 
 [Install]
 WantedBy=multi-user.target
@@ -256,9 +270,14 @@ echo ""
 echo "  🌐 Access FleetPilot at:"
 echo "     http://$PI_IP:$PORT"
 echo ""
-echo "  🔑 Default login:"
+echo "  🔑 Login:"
 echo "     Username: admin"
-echo "     Password: FleetPilot2025"
+if [ -n "$GENERATED_ADMIN_PASSWORD" ]; then
+    echo "     Password: $GENERATED_ADMIN_PASSWORD"
+    echo "     (generated for this install; change it under My Profile after signing in)"
+else
+    echo "     Password: unchanged (DASHBOARD_PASSWORD in $INSTALL_DIR/.env)"
+fi
 echo ""
 echo "  📋 Useful commands:"
 echo "     sudo systemctl status fleetpilot"

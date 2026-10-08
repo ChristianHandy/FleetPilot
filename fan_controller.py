@@ -27,6 +27,7 @@ Package installation:
 import json
 import logging
 import os
+import shlex
 import re
 import sqlite3
 import threading
@@ -38,21 +39,10 @@ import ssh_helper
 logger = logging.getLogger(__name__)
 
 # ── Encryption helpers ────────────────────────────────────────────────────────
-try:
-    from cryptography.fernet import Fernet
-    _SECRET = os.environ.get("SECRET_KEY", "").encode()
-    if len(_SECRET) >= 32:
-        import base64
-        _FKEY = Fernet(base64.urlsafe_b64encode(_SECRET[:32]))
-        def _encrypt(s: str) -> str:
-            return _FKEY.encrypt(s.encode()).decode()
-        def _decrypt(s: str) -> str:
-            return _FKEY.decrypt(s.encode()).decode()
-    else:
-        raise ValueError("key too short")
-except Exception:
-    def _encrypt(s: str) -> str: return s
-    def _decrypt(s: str) -> str: return s
+import secret_box
+_box = secret_box.SecretBox("raw32")
+_encrypt = _box.encrypt
+_decrypt = _box.decrypt
 
 # ── Controller type registry ──────────────────────────────────────────────────
 
@@ -281,8 +271,11 @@ def _ssh_connect(dev: Dict):
     return ssh
 
 
-def _run_remote(ssh, cmd: str, timeout: int = 60) -> Tuple[str, str, int]:
-    _, stdout, stderr = ssh.exec_command(cmd, timeout=timeout)
+def _run_remote(ssh, cmd: str, timeout: int = 60, stdin_data: Optional[str] = None) -> Tuple[str, str, int]:
+    stdin, stdout, stderr = ssh.exec_command(cmd, timeout=timeout)
+    if stdin_data is not None:
+        stdin.write(stdin_data)
+        stdin.channel.shutdown_write()
     out = stdout.read().decode(errors="replace").strip()
     err = stderr.read().decode(errors="replace").strip()
     code = stdout.channel.recv_exit_status()
@@ -569,7 +562,7 @@ def _fetch_ipmi(dev: Dict) -> Dict:
             temp_cmd = "ipmitool sdr type Temperature 2>&1"
         else:
             # Remote IPMI
-            base = f"ipmitool -I lanplus -H {ipmi_host} -U {ipmi_user} -P {ipmi_pass}"
+            base = f"ipmitool -I lanplus -H {shlex.quote(ipmi_host)} -U {shlex.quote(ipmi_user)} -P {shlex.quote(ipmi_pass)}"
             fan_cmd = f"{base} sdr type Fan 2>&1"
             temp_cmd = f"{base} sdr type Temperature 2>&1"
 
@@ -695,7 +688,7 @@ def _fetch_liquidctl(dev: Dict) -> Dict:
         match_str = extra.get("match_str", "")
         use_direct = extra.get("use_direct", False)
 
-        match_arg = f"--match '{match_str}'" if match_str else ""
+        match_arg = f"--match {shlex.quote(match_str)}" if match_str else ""
         direct_arg = "--direct-access" if use_direct else ""
 
         # Initialize
@@ -1117,13 +1110,8 @@ def _fetch_arctic_usb(dev: Dict) -> Dict:
     pump_channels = set(extra_cfg.get("pump_channels", []))
     try:
         ssh = _ssh_connect(dev)
-        # Upload and run the read script
-        script_path = "/tmp/_fp_arctic_read.py"
-        sftp = ssh.open_sftp()
-        with sftp.file(script_path, 'w') as f:
-            f.write(_ARCTIC_READ_SCRIPT)
-        sftp.close()
-        out, err, code = _run_remote(ssh, f"python3 {script_path} 2>&1", timeout=15)
+        # Run the read script from stdin (no file in a shared /tmp)
+        out, err, code = _run_remote(ssh, "python3 - 2>&1", timeout=15, stdin_data=_ARCTIC_READ_SCRIPT)
         result["raw"] = out
 
         method = "unknown"
@@ -1209,17 +1197,12 @@ def _set_fan_arctic_usb(dev: Dict, channel: str, speed, extra: dict) -> Dict:
             result["ok"] = False
             return result
 
-        # Upload and run set script
-        script_path = "/tmp/_fp_arctic_set.py"
-        sftp = ssh.open_sftp()
-        with sftp.file(script_path, 'w') as f:
-            f.write(_ARCTIC_SET_SCRIPT)
-        sftp.close()
-
+        # Run the set script from stdin (no file in a shared /tmp)
         out, err, code = _run_remote(
             ssh,
-            f"python3 {script_path} {ch_num} {speed_pct} 2>&1",
-            timeout=15
+            f"python3 - {int(ch_num)} {int(speed_pct)} 2>&1",
+            timeout=15,
+            stdin_data=_ARCTIC_SET_SCRIPT,
         )
         combined = (out or "") + (err or "")
         result["ok"] = "OK:" in combined
@@ -1268,7 +1251,7 @@ def _set_fan_lm_sensors(dev: Dict, channel: str, speed, extra: dict) -> Dict:
             # Find the pwm node by name
             find_out, _, _ = _run_remote(
                 ssh,
-                f"find /sys/class/hwmon -name '{channel}' 2>/dev/null | head -1",
+                f"find /sys/class/hwmon -name {shlex.quote(channel)} 2>/dev/null | head -1",
                 timeout=10
             )
             pwm_path = find_out.strip() or f"/sys/class/hwmon/hwmon0/{channel}"
@@ -1281,7 +1264,7 @@ def _set_fan_lm_sensors(dev: Dict, channel: str, speed, extra: dict) -> Dict:
 
         out1, err1, c1 = _run_remote(
             ssh,
-            f"echo 1 | {sudo}tee {enable_path} 2>&1",
+            f"echo 1 | {sudo}tee {shlex.quote(enable_path)} 2>&1",
             timeout=10
         )
         # Convert percent to PWM value (0-255)
@@ -1291,7 +1274,7 @@ def _set_fan_lm_sensors(dev: Dict, channel: str, speed, extra: dict) -> Dict:
             pwm_val = 128  # default 50%
         out2, err2, c2 = _run_remote(
             ssh,
-            f"echo {pwm_val} | {sudo}tee {pwm_path} 2>&1",
+            f"echo {pwm_val} | {sudo}tee {shlex.quote(pwm_path)} 2>&1",
             timeout=10
         )
         result["ok"] = (c2 == 0)
@@ -1325,7 +1308,7 @@ def _set_fan_ipmi(dev: Dict, channel: str, speed, extra: dict) -> Dict:
         if ipmi_host == "localhost":
             base = "ipmitool"
         else:
-            base = f"ipmitool -I lanplus -H {ipmi_host} -U {ipmi_user} -P {ipmi_pass}"
+            base = f"ipmitool -I lanplus -H {shlex.quote(ipmi_host)} -U {shlex.quote(ipmi_user)} -P {shlex.quote(ipmi_pass)}"
 
         if "dell" in vendor or "idrac" in vendor:
             # Dell iDRAC: disable auto fan control, set manual speed
@@ -1404,14 +1387,14 @@ def _set_fan_liquidctl(dev: Dict, channel: str, speed, extra: dict) -> Dict:
         match_str = cfg.get("match_str", "")
         use_direct = cfg.get("use_direct", False)
 
-        match_arg = f"--match '{match_str}'" if match_str else ""
+        match_arg = f"--match {shlex.quote(match_str)}" if match_str else ""
         direct_arg = "--direct-access" if use_direct else ""
 
         if isinstance(speed, (int, float)):
-            cmd = f"liquidctl {match_arg} {direct_arg} set {channel} speed {int(speed)} --json 2>&1".strip()
+            cmd = f"liquidctl {match_arg} {direct_arg} set {shlex.quote(str(channel))} speed {int(speed)} --json 2>&1".strip()
         elif isinstance(speed, list):
-            pairs = " ".join(f"{t} {r}" for t, r in speed)
-            cmd = f"liquidctl {match_arg} {direct_arg} set {channel} speed {pairs} --json 2>&1".strip()
+            pairs = " ".join(f"{int(t)} {int(r)}" for t, r in speed)
+            cmd = f"liquidctl {match_arg} {direct_arg} set {shlex.quote(str(channel))} speed {pairs} --json 2>&1".strip()
         else:
             result["message"] = "Invalid speed format"
             return result
@@ -1456,11 +1439,11 @@ def _set_fan_pwm_sysfs(dev: Dict, channel: str, speed, extra: dict) -> Dict:
             pwm_val = 128
 
         # Set to manual mode
-        _run_remote(ssh, f"echo 1 | {sudo}tee {enable_path} 2>&1", timeout=10)
+        _run_remote(ssh, f"echo 1 | {sudo}tee {shlex.quote(enable_path)} 2>&1", timeout=10)
         # Set PWM value
         out, err, code = _run_remote(
             ssh,
-            f"echo {pwm_val} | {sudo}tee {pwm_path} 2>&1",
+            f"echo {pwm_val} | {sudo}tee {shlex.quote(pwm_path)} 2>&1",
             timeout=10
         )
         result["ok"] = (code == 0)

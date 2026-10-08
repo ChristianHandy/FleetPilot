@@ -61,6 +61,9 @@ def test_addon_redirect_authenticated():
             # Login
             with client.session_transaction() as sess:
                 sess['user_id'] = user_id
+                sess['pw_tag'] = __import__('app')._password_tag(user_management.get_user_by_id(user_id))
+                sess['sid'] = __import__('account_security').create_session(user_id, '127.0.0.1', 'pytest')
+                sess['auth_time'] = __import__('time').time()
                 sess['username'] = 'testredruser'
                 sess['login'] = True
             

@@ -5,7 +5,7 @@ Test script for user management functionality
 import sys
 import user_management
 
-def test_user_creation():
+def _check_user_creation():
     """Test creating users with different roles"""
     print("Testing user creation...")
     
@@ -37,7 +37,7 @@ def test_user_creation():
     
     return admin_id, operator_id, viewer_id
 
-def test_password_verification():
+def _check_password_verification():
     """Test password verification"""
     print("\nTesting password verification...")
     
@@ -56,7 +56,7 @@ def test_password_verification():
     assert user_id is None, "Non-existent user was accepted"
     print("  ✓ Non-existent user is rejected")
 
-def test_role_management(admin_id, operator_id, viewer_id):
+def _check_role_management(admin_id, operator_id, viewer_id):
     """Test role assignment and checking"""
     print("\nTesting role management...")
     
@@ -87,7 +87,7 @@ def test_role_management(admin_id, operator_id, viewer_id):
     assert 'operator' not in viewer_roles, "Failed to remove operator role from viewer"
     print(f"  ✓ Successfully removed operator role from viewer: {viewer_roles}")
 
-def test_user_update(admin_id):
+def _check_user_update(admin_id):
     """Test updating user information"""
     print("\nTesting user updates...")
     
@@ -108,7 +108,7 @@ def test_user_update(admin_id):
     # Change password back
     user_management.update_user(admin_id, password='pass123')
 
-def test_user_deactivation(viewer_id):
+def _check_user_deactivation(viewer_id):
     """Test user activation/deactivation"""
     print("\nTesting user deactivation...")
     
@@ -130,7 +130,7 @@ def test_user_deactivation(viewer_id):
     assert user_id == viewer_id, "Reactivated user cannot login"
     print("  ✓ Reactivated user can login")
 
-def test_list_users():
+def _check_list_users():
     """Test listing all users"""
     print("\nTesting user listing...")
     
@@ -164,12 +164,12 @@ def main():
         user_management.init_user_db()
         
         # Run tests
-        admin_id, operator_id, viewer_id = test_user_creation()
-        test_password_verification()
-        test_role_management(admin_id, operator_id, viewer_id)
-        test_user_update(admin_id)
-        test_user_deactivation(viewer_id)
-        test_list_users()
+        admin_id, operator_id, viewer_id = _check_user_creation()
+        _check_password_verification()
+        _check_role_management(admin_id, operator_id, viewer_id)
+        _check_user_update(admin_id)
+        _check_user_deactivation(viewer_id)
+        _check_list_users()
         
         print("\n" + "=" * 60)
         print("✓ All tests passed!")
@@ -187,6 +187,10 @@ def main():
         import traceback
         traceback.print_exc()
         return 1
+
+def test_user_management_suite():
+    assert main() == 0
+
 
 if __name__ == '__main__':
     sys.exit(main())

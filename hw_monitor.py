@@ -12,7 +12,7 @@ New in this version:
 """
 
 import paramiko
-import ssh_helper, threading, time, json, os, re, sqlite3, datetime, uuid
+import ssh_helper, threading, time, json, os, re, shlex, sqlite3, datetime, uuid
 
 # ─── Database ────────────────────────────────────────────────────────────────
 
@@ -28,7 +28,7 @@ def get_db(data_dir=None):
     if _os.path.isdir(path):
         path = _os.path.join(path, "hw_monitor.db")
     _os.makedirs(_os.path.dirname(path), exist_ok=True)
-    conn = sqlite3.connect(path, check_same_thread=False)
+    conn = sqlite3.connect(path, check_same_thread=False, timeout=15)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -161,16 +161,14 @@ def ssh_run(ip, port, user, pw, cmd, timeout=12):
         return False, str(e)
 
 def ssh_run_script(ip, port, user, pw, script_content, timeout=15):
-    remote_path = f"/tmp/_hw_{abs(hash(script_content[:50]))}.py"
     try:
         c = ssh_helper.create_client(
             hostname=ip, port=port, username=user, password=pw,
                   timeout=8, allow_agent=False, look_for_keys=False)
-        sftp = c.open_sftp()
-        with sftp.open(remote_path, 'w') as f:
-            f.write(script_content)
-        sftp.close()
-        _, stdout, _ = c.exec_command(f"python3 {remote_path}; rm -f {remote_path}", timeout=timeout)
+        # Feed the script on stdin so nothing is written to a shared /tmp path.
+        stdin, stdout, _ = c.exec_command("python3 -", timeout=timeout)
+        stdin.write(script_content)
+        stdin.channel.shutdown_write()
         out = stdout.read().decode("utf-8", errors="replace").strip()
         c.close()
         return True, out
@@ -185,7 +183,8 @@ def ssh_run_script(ip, port, user, pw, script_content, timeout=15):
 # - NVIDIA GPU: utilization and memory added
 
 COLLECT_SCRIPT = """\
-import json, os, time, re, subprocess, glob
+import json
+import re, os, time, re, subprocess, glob
 
 d = {}
 # ── CPU Usage ──
@@ -547,8 +546,9 @@ def start_polling():
 
 # ─── Route Registration ───────────────────────────────────────────────────────
 
-def register_routes(app, login_required, csrf=None):
+def register_routes(app, login_required, csrf=None, operator_required=None):
     """Register all HW Monitor routes on the FleetPilot Flask app."""
+    operator_only = operator_required or (lambda f: f)
     from flask import render_template, jsonify, request, redirect, Response
 
     def exempt(f):
@@ -650,6 +650,7 @@ def register_routes(app, login_required, csrf=None):
     @app.route("/api/hw/server/<int:sid>/action", methods=["POST"])
     @login_required
     @exempt
+    @operator_only
     def api_hw_action(sid):
         action = request.json.get("action")
         conn = get_db()
@@ -718,25 +719,33 @@ def register_routes(app, login_required, csrf=None):
     @app.route("/api/hw/server/<int:sid>/fan", methods=["POST"])
     @login_required
     @exempt
+    @operator_only
     def api_hw_set_fan(sid):
-        data = request.json
+        data = request.get_json(silent=True) or {}
         conn = get_db()
         row = conn.execute("SELECT * FROM hw_servers WHERE id=?", (sid,)).fetchone()
         conn.close()
         if not row: return jsonify({"ok": False, "output": "Server not found"})
         s = dict(row)
-        pwm_path = data.get("pwm_path")
-        value_pct = int(data.get("value_pct", 50))
+        pwm_path = str(data.get("pwm_path") or "")
+        # Only hwmon PWM nodes; the path is written to by root on the remote host.
+        if ".." in pwm_path or not re.fullmatch(r"/sys/(class/hwmon|devices)/[A-Za-z0-9_./:-]+/pwm\d+", pwm_path):
+            return jsonify({"ok": False, "output": "Invalid PWM path"}), 400
+        try:
+            value_pct = max(0, min(100, int(data.get("value_pct", 50))))
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "output": "Invalid value"}), 400
         pwm_val = int(value_pct / 100 * 255)
-        enable_path = pwm_path + "_enable"
-        cmd = (f"echo 1 > {enable_path} 2>/dev/null || true; "
-               f"echo {pwm_val} > {pwm_path} && cat {pwm_path}")
+        q_pwm, q_enable = shlex.quote(pwm_path), shlex.quote(pwm_path + "_enable")
+        cmd = (f"echo 1 > {q_enable} 2>/dev/null || true; "
+               f"echo {pwm_val} > {q_pwm} && cat {q_pwm}")
         ok, out = ssh_run(s["ip"], s["ssh_port"], s["ssh_user"], s["ssh_pass"], cmd)
         return jsonify({"ok": ok, "output": out})
 
     @app.route("/api/hw/server/<int:sid>/acknowledge", methods=["POST"])
     @login_required
     @exempt
+    @operator_only
     def api_hw_acknowledge(sid):
         data = request.json or {}
         note = data.get("note", "")
@@ -789,6 +798,7 @@ def register_routes(app, login_required, csrf=None):
     @app.route("/api/hw/tasks/<task_id>/cancel", methods=["POST"])
     @login_required
     @exempt
+    @operator_only
     def api_hw_task_cancel(task_id):
         conn = get_db()
         conn.execute("UPDATE hw_tasks SET status='cancelled',finished_ts=? WHERE id=? AND status='running'",
@@ -799,6 +809,7 @@ def register_routes(app, login_required, csrf=None):
     @app.route("/api/hw/tasks/<task_id>/delete", methods=["POST"])
     @login_required
     @exempt
+    @operator_only
     def api_hw_task_delete(task_id):
         conn = get_db()
         conn.execute("DELETE FROM hw_tasks WHERE id=?", (task_id,))
@@ -808,6 +819,7 @@ def register_routes(app, login_required, csrf=None):
     @app.route("/api/hw/tasks/clear", methods=["POST"])
     @login_required
     @exempt
+    @operator_only
     def api_hw_tasks_clear():
         conn = get_db()
         conn.execute("DELETE FROM hw_tasks WHERE status != 'running'")
@@ -821,6 +833,9 @@ def register_routes(app, login_required, csrf=None):
     @exempt
     def api_hw_servers():
         if request.method == "POST":
+            denied = operator_only(lambda: None)()
+            if denied is not None:
+                return denied
             d = request.json
             conn = get_db()
             conn.execute("INSERT INTO hw_servers (name,ip,ssh_port,ssh_user,ssh_pass) VALUES (?,?,?,?,?)",
@@ -836,6 +851,7 @@ def register_routes(app, login_required, csrf=None):
     @app.route("/api/hw/servers/<int:sid>", methods=["DELETE"])
     @login_required
     @exempt
+    @operator_only
     def api_hw_del_server(sid):
         conn = get_db()
         conn.execute("UPDATE hw_servers SET enabled=0 WHERE id=?", (sid,))

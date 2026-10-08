@@ -18,6 +18,7 @@ Database: DATA_DIR/corsair_commander.db
 import json
 import logging
 import os
+import shlex
 import re
 import sqlite3
 import threading
@@ -29,21 +30,10 @@ import ssh_helper
 logger = logging.getLogger(__name__)
 
 # ── Encryption helpers (same pattern as vm_controller) ───────────────────────
-try:
-    from cryptography.fernet import Fernet
-    _SECRET = os.environ.get("SECRET_KEY", "").encode()
-    if len(_SECRET) >= 32:
-        import base64
-        _FKEY = Fernet(base64.urlsafe_b64encode(_SECRET[:32]))
-        def _encrypt(s: str) -> str:
-            return _FKEY.encrypt(s.encode()).decode()
-        def _decrypt(s: str) -> str:
-            return _FKEY.decrypt(s.encode()).decode()
-    else:
-        raise ValueError("key too short")
-except Exception:
-    def _encrypt(s: str) -> str: return s
-    def _decrypt(s: str) -> str: return s
+import secret_box
+_box = secret_box.SecretBox("raw32")
+_encrypt = _box.encrypt
+_decrypt = _box.decrypt
 
 # ── Module state ─────────────────────────────────────────────────────────────
 _DB_FILE: Optional[Path] = None
@@ -360,11 +350,11 @@ def set_fan_speed(dev: Dict, channel: str, speed) -> Dict:
 
         if isinstance(speed, (int, float)):
             # Fixed duty
-            cmd = f"liquidctl --match '{match}' {direct} set {channel} speed {int(speed)} --json 2>&1"
+            cmd = f"liquidctl --match {shlex.quote(match)} {direct} set {shlex.quote(channel)} speed {int(speed)} --json 2>&1"
         elif isinstance(speed, list):
             # Temperature profile: [(temp, rpm), ...]
-            pairs = " ".join(f"{t} {r}" for t, r in speed)
-            cmd = f"liquidctl --match '{match}' {direct} set {channel} speed {pairs} --json 2>&1"
+            pairs = " ".join(f"{int(t)} {int(r)}" for t, r in speed)
+            cmd = f"liquidctl --match {shlex.quote(match)} {direct} set {shlex.quote(channel)} speed {pairs} --json 2>&1"
         else:
             result["message"] = "Invalid speed format"
             return result

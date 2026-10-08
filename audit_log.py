@@ -97,12 +97,66 @@ def record_event(
         )
 
 
-def list_events(limit: int = 100) -> Iterable[sqlite3.Row]:
+def _filters(actor=None, event_type=None, outcome=None, since=None, search=None):
+    where, args = [], []
+    if actor:
+        where.append("actor = ?")
+        args.append(actor)
+    if event_type:
+        where.append("event_type LIKE ? ESCAPE '\\'")
+        args.append(event_type.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%")
+    if outcome:
+        where.append("outcome = ?")
+        args.append(outcome)
+    if since:
+        where.append("occurred_at >= ?")
+        args.append(since)
+    if search:
+        like = "%" + search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        where.append("(target LIKE ? ESCAPE '\\' OR remote_addr LIKE ? ESCAPE '\\' OR actor LIKE ? ESCAPE '\\')")
+        args += [like, like, like]
+    return (" WHERE " + " AND ".join(where)) if where else "", args
+
+
+def list_events(limit: int = 100, **filters) -> Iterable[sqlite3.Row]:
+    """Newest events first. Filters: actor, event_type (prefix), outcome, since (ISO), search."""
     limit = max(1, min(int(limit), 500))
+    where, args = _filters(**filters)
     with _connect() as db:
         return db.execute(
-            "SELECT * FROM audit_events ORDER BY id DESC LIMIT ?", (limit,)
+            "SELECT * FROM audit_events" + where + " ORDER BY id DESC LIMIT ?", args + [limit]
         ).fetchall()
+
+
+def iter_events(**filters):
+    """Every matching event, oldest first, for export."""
+    where, args = _filters(**filters)
+    with _connect() as db:
+        yield from db.execute("SELECT * FROM audit_events" + where + " ORDER BY id", args)
+
+
+def event_types() -> list[str]:
+    with _connect() as db:
+        return [r[0] for r in db.execute("SELECT DISTINCT event_type FROM audit_events ORDER BY event_type")]
+
+
+def count_events(**filters) -> int:
+    where, args = _filters(**filters)
+    with _connect() as db:
+        return db.execute("SELECT COUNT(*) FROM audit_events" + where, args).fetchone()[0]
+
+
+def prune(retention_days: int) -> int:
+    """Delete events older than ``retention_days``. Returns the number removed."""
+    cutoff = datetime.now(timezone.utc).timestamp() - max(1, int(retention_days)) * 86400
+    cutoff_iso = datetime.fromtimestamp(cutoff, timezone.utc).isoformat(timespec="seconds")
+    with _connect() as db:
+        return db.execute("DELETE FROM audit_events WHERE occurred_at < ?", (cutoff_iso,)).rowcount
+
+
+def iso_hours_ago(hours: float) -> str:
+    return datetime.fromtimestamp(datetime.now(timezone.utc).timestamp() - hours * 3600,
+                                  timezone.utc).isoformat(timespec="seconds")
 
 
 def health() -> dict[str, Any]:

@@ -37,11 +37,14 @@ It combines remote update management, disk health monitoring, VM controller inte
 | **VM Controllers** | Proxmox integration with retry/backoff, VM status overview |
 | **Storage Controllers** | TrueNAS and custom storage system management |
 | **Disk & SMART** | Format (ext4/XFS/FAT32), SMART tests, block validation, history |
-| **CheckMK** | Monitoring integration with token authentication |
+| **Monitoring** | CheckMK integration and a Prometheus `/metrics` endpoint, both token-authenticated |
+| **Alerts** | Email when a disk is newly flagged by SMART, when updates fail, and scheduled reports |
+| **Backups** | One-click and daily automatic backups of FleetPilot's own data, with verified restore |
 | **User Management** | Multi-user RBAC (Admin / Operator / Viewer), profile management |
 | **Plugins** | Extensible addon system with remote plugin repository |
 | **Scheduling** | Automatic updates (daily/weekly/monthly) with email notifications |
 | **i18n** | Interface available in EN, DE, FR, ES, NL |
+| **Accessibility** | WCAG 2.2 AA checked; text size, high contrast, readable font, spacing, reduced motion, and easy language (EN / German Leichte Sprache). See [docs/accessibility.md](docs/accessibility.md) |
 
 ---
 
@@ -200,6 +203,14 @@ Hosts are stored in `hosts.json`. The web UI at `/hosts` lets you add, edit, and
 ## Plugin System
 
 Extend FleetPilot with custom disk tools and integrations via the addon system. Install plugins from the web UI at `/disks/pluginmanager/` or create your own — see [PLUGIN_REPOSITORY.md](PLUGIN_REPOSITORY.md).
+
+---
+
+## Home Assistant Integration
+
+`integrations/home-assistant/` contains a Home Assistant custom component that shows SMART health for disks on your servers as sensors, binary sensors and self-test buttons. It runs inside Home Assistant on its own and reads the same `smartctl` data as FleetPilot's SMART pages. See [its README](integrations/home-assistant/README.md) for installation.
+
+This component was previously the separate `HAOS_SMART_Monitor` repository. The older standalone `Disk_Tools` app is fully covered by FleetPilot's Disk Tools pages (`/disks`).
 
 ---
 

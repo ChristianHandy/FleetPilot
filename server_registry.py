@@ -98,7 +98,7 @@ class ServerRegistry:
 
     def _conn(self) -> sqlite3.Connection:
         if not hasattr(self._local, 'conn') or self._local.conn is None:
-            conn = sqlite3.connect(self._db_path, check_same_thread=False)
+            conn = sqlite3.connect(self._db_path, check_same_thread=False, timeout=15)
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA foreign_keys=ON")
@@ -106,7 +106,7 @@ class ServerRegistry:
         return self._local.conn
 
     def _init_db(self):
-        with sqlite3.connect(self._db_path) as conn:
+        with sqlite3.connect(self._db_path, timeout=15) as conn:
             conn.executescript(self.SCHEMA)
             conn.commit()
 
@@ -302,9 +302,9 @@ class ServerRegistry:
         if not os.path.exists(hw_db_path):
             return 0
         try:
-            conn = sqlite3.connect(hw_db_path)
+            conn = sqlite3.connect(hw_db_path, timeout=15)
             conn.row_factory = sqlite3.Row
-            rows = conn.execute("SELECT * FROM servers").fetchall()
+            rows = [dict(r) for r in conn.execute("SELECT * FROM hw_servers WHERE enabled=1").fetchall()]
             conn.close()
         except Exception as e:
             logger.error(f"[ServerRegistry] Failed to read hw_monitor.db: {e}")
@@ -315,11 +315,9 @@ class ServerRegistry:
             try:
                 sid = self.upsert_server(
                     name=row['name'],
-                    host=row['host'],
-                    port=int(row.get('port') or 22),
-                    user=row.get('username') or row.get('user') or 'root',
-                    password=row.get('password') or '',
-                    ssh_key=row.get('ssh_key') or '',
+                    host=row['ip'],
+                    port=int(row.get('ssh_port') or 22),
+                    user=row.get('ssh_user') or 'root',
                     os_type='linux',
                 )
                 self.register_module(sid, 'hw_monitor', module_id=row['id'])
@@ -335,9 +333,9 @@ class ServerRegistry:
         if not os.path.exists(fan_db_path):
             return 0
         try:
-            conn = sqlite3.connect(fan_db_path)
+            conn = sqlite3.connect(fan_db_path, timeout=15)
             conn.row_factory = sqlite3.Row
-            rows = conn.execute("SELECT * FROM fc_devices").fetchall()
+            rows = [dict(r) for r in conn.execute("SELECT * FROM fc_devices").fetchall()]
             conn.close()
         except Exception as e:
             logger.error(f"[ServerRegistry] Failed to read fan_controller.db: {e}")
@@ -351,8 +349,6 @@ class ServerRegistry:
                     host=row['host'],
                     port=int(row.get('port') or 22),
                     user=row.get('username') or 'root',
-                    password=row.get('password') or '',
-                    ssh_key=row.get('ssh_key') or '',
                     os_type='linux',
                 )
                 self.register_module(sid, 'fan_control', module_id=row['id'])
@@ -368,9 +364,9 @@ class ServerRegistry:
         if not os.path.exists(backup_db_path):
             return 0
         try:
-            conn = sqlite3.connect(backup_db_path)
+            conn = sqlite3.connect(backup_db_path, timeout=15)
             conn.row_factory = sqlite3.Row
-            rows = conn.execute("SELECT * FROM bc_servers").fetchall()
+            rows = [dict(r) for r in conn.execute("SELECT * FROM backup_servers WHERE enabled=1").fetchall()]
             conn.close()
         except Exception as e:
             logger.error(f"[ServerRegistry] Failed to read backup_controller.db: {e}")
@@ -386,10 +382,6 @@ class ServerRegistry:
                 sid = self.upsert_server(
                     name=row['name'],
                     host=host,
-                    port=int(row.get('port') or 22),
-                    user=row.get('username') or row.get('user') or 'root',
-                    password=row.get('password') or '',
-                    ssh_key=row.get('ssh_key') or '',
                     os_type='linux',
                 )
                 self.register_module(sid, 'backup', module_id=row['id'])

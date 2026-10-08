@@ -250,11 +250,10 @@ def perform_self_update(preserve_configs=True):
             "smart.db"
         ]
         
-        backup_dir = "/tmp/dashboard_backup_" + str(int(time.time()))
+        import tempfile
+        backup_dir = tempfile.mkdtemp(prefix="dashboard_backup_") if preserve_configs else None  # 0700
         
         if preserve_configs:
-            # Create backup directory
-            os.makedirs(backup_dir, exist_ok=True)
             
             # Backup configuration files
             for filename in preserve_files:

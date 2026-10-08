@@ -5,8 +5,9 @@ Optimised for a typical home-lab / small-enterprise server.
 import multiprocessing, os
 
 # ── Binding ───────────────────────────────────────────────────────────────────
-# Respect the SERVER_IP env var set in /opt/fleetpilot/.env, fallback to 0.0.0.0
-_server_ip = os.environ.get("SERVER_IP", "0.0.0.0")
+# Respect the SERVER_IP env var set in /opt/fleetpilot/.env. Without it, listen on
+# loopback only; put Nginx/HAProxy in front or set SERVER_IP to expose FleetPilot.
+_server_ip = os.environ.get("SERVER_IP", "127.0.0.1")
 _app_port  = os.environ.get("APP_PORT", "5000")
 bind        = os.environ.get("GUNICORN_BIND", f"{_server_ip}:{_app_port}")
 backlog     = 2048
@@ -15,7 +16,7 @@ backlog     = 2048
 # FleetPilot starts polling and scheduling threads during application startup.
 # A single worker avoids duplicate pollers and SQLite writers. Threads keep
 # request handling responsive on the Raspberry Pi.
-workers     = int(os.environ.get("GUNICORN_WORKERS", "1"))
+workers     = 1                # see note above; more workers would duplicate every poller
 worker_class = "gthread"
 threads     = int(os.environ.get("GUNICORN_THREADS", "4"))
 worker_connections = 1000
@@ -38,6 +39,13 @@ default_proc_name = "fleetpilot"
 
 # ── Performance tweaks ────────────────────────────────────────────────────────
 preload_app  = False           # do not fork after scheduler/polling threads initialise
-max_requests = 1000            # recycle workers to prevent memory leaks
-max_requests_jitter = 100      # randomise recycling to avoid thundering herd
+# Never recycle the worker: FleetPilot runs one worker whose background threads
+# (pollers, Disk Tools wipes/formats, auto mode, backups) must not be killed
+# mid-task, and login throttling lives in memory.
+max_requests = 0
 sendfile     = True            # use OS sendfile() for static files
+
+# ── Request limits ────────────────────────────────────────────────────────────
+limit_request_line   = 8190
+limit_request_fields = 100
+limit_request_field_size = 8190

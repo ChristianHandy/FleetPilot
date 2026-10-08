@@ -23,6 +23,7 @@ import json
 import logging
 import os
 import re
+import shlex
 import sqlite3
 import threading
 import time
@@ -38,21 +39,10 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logger = logging.getLogger(__name__)
 
 # ── Encryption helpers ────────────────────────────────────────────────────────
-try:
-    from cryptography.fernet import Fernet
-    _SECRET = os.environ.get("SECRET_KEY", "").encode()
-    if len(_SECRET) >= 32:
-        import base64
-        _FKEY = Fernet(base64.urlsafe_b64encode(_SECRET[:32]))
-        def _encrypt(s: str) -> str:
-            return _FKEY.encrypt(s.encode()).decode()
-        def _decrypt(s: str) -> str:
-            return _FKEY.decrypt(s.encode()).decode()
-    else:
-        raise ValueError("key too short")
-except Exception:
-    def _encrypt(s: str) -> str: return s
-    def _decrypt(s: str) -> str: return s
+import secret_box
+_box = secret_box.SecretBox("raw32")
+_encrypt = _box.encrypt
+_decrypt = _box.decrypt
 
 # ── Server type registry ──────────────────────────────────────────────────────
 
@@ -138,7 +128,7 @@ def _ssh_run(host: str, port: int, username: str, password: str,
     try:
         key_filename = None
         if ssh_key:
-            import io, tempfile, os
+            import tempfile
             tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.pem', delete=False)
             tmp.write(ssh_key)
             tmp.close()
@@ -171,7 +161,7 @@ def init_db(data_dir: str) -> None:
     global _DB_PATH
     _DB_PATH = Path(data_dir) / "backup_controller.db"
     with _db_lock:
-        conn = sqlite3.connect(str(_DB_PATH))
+        conn = sqlite3.connect(str(_DB_PATH), timeout=15)
         c = conn.cursor()
         c.executescript("""
             CREATE TABLE IF NOT EXISTS backup_servers (
@@ -250,7 +240,7 @@ def init_db(data_dir: str) -> None:
 
 
 def _db() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(_DB_PATH))
+    conn = sqlite3.connect(str(_DB_PATH), timeout=15)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -1068,11 +1058,17 @@ def test_connection(server_id: int) -> Dict:
 
 # ── Trigger backup ────────────────────────────────────────────────────────────
 
+_JOB_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
+
+
 def trigger_backup(server_id: int, job_id: str = "") -> Dict:
     """Trigger a backup job on the server."""
     srv = get_server(server_id)
     if not srv:
         return {"ok": False, "error": "Server not found"}
+    # Job IDs reach a remote shell (bconsole) and API paths, so only allow plain identifiers.
+    if not _JOB_ID_RE.fullmatch(job_id or ""):
+        return {"ok": False, "error": "Invalid job ID"}
     stype = srv["server_type"]
     if stype == "duplicati":
         return trigger_duplicati_backup(srv, job_id)
@@ -1084,8 +1080,8 @@ def trigger_backup(server_id: int, job_id: str = "") -> Dict:
             return {"ok": r.ok, "message": r.text[:200]}
         except Exception as e:
             return {"ok": False, "error": str(e)}
-    elif stype in ("bacula", "ssh_generic"):
-        cmd = f"echo -e 'run job={job_id} yes\\nquit' | bconsole 2>&1" if stype == "bacula" else job_id
+    elif stype == "bacula":
+        cmd = f"printf 'run job=%s yes\\nquit\\n' {shlex.quote(job_id)} | bconsole 2>&1"
         rc, out, err = _ssh_run(
             srv["host"], srv["port"], srv.get("username", "root"),
             srv.get("password", ""), srv.get("ssh_key", ""), cmd, timeout=30

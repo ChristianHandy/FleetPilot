@@ -48,7 +48,14 @@ FleetPilot implements the following security controls by default:
 | **Command injection prevention** | Device names, plugin identifiers, and filesystem types are strictly validated against allowlists before being passed to system commands |
 | **Secure file transfer** | SSH key installation uses SFTP rather than shell execution |
 | **Template injection protection** | Plugin names are validated (alphanumeric and underscores only) before template rendering |
-| **Security headers** | `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `X-XSS-Protection: 1; mode=block`, `Strict-Transport-Security` |
+| **Security headers** | Content-Security-Policy without `unsafe-eval` and with `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `nosniff`, `Cross-Origin-Opener-Policy`, `Strict-Transport-Security` on HTTPS |
+| **Server-side sessions** | Each sign-in has a server record; sessions can be listed and ended per device, end after an idle timeout, and end when the password changes or the account is disabled |
+| **Password confirmation** | User management, backups, API token creation and security settings ask for the password again after a configurable time |
+| **Two-factor sign-in** | TOTP, YubiKey OTP and WebAuthn security keys; admins can be required to use 2FA |
+| **API tokens** | Per-user, hashed, expiring, read-only or read/write; accepted only on `/api/` and never turned into browser sessions |
+| **Login throttling** | Per-address and per-account limits; lockouts are audited and can be pushed to a notification channel |
+| **Network allowlist** | Optional list of allowed networks; FleetPilot refuses a list that would lock out the admin saving it |
+| **Audit trail** | Sign-ins and state-changing requests, filterable and exportable as CSV (formula-safe), with a retention period |
 | **Debug mode off by default** | Flask debug mode is disabled unless `FLASK_DEBUG=true` is explicitly set |
 
 ---
@@ -113,6 +120,10 @@ FleetPilot is an administrative tool and must not be reachable from the public i
 - Require a **VPN connection** (e.g., WireGuard, Tailscale) to reach the management interface.
 - Use firewall rules (`ufw`, `iptables`, or a network-level ACL) to allow access only from trusted management hosts or subnets.
 
+FleetPilot can also enforce this itself: **System → Security center → Allowed networks** accepts addresses and CIDR
+ranges. The server itself and the public status page are always reachable. Behind a reverse proxy, set
+`FLEETPILOT_TRUST_PROXY=true` so FleetPilot sees real client addresses.
+
 ### 4. Use a Production WSGI Server
 
 Flask's built-in development server is single-threaded, not hardened, and not suitable for production. Use **Gunicorn** or **uWSGI** instead:
@@ -148,11 +159,10 @@ The following security gaps are acknowledged. Contributions to address them are 
 
 | Limitation | Risk | Recommended Mitigation |
 |---|---|---|
-| **No CSRF protection** | State-changing requests can be forged from malicious pages | Add [Flask-WTF](https://flask-wtf.readthedocs.io/) for CSRF token validation |
-| **No login rate limiting** | Brute-force attacks against the login endpoint are possible | Add [Flask-Limiter](https://flask-limiter.readthedocs.io/) to throttle login attempts |
 | **SSH `AutoAddPolicy`** | Vulnerable to MitM attacks on first connection | Pre-populate `known_hosts` and switch to `RejectPolicy` (see above) |
-| **No audit log** | Destructive operations (disk format, remote update) are not logged to a tamper-evident store | Implement structured logging with a write-once audit trail |
-| **Session cookie flags** | Cookies lack `Secure` flag by default | Set `SESSION_COOKIE_SECURE=true` when deploying behind HTTPS |
+| **Inline scripts in templates** | The CSP must allow `'unsafe-inline'` scripts, so it limits but does not stop injected scripts | Templates escape all remote data; moving scripts to files would allow a nonce-based CSP |
+| **In-memory login throttling** | Counters reset when FleetPilot restarts and are per worker | Also rate-limit at the reverse proxy, or use fail2ban on the audit log |
+| **Session cookie flags** | Cookies lack `Secure` flag on plain HTTP | Run behind HTTPS; the Security center flags plain HTTP |
 
 ---
 
@@ -174,6 +184,9 @@ Before going live, verify each of the following:
 - [ ] Dependency updates are scheduled regularly
 - [ ] Backups of `hosts.json`, `users.db`, and `update_settings.json` are configured
 - [ ] Monitoring and alerting are configured for the host system
+- [ ] **System → Security center** shows no red checks
+- [ ] Every administrator uses two-factor sign-in, and "Require 2FA for administrators" is on
+- [ ] A notification channel receives security events (lockouts, new admins)
 
 ---
 

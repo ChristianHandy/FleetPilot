@@ -1,9 +1,9 @@
-import os, json, csv, sqlite3, subprocess, threading, re
+import os, json, csv, sqlite3, shutil, subprocess, threading, re
 from datetime import datetime
 from pathlib import Path
 
 # Globale Pfade und Variablen
-DB_FILE = Path(__file__).with_suffix('.db')
+DB_FILE = None  # set by init_db(data_dir); see _migrate_legacy_db()
 UPLOAD_DIR = Path(__file__).parent / 'uploads'
 UPLOAD_DIR.mkdir(exist_ok=True)
 auto_enabled = False
@@ -24,12 +24,31 @@ def sanitize_device_name(device):
 
 def get_db():
     """Stellt eine DB-Verbindung her und liefert das Connection-Objekt zurück."""
-    conn = sqlite3.connect(DB_FILE)
+    conn = sqlite3.connect(DB_FILE, timeout=15)
     conn.row_factory = sqlite3.Row
     return conn
 
-def init_db():
+def _migrate_legacy_db(new_path):
+    """One-time migration from the old repo-root DB location (previously
+    Path(__file__).with_suffix('.db'), i.e. disktool_core.db next to this
+    .py file) into DATA_DIR, so already-tracked disks survive the upgrade."""
+    legacy_path = Path(__file__).with_suffix('.db')
+    try:
+        if legacy_path.exists() and str(legacy_path) != str(new_path) and not Path(new_path).exists():
+            Path(new_path).parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(legacy_path), str(new_path))
+    except Exception:
+        pass
+
+def init_db(data_dir=None):
     """Initialisiert die SQLite-Datenbank und erforderliche Tabellen, falls noch nicht vorhanden."""
+    global DB_FILE
+    if data_dir:
+        DB_FILE = str(Path(data_dir) / "disktool_core.db")
+        _migrate_legacy_db(DB_FILE)
+    elif DB_FILE is None:
+        DB_FILE = str(Path(__file__).with_suffix('.db'))
+
     with get_db() as db:
         db.executescript("""
         CREATE TABLE IF NOT EXISTS disks(
@@ -201,8 +220,11 @@ def sync_disks():
     # Falls Auto-Format/SMART aktiviert ist, entsprechende Tasks starten
     if auto_enabled:
         for dev in new_devices:
-            start_format(dev, 'ext4')
-            start_smart(dev, 'short')
+            try:
+                start_format(dev, 'ext4', 'quick')
+                start_smart(dev, 'short')
+            except Exception as exc:  # protected or vanished disk: log and keep going
+                log_op(dev, 'AUTO_MODE_SKIPPED', f'Auto mode did not process /dev/{dev}: {exc}')
 
 # --- Operations-Logging in DB ---
 def log_op(device, action, details='Task queued on the FleetPilot server.'):
@@ -570,9 +592,37 @@ def stop_task(op_id):
         db.execute("UPDATE operations SET status='STOPPED' WHERE id=?", (op_id,))
 
 # Hintergrund-Thread Funktion für Auto-Sync
+def set_auto_mode(enabled):
+    """Turn auto mode on or off.
+
+    Disks already attached when auto mode is switched on are recorded first,
+    so only disks plugged in afterwards are formatted.
+    """
+    global auto_enabled
+    if enabled and not auto_enabled:
+        sync_disks()  # baseline while auto mode is still off
+    auto_enabled = bool(enabled)
+    return auto_enabled
+
+
 def auto_mode_worker():
     import time
     while True:
         time.sleep(10)  # alle 10 Sekunden prüfen
         if auto_enabled:
-            sync_disks()
+            try:
+                sync_disks()
+            except Exception as exc:
+                print(f'[DiskTools] auto mode sync failed: {exc}')
+
+
+_auto_worker_started = False
+
+
+def start_auto_mode_worker():
+    """Start the background auto-mode thread once per process."""
+    global _auto_worker_started
+    if _auto_worker_started:
+        return
+    _auto_worker_started = True
+    threading.Thread(target=auto_mode_worker, daemon=True, name='disktools-auto-mode').start()

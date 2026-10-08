@@ -13,6 +13,7 @@ All connections are stored in the SQLite database (storage_controller.db).
 import os
 import json
 import sqlite3
+import shutil
 import logging
 import urllib.request
 import urllib.error
@@ -24,37 +25,44 @@ from typing import Optional, Dict, List, Any
 
 logger = logging.getLogger("fleetpilot.storage_controller")
 
-DB_FILE = Path(__file__).parent / "storage_controller.db"
+DB_FILE = None  # set by init_db(data_dir); see migration note there
 
 # ── Encryption (same pattern as vm_controller) ────────────────────────────────
-try:
-    from cryptography.fernet import Fernet
-    import base64 as _b64
-    import hashlib as _hashlib
-    # Use SHA256 of SECRET_KEY — consistent with app.py and all other controllers
-    _secret = os.environ.get("SECRET_KEY", "")
-    _fernet = Fernet(_b64.urlsafe_b64encode(_hashlib.sha256(_secret.encode()).digest()))
-    def _encrypt(s: str) -> str:
-        return _fernet.encrypt(s.encode()).decode()
-    def _decrypt(s: str) -> str:
-        return _fernet.decrypt(s.encode()).decode()
-except Exception:
-    import base64 as _b64
-    def _encrypt(s: str) -> str:
-        return _b64.b64encode(s.encode()).decode()
-    def _decrypt(s: str) -> str:
-        return _b64.b64decode(s.encode()).decode()
+import secret_box
+_box = secret_box.SecretBox("sha256")
+_encrypt = _box.encrypt
+_decrypt = _box.decrypt
 
 
 # ── Database ──────────────────────────────────────────────────────────────────
 
 def get_db():
-    conn = sqlite3.connect(str(DB_FILE))
+    conn = sqlite3.connect(str(DB_FILE), timeout=15)
     conn.row_factory = sqlite3.Row
     return conn
 
 
-def init_db():
+def _migrate_legacy_db(new_path: Path):
+    """One-time migration from the old repo-root DB location. See
+    smart_manager.py's version of this helper for the full rationale."""
+    legacy_path = Path(__file__).parent / "storage_controller.db"
+    try:
+        if legacy_path.exists() and legacy_path != new_path and not new_path.exists():
+            new_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(legacy_path), str(new_path))
+            logger.info("Migrated storage_controller.db from repo root to %s", new_path)
+    except Exception as e:
+        logger.warning("Could not migrate legacy storage_controller.db: %s", e)
+
+
+def init_db(data_dir=None):
+    global DB_FILE
+    if data_dir:
+        DB_FILE = Path(data_dir) / "storage_controller.db"
+        _migrate_legacy_db(DB_FILE)
+    elif DB_FILE is None:
+        DB_FILE = Path(__file__).parent / "storage_controller.db"
+
     with get_db() as db:
         db.executescript("""
         CREATE TABLE IF NOT EXISTS storage_endpoints (

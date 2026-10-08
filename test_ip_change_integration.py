@@ -37,11 +37,11 @@ class TestIpChangeDetectionIntegration(unittest.TestCase):
         def test_load_hosts():
             try:
                 with open(self.temp_hosts_path, 'r') as f:
-                    return json.load(f)
+                    return {n: app.normalize_host(d) for n, d in json.load(f).items()}
             except (FileNotFoundError, json.JSONDecodeError):
                 return {}
         
-        def test_save_hosts(hosts):
+        def test_save_hosts(hosts, **_kwargs):
             with open(self.temp_hosts_path, 'w') as f:
                 json.dump(hosts, f)
         
@@ -52,16 +52,26 @@ class TestIpChangeDetectionIntegration(unittest.TestCase):
         test_save_hosts({})
         
         # Log in for tests
+        import user_management
+        user_management.init_user_db()
+        existing = user_management.get_user('ipchange_admin')
+        user_id = existing['id'] if existing else user_management.create_user(
+            'ipchange_admin', 'ipchange-test-pass', None, ['admin'])
         with self.client.session_transaction() as sess:
+            sess['user_id'] = user_id
+            sess['pw_tag'] = __import__('app')._password_tag(user_management.get_user_by_id(user_id))
+            sess['sid'] = __import__('account_security').create_session(user_id, '127.0.0.1', 'pytest')
+            sess['auth_time'] = __import__('time').time()
+            sess['username'] = 'ipchange_admin'
             sess['login'] = True
-            sess['username'] = 'test'
     
     def tearDown(self):
         """Clean up temporary files"""
         os.close(self.temp_hosts_fd)
         os.unlink(self.temp_hosts_path)
         
-        # Restore original functions
+        # Restore original functions and CSRF setting
+        app.app.config['WTF_CSRF_ENABLED'] = True
         app.load_hosts = self.original_load_hosts
         app.save_hosts = self.original_save_hosts
     

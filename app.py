@@ -1,15 +1,24 @@
-from flask import Flask, render_template, redirect, session, request, flash, jsonify, send_file, url_for, make_response
+import runtime_env  # must stay first: loads .env and SECRET_KEY before other modules
+from flask import Flask, render_template, redirect, session, request, flash, jsonify, send_file, url_for, make_response, abort
 from markupsafe import escape as html_escape
 import re, time as _time
 from collections import defaultdict
 from i18n import get_translator, SUPPORTED_LANGUAGES
-import json, threading, paramiko, os, secrets
+import json, threading, paramiko, os, secrets, hmac
+import requests
+import sqlite3
 import audit_log
 import fleetpilot_version
 import production_runtime
 import proxy_manager
 import host_discovery
 import ssh_helper
+import ui_icons
+import metrics
+import easy_language
+import config_backup
+import account_security
+import notify
 from updater import run_update
 import scheduler
 import disktool_core
@@ -46,12 +55,6 @@ try:
 except Exception as _2fa_err:
     _2FA_AVAILABLE = False
     print(f'[2FA] Module not available: {_2fa_err}')
-# Load environment variables from .env file if python-dotenv is available
-try:
-    from dotenv import load_dotenv
-    load_dotenv('/opt/fleetpilot/.env', override=True)
-except ImportError:
-    pass  # python-dotenv is optional
 
 # ── Persistent Data Directory ───────────────────────────────────────────────────
 # All mutable data files (hosts.json, history.json, etc.) are stored in DATA_DIR.
@@ -64,10 +67,63 @@ proxy_manager.configure(DATA_DIR)
 ssh_helper.init(DATA_DIR)
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
+_AUTO_BACKUP = os.environ.get('FLEETPILOT_AUTO_BACKUP', 'true').lower() not in ('false', '0', 'no', 'off')
+_BACKUP_KEEP = max(1, int(os.environ.get('FLEETPILOT_BACKUP_KEEP', '7') or 7))
+_BACKUP_HOUR = max(0, min(23, int(os.environ.get('FLEETPILOT_BACKUP_HOUR', '3') or 3)))
+ui_icons.register(app)
 # Security: Use environment variables for credentials, generate secure secret key.
 # Production setup generates and protects SECRET_KEY in /opt/fleetpilot/.env.
 app.secret_key = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
 PRODUCTION_STATUS = production_runtime.configure_app(app)
+
+# ── API tokens and IP allowlist ───────────────────────────────────────────────
+# A request to /api/ carrying "Authorization: Bearer fp_..." is authenticated by
+# that personal token alone. It gets a throwaway session that is never written
+# back as a cookie, so tokens cannot be turned into browser sessions.
+from flask.sessions import SecureCookieSession as _SecureCookieSession
+
+
+class _TokenSession(_SecureCookieSession):
+    pass
+
+
+class _TokenAwareSessionInterface(type(app.session_interface)):
+    def open_session(self, app_, req):
+        auth = req.headers.get('Authorization', '')
+        if req.path.startswith('/api/') and auth.startswith('Bearer ' + account_security.TOKEN_PREFIX):
+            sess = _TokenSession()
+            token = account_security.verify_token(auth[7:].strip(), req.remote_addr or '')
+            if token:
+                sess.update(user_id=token['user_id'], username=token['username'],
+                            api_token_id=token['id'], api_scope=token['scope'])
+            sess.modified = False
+            return sess
+        return super().open_session(app_, req)
+
+    def save_session(self, app_, sess, response):
+        if isinstance(sess, _TokenSession):
+            return None
+        return super().save_session(app_, sess, response)
+
+
+app.session_interface = _TokenAwareSessionInterface()
+
+# Paths that stay reachable from any address: the public status page and static files.
+_ALLOWLIST_EXEMPT = ('/static/', '/status')
+
+
+@app.before_request
+def _enforce_ip_allowlist():
+    if request.path.startswith(_ALLOWLIST_EXEMPT):
+        return None
+    if not account_security.ip_allowed(request.remote_addr or ''):
+        return ('FleetPilot is not available from this network address.', 403,
+                {'Content-Type': 'text/plain; charset=utf-8'})
+    if session.get('api_token_id') and session.get('api_scope') != 'write' \
+            and request.method not in ('GET', 'HEAD', 'OPTIONS'):
+        return jsonify({'error': 'This API token is read-only.'}), 403
+    return None
+
 
 # ── Flask-Compress: Gzip response compression ───────────────────────────────────────
 try:
@@ -84,56 +140,97 @@ except ImportError:
     pass
 
 # ── Brute-Force Rate Limiting (in-process, no Redis required) ─────────────────
-_login_attempts = defaultdict(list)   # ip -> [timestamp, ...]
-_LOGIN_MAX       = 10                  # max failed attempts per window
-_LOGIN_WINDOW    = 60                  # window in seconds
+# Two buckets: per client address (stops one source hammering many accounts) and
+# per account (stops many sources hammering one account, and keeps one noisy
+# address behind a shared proxy from locking everybody else out).
+_login_attempts = defaultdict(list)   # key -> [timestamp, ...]
+_login_lock = threading.Lock()
+_LIMITS = {'ip': (20, 60), 'user': (10, 600)}   # max failures, window seconds
 
-def _check_rate_limit(ip):
-    """Returns True if IP is allowed, False if rate-limited."""
+
+def _attempt_keys(ip, username=None):
+    keys = [('ip', ip)]
+    if username:
+        keys.append(('user', username.strip().lower()))
+    return keys
+
+
+def _check_rate_limit(ip, username=None):
+    """Return True if neither the address nor the account is currently throttled."""
     now = _time.time()
-    attempts = [t for t in _login_attempts[ip] if now - t < _LOGIN_WINDOW]
-    _login_attempts[ip] = attempts
-    return len(attempts) < _LOGIN_MAX
+    with _login_lock:
+        for kind, value in _attempt_keys(ip, username):
+            limit, window = _LIMITS[kind]
+            key = f'{kind}:{value}'
+            recent = [t for t in _login_attempts.get(key, []) if now - t < window]
+            if recent:
+                _login_attempts[key] = recent
+            else:
+                _login_attempts.pop(key, None)
+            if len(recent) >= limit:
+                return False
+    return True
 
-def _record_failed_login(ip):
-    _login_attempts[ip].append(_time.time())
 
-def _clear_login_attempts(ip):
-    _login_attempts.pop(ip, None)
+def _record_failed_login(ip, username=None):
+    now = _time.time()
+    locked = []
+    with _login_lock:
+        if len(_login_attempts) > 10000:   # bound memory under a distributed attack
+            _login_attempts.clear()
+        for kind, value in _attempt_keys(ip, username):
+            attempts = _login_attempts[f'{kind}:{value}']
+            attempts.append(now)
+            if len(attempts) == _LIMITS[kind][0]:
+                locked.append((kind, value))
+    for kind, value in locked:
+        # Report each lockout once, when the limit is first reached.
+        what = f'account "{value}"' if kind == 'user' else f'address {value}'
+        try:
+            audit_log.record_event(actor_id=None, actor=username or '-', event_type='login_locked',
+                                   target=f'{kind}:{value}', outcome='failure', remote_addr=ip)
+        except Exception:
+            pass
+        notify.send('security', 'FleetPilot: sign-in locked',
+                    f'Too many failed sign-ins for {what} (last attempt from {ip}). '
+                    f'Further attempts are blocked for {_LIMITS[kind][1] // 60} minutes.', 'warning')
+
+
+def _clear_login_attempts(ip, username=None):
+    with _login_lock:
+        for kind, value in _attempt_keys(ip, username):
+            _login_attempts.pop(f'{kind}:{value}', None)
 
 # ── CSRF Protection ────────────────────────────────────────────────────────────
-_CSRF_ENABLED = os.environ.get('WTF_CSRF_ENABLED', 'false').lower() not in ('false', '0', 'no', 'off')
+# On by default. WTF_CSRF_ENABLED=false is meant for local debugging only.
+_CSRF_ENABLED = os.environ.get('WTF_CSRF_ENABLED', 'true').lower() not in ('false', '0', 'no', 'off')
+# Token-authenticated machine endpoints and harmless UI preferences. Browser
+# fetch() calls get the token automatically from base.html.
+_CSRF_EXEMPT_PREFIXES = ('/api/sync/', '/api/checkmk/', '/metrics', '/set_language', '/set_theme')
+_csrf = None
 try:
     from flask_wtf.csrf import CSRFProtect as _CSRFProtect, generate_csrf as _gen_csrf, CSRFError
-    if _CSRF_ENABLED:
-        _csrf = _CSRFProtect(app)
-    else:
-        _csrf = None
-        raise ImportError('CSRF disabled via WTF_CSRF_ENABLED=false')
+except ImportError:
+    _CSRFProtect = None
+    print('WARNING: Flask-WTF is not installed; CSRF protection is unavailable.')
+
+if _CSRF_ENABLED and _CSRFProtect is not None:
     app.config['WTF_CSRF_TIME_LIMIT'] = 3600
-
-    # Exempt pure JSON/API and SSE-stream endpoints from CSRF
-    _CSRF_EXEMPT_PREFIXES = ('/api/', '/progress/', '/disks/stream', '/smart/stream',
-                              '/set_language', '/set_theme')
-    _CSRF_EXEMPT_SUFFIXES = ('/set_fan', '/test', '/refresh')
-
-    @_csrf.exempt
-    def _csrf_exempt_check():
-        pass
+    # Checked per request below, so exemptions never flip a shared app setting.
+    app.config['WTF_CSRF_CHECK_DEFAULT'] = False
+    _csrf = _CSRFProtect(app)
 
     @app.before_request
-    def _maybe_exempt_csrf():
-        """Exempt API, streaming and UI-helper routes from CSRF validation."""
-        if any(request.path.startswith(p) for p in _CSRF_EXEMPT_PREFIXES) or any(request.path.endswith(s) for s in _CSRF_EXEMPT_SUFFIXES):
-            # Disable CSRF check for this request by setting the flag Flask-WTF reads
-            app.config['WTF_CSRF_ENABLED'] = False
-
-    @app.after_request
-    def _re_enable_csrf(response):
-        """Re-enable CSRF after each request so only exempt routes skip it."""
-        if _CSRF_ENABLED:
-            app.config['WTF_CSRF_ENABLED'] = True
-        return response
+    def _csrf_check():
+        if request.method in ('GET', 'HEAD', 'OPTIONS', 'TRACE'):
+            return
+        if not app.config.get('WTF_CSRF_ENABLED', True):
+            return
+        if request.path.startswith(_CSRF_EXEMPT_PREFIXES):
+            return
+        if isinstance(session._get_current_object(), _TokenSession):
+            return  # bearer-token request: no cookie, so no cross-site forgery
+        _csrf.protect()
 
     @app.errorhandler(CSRFError)
     def handle_csrf_error(e):
@@ -143,35 +240,28 @@ try:
             _record_failed_login(ip)
             if not _check_rate_limit(ip):
                 flash('Too many failed login attempts. Please wait 60 seconds.')
-                _next_raw = request.args.get('next', '/index')
-                if not _next_raw.startswith('/') or '//' in _next_raw:
-                    _next_raw = '/index'
-                return render_template('login.html', next=_next_raw, rate_limited=True), 429
+                return render_template('login.html', next='/index', rate_limited=True), 429
             flash('Security token expired or missing. Please try again.')
             return redirect(url_for('login'))
-        return jsonify({'error': 'CSRF token missing or invalid', 'detail': str(e)}), 400
+        if request.path.startswith('/api/') or request.is_json:
+            return jsonify({'error': 'CSRF token missing or invalid'}), 400
+        flash('Your form expired. Please try again.', 'error')
+        return redirect(request.referrer if request.referrer and request.referrer.startswith(request.host_url) else url_for('index'))
 
     @app.context_processor
     def _inject_csrf():
         return dict(csrf_token=_gen_csrf)
-except ImportError:
-    _csrf = None
-
-# Fallback context processor when CSRF is disabled
-@app.context_processor
-def _inject_csrf_fallback():
-    if _csrf is None:
-        return dict(csrf_token=lambda: '')
-    return {}
-# Safe CSRF exempt decorator - works even when CSRF is disabled
-def _csrf_exempt_safe(f):
-    if _csrf is not None:
-        return _csrf.exempt(f)
-    return f
+else:
+    print('WARNING: CSRF protection is disabled (WTF_CSRF_ENABLED=false).')
 
     @app.context_processor
-    def _inject_csrf():
+    def _inject_csrf_fallback():
         return dict(csrf_token=lambda: '')
+
+
+def _csrf_exempt_safe(f):
+    """Kept for existing call sites; every browser POST is now CSRF-checked."""
+    return f
 
 # ── Input sanitisation helpers ───────────────────────────────────────────────────
 _DANGEROUS_PROTO = re.compile(r'^\s*(javascript|vbscript|data):', re.IGNORECASE)
@@ -263,13 +353,22 @@ addon_mgr.load_addons()
 with app.app_context():
     user_management.init_user_db()
     audit_log.init_db()
+    account_security.init_db()
+    try:
+        audit_log.prune(account_security.get_settings()['audit_retention_days'])
+    except Exception as _prune_err:
+        print(f'WARNING: audit log pruning failed: {_prune_err}')
     if user_management.migrate_env_user_to_db():
         print(f"INFO: Migrated env-var user '{USERNAME}' to database.")
-    disktool_core.init_db()
+    disktool_core.init_db(DATA_DIR)
     disktool_core.recover_interrupted_tasks()
-    vm_controller.init_db()
-    storage_controller.init_db()
-    smart_manager.init_db()
+    disktool_core.start_auto_mode_worker()
+    if _AUTO_BACKUP:
+        config_backup.start_daily_backups(DATA_DIR, fleetpilot_version.release_metadata().get('version', '?'),
+                                          keep=_BACKUP_KEEP, hour=_BACKUP_HOUR)
+    vm_controller.init_db(DATA_DIR)
+    storage_controller.init_db(DATA_DIR)
+    smart_manager.init_db(DATA_DIR)
     smart_manager.start_polling()
     system_monitor.init_db(DATA_DIR)
     system_monitor.start_polling()
@@ -344,6 +443,22 @@ def inject_user_context():
         is_operator=is_operator,
         localhost_identifiers=LOCALHOST_IDENTIFIERS
     )
+
+# Accessibility preferences and easy-language helpers for every template
+@app.context_processor
+def inject_accessibility():
+    user_id = session.get("user_id")
+    prefs = user_management.get_accessibility(user_id) if user_id else dict(user_management.DEFAULT_ACCESSIBILITY)
+    lang = session.get('lang', 'en')
+    easy = prefs.get('easy_language') == 'on'
+    return dict(
+        a11y=prefs,
+        easy_on=easy,
+        nav_text=(lambda label: easy_language.nav_label(label, lang)) if easy else (lambda label: label),
+        easy_help=easy_language.page_help(request.path, lang) if easy else None,
+        easy_heading=easy_language.help_heading(lang),
+    )
+
 
 # Template function for theme and language context
 @app.context_processor
@@ -440,13 +555,61 @@ def storage_workspace():
     )
 
 
+_AUDIT_PERIODS = {'24h': 24, '7d': 24 * 7, '30d': 24 * 30}
+
+
+def _audit_filters():
+    """Read audit filters from the query string; returns (filters for audit_log, raw values)."""
+    raw = {k: (request.args.get(k) or '').strip()[:100] for k in ('actor', 'type', 'outcome', 'period', 'q')}
+    filters = {
+        'actor': raw['actor'] or None,
+        'event_type': raw['type'] or None,
+        'outcome': raw['outcome'] if raw['outcome'] in ('success', 'failure', 'failed') else None,
+        'since': audit_log.iso_hours_ago(_AUDIT_PERIODS[raw['period']]) if raw['period'] in _AUDIT_PERIODS else None,
+        'search': raw['q'] or None,
+    }
+    return filters, raw
+
+
 @app.route('/system/audit')
-@user_management.login_required
+@user_management.admin_required
 def system_audit():
-    if not current_user_has_role('admin'):
-        flash('Administrator role required to view the audit trail.', 'error')
-        return redirect(url_for('index'))
-    return render_template('system_audit.html', events=audit_log.list_events(200), audit_health=audit_log.health())
+    filters, raw = _audit_filters()
+    return render_template('system_audit.html', events=audit_log.list_events(300, **filters),
+                           matching=audit_log.count_events(**filters), filters=raw,
+                           event_types=audit_log.event_types(), audit_health=audit_log.health(),
+                           retention=account_security.get_settings()['audit_retention_days'])
+
+
+@app.route('/system/audit/export.csv')
+@user_management.admin_required
+def system_audit_export():
+    import csv
+    import io
+    filters, _ = _audit_filters()
+
+    def cell(value):
+        # Stop spreadsheets from treating a value as a formula.
+        text = '' if value is None else str(value)
+        return "'" + text if text[:1] in ('=', '+', '-', '@', '\t', '\r') else text
+
+    def rows():
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        columns = ['occurred_at', 'actor', 'event_type', 'target', 'outcome', 'remote_addr', 'metadata_json']
+        writer.writerow(columns)
+        for event in audit_log.iter_events(**filters):
+            writer.writerow([cell(event[c]) for c in columns])
+            if buf.tell() > 65536:
+                yield buf.getvalue()
+                buf.seek(0)
+                buf.truncate()
+        yield buf.getvalue()
+
+    _audit('audit_exported')
+    name = f'fleetpilot-audit-{_time.strftime("%Y%m%d-%H%M")}.csv'
+    return app.response_class(rows(), mimetype='text/csv',
+                              headers={'Content-Disposition': f'attachment; filename="{name}"'})
 
 
 @app.route('/system/production')
@@ -815,22 +978,139 @@ def get_local_public_key():
     except Exception as e:
         raise RuntimeError(f"Failed to obtain or generate local SSH key: {e}")
 
+def _password_tag(user):
+    """Short fingerprint of the stored hash; sessions end when the password changes."""
+    import hashlib
+    return hashlib.sha256(str(user['password_hash']).encode()).hexdigest()[:16]
+
+
+# Pages a signed-in admin can still reach while the "admins must use 2FA" rule
+# is waiting for them to enrol.
+_2FA_ENROL_ENDPOINTS = {'tfa_setup', 'tfa_totp_setup', 'tfa_totp_enable', 'tfa_yubikey_register',
+                        'webauthn_register_options', 'webauthn_register_verify', 'tfa_backup_regenerate',
+                        'logout', 'users_accessibility', 'api_tfa_status', 'login', 'reauth',
+                        'set_language', 'set_theme'}
+
+
+def _session_is_valid(user):
+    if not user or not user['active']:
+        return False
+    if session.get('api_token_id'):
+        return True  # verified by the session interface for this request only
+    return (session.get('pw_tag') == _password_tag(user)
+            and account_security.check_session(session.get('sid', ''), user['id'], request.remote_addr or ''))
+
+
+def _needs_2fa_enrolment(user_id):
+    if session.get('api_token_id') or not account_security.get_settings()['require_2fa_admins']:
+        return False
+    if not _2FA_AVAILABLE or 'admin' not in user_management.get_user_role_names(user_id):
+        return False
+    return not _2fa.user_has_2fa(user_id)
+
+
+@app.before_request
+def _validate_session():
+    """Check the signed-in session on every request, whatever decorator a route uses.
+
+    An ended, revoked, idle or outdated session is cleared here, so every
+    decorator (including user_management.login_required used by add-ons) sees
+    an anonymous request.
+    """
+    user_id = session.get('user_id')
+    if not user_id or request.endpoint == 'static':
+        return None
+    if not _session_is_valid(user_management.get_user_by_id(user_id)):
+        if session.get('api_token_id') is None:
+            session.clear()
+            flash('Your session has ended. Please sign in again.')
+        else:
+            session.clear()
+        return None
+    if request.endpoint not in _2FA_ENROL_ENDPOINTS and request.endpoint and _needs_2fa_enrolment(user_id):
+        if request.path.startswith('/api/'):
+            return jsonify({'error': 'Two-factor authentication must be set up first.'}), 403
+        flash('Administrators must set up two-factor authentication before continuing.', 'warning')
+        return redirect(url_for('tfa_setup'))
+    return None
+
+
 def login_required(f):
-    """Decorator to require login - uses new user management system."""
+    """Require a signed-in user. The session itself is validated in _validate_session."""
     @wraps(f)
     def wrapped(*args, **kwargs):
-        # Check new user_id session first
         if session.get("user_id"):
             return f(*args, **kwargs)
-        # Fallback to old login session for backward compatibility
-        if session.get("login"):
-            return f(*args, **kwargs)
+        if request.headers.get('Authorization', '').startswith('Bearer '):
+            return jsonify({'error': 'Invalid or expired API token.'}), 401
         return redirect(url_for('login', next=request.path))
     return wrapped
 
+
+def _recently_authenticated():
+    minutes = account_security.get_settings()['reauth_minutes']
+    return not session.get('api_token_id') and _time.time() - session.get('auth_time', 0) < minutes * 60
+
+
+def recent_auth_required(f):
+    """Ask for the password again before sensitive actions (sudo mode).
+
+    Apply below ``login_required``/role decorators. POSTs that arrive without a
+    recent confirmation are sent back to the page they came from afterwards.
+    """
+    @wraps(f)
+    def wrapped(*args, **kwargs):
+        if _recently_authenticated():
+            return f(*args, **kwargs)
+        if request.method == 'GET':
+            back = request.full_path.rstrip('?')
+        else:
+            ref = request.referrer or ''
+            back = ref[len(request.host_url) - 1:] if ref.startswith(request.host_url) else url_for('index')
+        if request.path.startswith('/api/') or request.is_json:
+            return jsonify({'error': 'Confirm your password first.', 'reauth': url_for('reauth', next=back)}), 401
+        flash('Please confirm your password to continue.', 'warning')
+        return redirect(url_for('reauth', next=back))
+    return wrapped
+
+
+MIN_PASSWORD_LENGTH = 12
+
+
+def _password_problem(password):
+    """Return a message if ``password`` is too weak, else None."""
+    if len(password) < MIN_PASSWORD_LENGTH:
+        return f'Passwords must be at least {MIN_PASSWORD_LENGTH} characters.'
+    if password.lower() in {'password', 'changeme', 'fleetpilot', 'admin'} or len(set(password)) < 4:
+        return 'Please choose a less predictable password.'
+    return None
+
+
+def role_required(*roles):
+    """Require login plus one of ``roles`` (admins always pass).
+
+    JSON/API callers get a 403 body; page requests are redirected with a message.
+    """
+    def decorator(f):
+        @wraps(f)
+        @login_required
+        def wrapped(*args, **kwargs):
+            if current_user_has_role(*roles):
+                return f(*args, **kwargs)
+            if request.path.startswith('/api/') or request.is_json or request.accept_mimetypes.best == 'application/json':
+                return jsonify({'error': 'Insufficient permissions'}), 403
+            flash('Insufficient permissions. Your role cannot perform this action.', 'error')
+            return redirect(url_for('index'))
+        return wrapped
+    return decorator
+
+
+operator_required = role_required('operator', 'admin')
+admin_required = role_required('admin')
+
 # ── HW Monitor route registration (after login_required is defined) ──────────────
 try:
-    _hw.register_routes(app, login_required, _csrf if '_csrf' in dir() else None)
+    _hw.register_routes(app, login_required, _csrf if '_csrf' in dir() else None, operator_required=operator_required)
     # HW Info (Fastfetch-style hardware overview)
     if _HW_INFO_AVAILABLE:
         try:
@@ -841,14 +1121,44 @@ try:
 except Exception as _hw_reg_err:
     print(f"[HW Monitor] Route registration error: {_hw_reg_err}")
 
-def _complete_authenticated_login(user_id, username, next_url, method='password'):
+def _last_sign_in_notice(username):
+    """Describe the previous sign-in and any failed attempts since then."""
+    try:
+        previous = audit_log.list_events(1, actor=username, event_type='login_success')
+        since = previous[0]['occurred_at'] if previous else None
+        failed = audit_log.count_events(actor=username, event_type='login_failed', since=since) if since else 0
+    except Exception:
+        return None
+    if not previous:
+        return None
+    text = f"Last sign-in: {previous[0]['occurred_at'].replace('T', ' ')[:16]} UTC from {previous[0]['remote_addr'] or 'unknown address'}."
+    if failed:
+        text += f' {failed} failed sign-in attempt{"s" if failed != 1 else ""} since then.'
+    return text
+
+
+def _complete_authenticated_login(user_id, username, next_url, method='password', json_response=False):
     """Create a fresh authenticated session after password or verified second factor."""
+    ip = request.remote_addr or ''
+    notice = _last_sign_in_notice(username)
     session.clear()
     session.permanent = True
     session['user_id'] = user_id
     session['username'] = username
     session['login'] = True
+    session['pw_tag'] = _password_tag(user_management.get_user_by_id(user_id))
+    session['sid'] = account_security.create_session(user_id, ip, request.headers.get('User-Agent', ''), method)
+    session['auth_time'] = _time.time()
+    try:
+        audit_log.record_event(actor_id=user_id, actor=username, event_type='login_success',
+                               target=method, remote_addr=ip)
+    except Exception:
+        pass
     flash(f'Logged in successfully ({method})' if method != 'password' else 'Logged in successfully')
+    if notice:
+        flash(notice, 'info')
+    if json_response:
+        return jsonify({'ok': True, 'next': next_url})
     return redirect(next_url)
 
 
@@ -876,22 +1186,19 @@ def login():
     # The central ingress address is the normal entry point.  Once a session
     # exists, returning the login form at '/' is confusing and hides the
     # Service Hub. Redirect authenticated users to the requested page or home.
-    if request.method == "GET" and (session.get("user_id") or session.get("login")):
+    if request.method == "GET" and session.get("user_id"):
         return redirect(next_url)
     if request.method == "POST":
         ip = request.remote_addr or '127.0.0.1'  # Use loopback as fallback, not all-interfaces
-        # ── Brute-Force check ─────────────────────────────────────────────────────────
-        if not _check_rate_limit(ip):
-            flash('Too many failed login attempts. Please wait 60 seconds.')
-            return render_template("login.html", next=next_url, rate_limited=True), 429
-
         username = sanitize_input(request.form.get("user", ""), max_len=128)
         password = request.form.get("pass", "")
-        
-        # Try database authentication first
+        if not _check_rate_limit(ip, username):
+            flash('Too many failed login attempts. Please wait a few minutes and try again.')
+            return render_template("login.html", next=next_url, rate_limited=True), 429
+
         user_id = user_management.verify_password(username, password)
         if user_id:
-            _clear_login_attempts(ip)
+            _clear_login_attempts(ip, username)
             # Check if user has 2FA enabled
             if _2FA_AVAILABLE and _2fa.user_has_2fa(user_id):
                 session['_2fa_pending_user_id'] = user_id
@@ -900,17 +1207,12 @@ def login():
                 return redirect(url_for('tfa_verify'))
             return _complete_authenticated_login(user_id, username, next_url)
         
-        # Fallback to environment variable authentication for backward compatibility
-        if username == USERNAME and password == PASSWORD:
-            _clear_login_attempts(ip)
-            session.clear()
-            session.permanent = True
-            session['login'] = True
-            session['username'] = username
-            flash('Logged in successfully (legacy mode)')
-            return redirect(next_url)
-        
-        _record_failed_login(ip)
+        _record_failed_login(ip, username)
+        try:
+            audit_log.record_event(actor_id=None, actor=username or '-', event_type='login_failed',
+                                   outcome='failure', remote_addr=ip)
+        except Exception:
+            pass
         flash('Invalid username or password')
     return render_template("login.html", next=next_url)
 
@@ -926,11 +1228,25 @@ def tfa_verify():
     if not user_id:
         return redirect(url_for('login'))
     if request.method == 'POST':
+        ip = request.remote_addr or '127.0.0.1'
+        if not _check_rate_limit(ip, username):
+            session.clear()
+            flash('Too many failed attempts. Please wait a few minutes and sign in again.', 'error')
+            return redirect(url_for('login'))
         code = request.form.get('code', '').strip()
         next_url = session.get('_2fa_next', url_for('index'))
         result = _2fa.verify_2fa(user_id, code)
         if result['success']:
+            _clear_login_attempts(ip, username)
             return _complete_authenticated_login(user_id, username, next_url, f'2FA: {result["method"]}')
+        _record_failed_login(ip, username)
+        failures = session.get('_2fa_failures', 0) + 1
+        if failures >= 5:
+            # Make the attacker start over with the password instead of guessing codes.
+            session.clear()
+            flash('Too many invalid codes. Please sign in again.', 'error')
+            return redirect(url_for('login'))
+        session['_2fa_failures'] = failures
         flash('Invalid authentication code. Please try again.', 'error')
     methods = _2fa.get_2fa_methods(user_id) if _2FA_AVAILABLE else {}
     return render_template('2fa_verify.html', username=username,
@@ -1099,12 +1415,7 @@ def webauthn_authentication_verify():
     result = _2fa.verify_webauthn_authentication(user_id, credential, pending['challenge'], rp_id, origin)
     if not result.get('success'):
         return jsonify({'ok': False, 'error': result.get('error', 'Security-key authentication failed.')}), 400
-    session.clear()
-    session.permanent = True
-    session['user_id'] = user_id
-    session['username'] = username
-    session['login'] = True
-    return jsonify({'ok': True, 'next': next_url})
+    return _complete_authenticated_login(user_id, username, next_url, '2FA: security key', json_response=True)
 
 
 @app.route('/2fa/backup/regenerate', methods=['POST'])
@@ -1127,9 +1438,365 @@ def api_tfa_status():
 @app.route('/logout', methods=['POST'])
 def logout():
     """End the complete browser session through the visible account control."""
+    if session.get('sid'):
+        account_security.revoke_session(account_security.session_key(session['sid']))
     session.clear()
     flash('Logged out successfully.', 'success')
     return redirect(url_for('login'))
+
+
+def _safe_next(raw, default=None):
+    """Only allow same-site relative paths as redirect targets."""
+    if raw and raw.startswith('/') and not raw.startswith('//') and '\\' not in raw and '//' not in raw:
+        return raw
+    return default or url_for('index')
+
+
+@app.route('/reauth', methods=['GET', 'POST'])
+@login_required
+def reauth():
+    """Confirm the password before a sensitive action."""
+    next_url = _safe_next(request.values.get('next'))
+    if session.get('api_token_id'):
+        abort(403)
+    if request.method == 'POST':
+        ip = request.remote_addr or ''
+        username = session.get('username', '')
+        if not _check_rate_limit(ip, username):
+            flash('Too many failed attempts. Please wait a few minutes.', 'error')
+            return render_template('reauth.html', next=next_url,
+                                   fp_reauth_minutes=account_security.get_settings()['reauth_minutes']), 429
+        if user_management.verify_password(username, request.form.get('password', '')) == session.get('user_id'):
+            _clear_login_attempts(ip, username)
+            session['auth_time'] = _time.time()
+            _audit('reauth')
+            return redirect(next_url)
+        _record_failed_login(ip, username)
+        _audit('reauth', outcome='failure')
+        flash('That password is not correct.', 'error')
+    return render_template('reauth.html', next=next_url,
+                           fp_reauth_minutes=account_security.get_settings()['reauth_minutes'])
+
+
+# ── My sign-in & security ─────────────────────────────────────────────────────
+
+def _fmt_ts(value):
+    return _time.strftime('%Y-%m-%d %H:%M', _time.localtime(value)) if value else '—'
+
+
+app.jinja_env.filters['fp_ts'] = _fmt_ts
+
+
+def _describe_agent(ua):
+    """Short, human-readable browser/OS label from a User-Agent string."""
+    ua = ua or ''
+    browser = next((name for key, name in (('Edg/', 'Edge'), ('OPR/', 'Opera'), ('Firefox/', 'Firefox'),
+                                           ('Chrome/', 'Chrome'), ('Safari/', 'Safari'), ('curl/', 'curl'),
+                                           ('python-requests', 'Python')) if key in ua), 'Unknown browser')
+    system = next((name for key, name in (('Android', 'Android'), ('iPhone', 'iPhone'), ('iPad', 'iPad'),
+                                          ('Windows', 'Windows'), ('Mac OS', 'macOS'), ('Linux', 'Linux'))
+                   if key in ua), '')
+    return f'{browser} on {system}' if system else browser
+
+
+app.jinja_env.filters['fp_agent'] = _describe_agent
+
+
+@app.route('/users/security')
+@login_required
+def users_security():
+    user_id = session['user_id']
+    current_key = account_security.session_key(session.get('sid', ''))
+    history = audit_log.list_events(25, actor=session.get('username'), event_type='login_')
+    return render_template(
+        'users/security.html',
+        sessions=account_security.list_sessions(user_id), current_key=current_key,
+        tokens=account_security.list_tokens(user_id), history=history,
+        new_token=session.pop('_new_token', None),
+        has_2fa=bool(_2FA_AVAILABLE and _2fa.user_has_2fa(user_id)),
+        settings=account_security.get_settings(),
+        can_write=current_user_has_role('operator', 'admin'),
+    )
+
+
+@app.route('/users/security/sessions/<key>/end', methods=['POST'])
+@login_required
+def users_security_end_session(key):
+    if account_security.revoke_session(key, user_id=session['user_id']):
+        _audit('session_ended', key[:8])
+        flash('That session has been signed out.')
+    return redirect(url_for('users_security'))
+
+
+@app.route('/users/security/sessions/end-others', methods=['POST'])
+@login_required
+def users_security_end_others():
+    count = account_security.revoke_user_sessions(session['user_id'], keep_sid=session.get('sid', ''))
+    _audit('sessions_ended_others', str(count))
+    flash(f'Signed out {count} other session{"s" if count != 1 else ""}.')
+    return redirect(url_for('users_security'))
+
+
+@app.route('/users/security/tokens', methods=['POST'])
+@login_required
+@recent_auth_required
+def users_security_create_token():
+    scope = request.form.get('scope', 'read')
+    if scope == 'write' and not current_user_has_role('operator', 'admin'):
+        flash('Viewers can only create read-only tokens.', 'error')
+        return redirect(url_for('users_security'))
+    try:
+        raw, token_id = account_security.create_token(session['user_id'], request.form.get('name', ''),
+                                                      scope, int(request.form.get('days') or 0))
+    except ValueError as exc:
+        flash(str(exc), 'error')
+        return redirect(url_for('users_security'))
+    session['_new_token'] = raw
+    _audit('api_token_created', f'{token_id}:{scope}')
+    if scope == 'write':
+        notify.send('security', 'FleetPilot: API token created',
+                    f'{session.get("username")} created a write API token named '
+                    f'"{request.form.get("name", "")[:64]}".', 'info')
+    return redirect(url_for('users_security'))
+
+
+@app.route('/users/security/tokens/<int:token_id>/revoke', methods=['POST'])
+@login_required
+def users_security_revoke_token(token_id):
+    if account_security.revoke_token(token_id, user_id=session['user_id']):
+        _audit('api_token_revoked', str(token_id))
+        flash('Token revoked. Programs using it will stop working.')
+    return redirect(url_for('users_security'))
+
+
+@app.route('/api/me')
+@login_required
+def api_me():
+    """Who am I? Handy for checking an API token."""
+    return jsonify({'username': session.get('username'),
+                    'roles': user_management.get_user_role_names(session['user_id']),
+                    'auth': 'token' if session.get('api_token_id') else 'session',
+                    'scope': session.get('api_scope', 'write')})
+
+
+# ── Security center (admins) ──────────────────────────────────────────────────
+
+def _security_checks():
+    """Return a list of {title, status: ok|warn|bad|info, detail, href}."""
+    checks = []
+    settings = account_security.get_settings()
+
+    def add(title, status, detail, href=None):
+        checks.append({'title': title, 'status': status, 'detail': detail, 'href': href})
+
+    secure = bool(request.is_secure or app.config.get('SESSION_COOKIE_SECURE'))
+    add('HTTPS', 'ok' if secure else 'bad',
+        'Sign-in cookies are only sent over HTTPS.' if secure else
+        'FleetPilot is reached over plain HTTP, so passwords cross the network unencrypted. Put it behind HTTPS.',
+        url_for('proxy_services') if 'proxy_services' in app.view_functions else None)
+
+    admins = [u for u in user_management.list_users()
+              if u['active'] and 'admin' in user_management.get_user_role_names(u['id'])]
+    no_2fa = [u['username'] for u in admins if not (_2FA_AVAILABLE and _2fa.user_has_2fa(u['id']))]
+    add('Two-factor sign-in for admins', 'ok' if not no_2fa else ('warn' if settings['require_2fa_admins'] else 'bad'),
+        'Every administrator uses a second factor.' if not no_2fa else
+        f'Without 2FA: {", ".join(no_2fa)}.' + ('' if settings['require_2fa_admins'] else
+                                                ' Turn on "Require 2FA for administrators" below.'),
+        url_for('tfa_setup'))
+
+    if os.path.exists(os.path.join(DATA_DIR, 'initial_admin_password')):
+        add('Initial password file', 'bad',
+            'The generated first-run password is still stored on disk. Sign in, change the password, then delete '
+            f'{os.path.join(DATA_DIR, "initial_admin_password")}.')
+    else:
+        add('Initial password file', 'ok', 'The first-run password file has been removed.')
+
+    key_file = os.path.join(DATA_DIR, '.secret_key')
+    if os.path.exists(key_file):
+        mode = os.stat(key_file).st_mode & 0o777
+        add('Secret key file', 'ok' if mode & 0o077 == 0 else 'bad',
+            f'Permissions {oct(mode)}.' + ('' if mode & 0o077 == 0 else f' Run: chmod 600 {key_file}'))
+    else:
+        add('Secret key file', 'info', 'SECRET_KEY comes from the environment.')
+
+    add('CSRF protection', 'ok' if (_csrf is not None and app.config.get('WTF_CSRF_ENABLED', True)) else 'bad',
+        'Forms are protected against cross-site request forgery.' if _csrf is not None else
+        'CSRF protection is switched off. Remove WTF_CSRF_ENABLED=false.')
+    add('Debug mode', 'bad' if app.debug else 'ok',
+        'Debug mode is on and exposes an interactive console. Turn it off.' if app.debug else 'Debug mode is off.')
+
+    add('Idle sign-out', 'ok' if settings['idle_minutes'] else 'warn',
+        f'Sessions end after {settings["idle_minutes"]} minutes without activity.' if settings['idle_minutes'] else
+        'Sessions never end on their own. Set an idle timeout below.')
+    add('Network allowlist', 'ok' if settings['ip_allowlist'] else 'info',
+        f'Only {", ".join(settings["ip_allowlist"])} (and this server itself) can connect.'
+        if settings['ip_allowlist'] else 'Any address that can reach the server can open the sign-in page.')
+
+    failed = audit_log.count_events(event_type='login_failed', since=audit_log.iso_hours_ago(24))
+    locked = audit_log.count_events(event_type='login_locked', since=audit_log.iso_hours_ago(24))
+    add('Failed sign-ins (24 h)', 'ok' if failed < 10 and not locked else ('bad' if locked else 'warn'),
+        f'{failed} failed sign-in{"s" if failed != 1 else ""}, {locked} lockout{"s" if locked != 1 else ""}.',
+        url_for('system_audit', type='login_'))
+
+    backups = config_backup.list_backups(DATA_DIR)
+    if backups:
+        age_days = (_time.time() - backups[0]['mtime']) / 86400 if backups[0].get('mtime') else None
+        fresh = age_days is not None and age_days < 8
+        add('Configuration backup', 'ok' if fresh else 'warn',
+            f'Newest backup {backups[0]["name"]}' + (f' ({age_days:.0f} days old).' if age_days is not None else '.'),
+            url_for('system_backups'))
+    else:
+        add('Configuration backup', 'warn', 'No backup of FleetPilot\'s own data exists yet.', url_for('system_backups'))
+
+    tokens = [t for t in account_security.list_tokens() if not t['revoked'] and not t['expired']]
+    forever = [t for t in tokens if not t['expires_at']]
+    add('API tokens', 'warn' if forever else 'ok',
+        f'{len(tokens)} active token{"s" if len(tokens) != 1 else ""}' +
+        (f', {len(forever)} never expire.' if forever else ', all with an expiry date.'))
+
+    activity = account_security.last_activity_by_user()
+    stale = [u['username'] for u in user_management.list_users()
+             if u['active'] and activity.get(u['id']) and _time.time() - activity[u['id']] > 90 * 86400]
+    if stale:
+        add('Unused accounts', 'warn', f'Not used for 90 days: {", ".join(stale)}. Consider deactivating them.',
+            url_for('users_list'))
+
+    channels = [c for c in notify.list_channels() if c['enabled'] and 'security' in (c['events'] or [])]
+    add('Security alerts', 'ok' if channels else 'info',
+        f'Sent to {len(channels)} notification channel{"s" if len(channels) != 1 else ""}.' if channels else
+        'Lockouts and other security events are only visible in the audit trail. Add a notification channel.',
+        url_for('system_notifications'))
+    return checks
+
+
+@app.route('/system/security')
+@admin_required
+def system_security():
+    checks = _security_checks()
+    scored = [c for c in checks if c['status'] != 'info']
+    passed = sum(1 for c in scored if c['status'] == 'ok')
+    users = {u['id']: u['username'] for u in user_management.list_users()}
+    return render_template(
+        'system_security.html', checks=checks, passed=passed, total=len(scored),
+        settings=account_security.get_settings(),
+        sessions=account_security.list_sessions(),
+        tokens=[t for t in account_security.list_tokens() if not t['revoked']],
+        current_key=account_security.session_key(session.get('sid', '')),
+        events=audit_log.list_events(15, event_type='login_', outcome='failure'),
+        client_ip=request.remote_addr or '', users=users,
+    )
+
+
+@app.route('/system/security/settings', methods=['POST'])
+@admin_required
+@recent_auth_required
+def system_security_settings():
+    allow, bad = account_security.clean_allowlist(request.form.get('ip_allowlist', '').replace(',', '\n').splitlines())
+    if bad:
+        flash(f'Not a valid address or network: {", ".join(bad)}', 'error')
+        return redirect(url_for('system_security'))
+    if allow and not account_security.ip_allowed(request.remote_addr or '', allow):
+        flash(f'Your own address ({request.remote_addr}) is not in that list, so saving it would lock you out. '
+              'Add it first.', 'error')
+        return redirect(url_for('system_security'))
+    before = account_security.get_settings()
+    after = account_security.save_settings({
+        'require_2fa_admins': bool(request.form.get('require_2fa_admins')),
+        'idle_minutes': request.form.get('idle_minutes', before['idle_minutes']),
+        'reauth_minutes': request.form.get('reauth_minutes', before['reauth_minutes']),
+        'audit_retention_days': request.form.get('audit_retention_days', before['audit_retention_days']),
+        'max_token_days': request.form.get('max_token_days', before['max_token_days']),
+        'ip_allowlist': allow,
+    })
+    changed = sorted(k for k in after if after[k] != before.get(k))
+    if changed:
+        _audit('security_settings_changed', ','.join(changed))
+        notify.send('security', 'FleetPilot: security settings changed',
+                    f'{session.get("username")} changed: {", ".join(changed)}.', 'info')
+        if 'audit_retention_days' in changed:
+            audit_log.prune(after['audit_retention_days'])
+    flash('Security settings saved.' if changed else 'Nothing changed.')
+    return redirect(url_for('system_security'))
+
+
+@app.route('/system/security/sessions/<key>/end', methods=['POST'])
+@admin_required
+def system_security_end_session(key):
+    if account_security.revoke_session(key):
+        _audit('session_ended_by_admin', key[:8])
+        flash('Session signed out.')
+    return redirect(url_for('system_security'))
+
+
+@app.route('/system/security/users/<int:uid>/sign-out', methods=['POST'])
+@admin_required
+def system_security_sign_out_user(uid):
+    keep = session.get('sid', '') if uid == session.get('user_id') else ''
+    count = account_security.revoke_user_sessions(uid, keep_sid=keep)
+    _audit('user_signed_out_by_admin', str(uid))
+    flash(f'Signed out {count} session{"s" if count != 1 else ""}.')
+    return redirect(request.referrer if (request.referrer or '').startswith(request.host_url) else url_for('system_security'))
+
+
+@app.route('/system/security/tokens/<int:token_id>/revoke', methods=['POST'])
+@admin_required
+def system_security_revoke_token(token_id):
+    if account_security.revoke_token(token_id):
+        _audit('api_token_revoked_by_admin', str(token_id))
+        flash('Token revoked.')
+    return redirect(url_for('system_security'))
+
+
+# ── Notification channels (admins) ────────────────────────────────────────────
+
+@app.route('/system/notifications')
+@admin_required
+def system_notifications():
+    return render_template('system_notifications.html', channels=notify.list_channels(),
+                           kinds=notify.KINDS, events=notify.EVENTS, levels=notify.LEVELS)
+
+
+@app.route('/system/notifications/add', methods=['POST'])
+@admin_required
+def system_notifications_add():
+    try:
+        notify.add_channel(request.form.get('name', ''), request.form.get('kind', ''), request.form.get('url', ''),
+                           request.form.getlist('events'), request.form.get('min_level', 'warning'))
+    except (ValueError, RuntimeError) as exc:
+        flash(str(exc), 'error')
+        return redirect(url_for('system_notifications'))
+    _audit('notify_channel_added', request.form.get('kind', ''))
+    flash('Channel added. Use "Send test" to check it.')
+    return redirect(url_for('system_notifications'))
+
+
+@app.route('/system/notifications/<channel_id>/test', methods=['POST'])
+@admin_required
+def system_notifications_test(channel_id):
+    results = notify.send('test', 'FleetPilot test message',
+                          f'This is a test from FleetPilot, sent by {session.get("username")}.',
+                          'info', wait=True, only=channel_id)
+    for name, ok, status in results:
+        flash(f'{name}: {"delivered" if ok else "failed"} — {status}', 'success' if ok else 'error')
+    return redirect(url_for('system_notifications'))
+
+
+@app.route('/system/notifications/<channel_id>/update', methods=['POST'])
+@admin_required
+def system_notifications_update(channel_id):
+    notify.update_channel(channel_id, enabled=bool(request.form.get('enabled')),
+                          events=request.form.getlist('events'), min_level=request.form.get('min_level'))
+    flash('Channel updated.')
+    return redirect(url_for('system_notifications'))
+
+
+@app.route('/system/notifications/<channel_id>/delete', methods=['POST'])
+@admin_required
+def system_notifications_delete(channel_id):
+    if notify.delete_channel(channel_id):
+        _audit('notify_channel_deleted', channel_id)
+        flash('Channel removed.')
+    return redirect(url_for('system_notifications'))
 
 def _home_page_catalog(is_admin):
     """Return every principal FleetPilot area visible to the current user."""
@@ -1435,7 +2102,7 @@ def dashboard():
         last_auto_update=settings.get("last_auto_update")
     )
 
-@app.route("/update/<name>")
+@app.route("/update/<name>", methods=["POST"])
 @login_required
 def update(name):
     # Require operator or admin role to perform updates
@@ -1444,6 +2111,9 @@ def update(name):
         return redirect(url_for('dashboard'))
     
     hosts = load_hosts()
+    if name not in hosts:
+        flash(f'Unknown host: {name}', 'error')
+        return redirect(url_for('dashboard'))
     logs[name] = []
     threading.Thread(
         target=run_update,
@@ -1504,34 +2174,37 @@ def email_settings():
         return redirect(url_for('index'))
     
     if request.method == "POST":
-        # Check if this is a test email request
-        if request.form.get("test_email"):
-            success, error = email_notifier.test_email_configuration()
-            if success:
-                flash('Test email sent successfully! Check your inbox.')
-            else:
-                flash(f'Failed to send test email: {error}')
-            return redirect(url_for('email_settings'))
-        
-        # Regular settings update
         settings = email_config.load_email_settings()
         
-        # Update settings from form
-        settings["email_enabled"] = bool(request.form.get("email_enabled"))
-        settings["smtp_server"] = request.form.get("smtp_server", "").strip()
-        settings["smtp_port"] = int(request.form.get("smtp_port", 587))
-        settings["smtp_use_tls"] = bool(request.form.get("smtp_use_tls"))
-        settings["smtp_username"] = request.form.get("smtp_username", "").strip()
-        settings["smtp_password"] = request.form.get("smtp_password", "").strip()
-        settings["sender_email"] = request.form.get("sender_email", "").strip()
+        # Each form on the page only updates its own fields.
+        section = request.form.get("section", "smtp")
+        if section == "smtp":
+            # Update settings from form
+            settings["email_enabled"] = bool(request.form.get("email_enabled"))
+            settings["smtp_server"] = request.form.get("smtp_server", "").strip()
+            try:
+                settings["smtp_port"] = max(1, min(65535, int(request.form.get("smtp_port", 587))))
+            except (TypeError, ValueError):
+                flash('SMTP port must be a number.', 'error')
+                return redirect(url_for('email_settings'))
+            settings["smtp_use_tls"] = bool(request.form.get("smtp_use_tls"))
+            settings["smtp_username"] = request.form.get("smtp_username", "").strip()
+            new_password = request.form.get("smtp_password", "")
+            if new_password:  # blank keeps the stored password
+                settings["smtp_password"] = new_password
+            if request.form.get("clear_smtp_password"):
+                settings["smtp_password"] = ""
+            settings["sender_email"] = request.form.get("sender_email", "").strip()
         
-        # Parse recipient emails (one per line)
-        recipient_text = request.form.get("recipient_emails", "").strip()
-        settings["recipient_emails"] = [email.strip() for email in recipient_text.split('\n') if email.strip()]
+            # Parse recipient emails (one per line)
+            recipient_text = request.form.get("recipient_emails", "").strip()
+            settings["recipient_emails"] = [email.strip() for email in recipient_text.split('\n') if email.strip()]
         
-        settings["report_enabled"] = bool(request.form.get("report_enabled"))
-        settings["report_interval"] = request.form.get("report_interval", "weekly")
-        settings["error_notifications_enabled"] = bool(request.form.get("error_notifications_enabled"))
+        else:
+            settings["report_enabled"] = bool(request.form.get("report_enabled"))
+            settings["report_interval"] = request.form.get("report_interval", "weekly")
+            settings["error_notifications_enabled"] = bool(request.form.get("error_notifications_enabled"))
+            settings["smart_alerts_enabled"] = bool(request.form.get("smart_alerts_enabled"))
         
         # Validate report interval
         if settings["report_interval"] not in ["daily", "weekly", "monthly"]:
@@ -1542,13 +2215,23 @@ def email_settings():
         
         # Reconfigure scheduler to apply report changes
         scheduler.configure_scheduler()
-        
+
+        # "Send test email" saves what was typed first, then tests it.
+        if request.form.get("test_email"):
+            success, error = email_notifier.test_email_configuration()
+            if success:
+                flash('Settings saved and test email sent. Check your inbox.')
+            else:
+                flash(f'Settings saved, but the test email failed: {error}', 'error')
+            return redirect(url_for('email_settings'))
+
         flash('Email settings saved successfully')
         return redirect(url_for('email_settings'))
     
     # GET request - display current settings
     settings = email_config.load_email_settings()
-    return render_template("email_settings.html", settings=settings)
+    has_password = bool(settings.pop("smtp_password", ""))  # never echo the password into the page
+    return render_template("email_settings.html", settings=settings, has_smtp_password=has_password)
 
 
 # Dashboard version update routes
@@ -1605,7 +2288,7 @@ def update_dashboard():
     version_data = version_manager.load_version_data()
     return render_template("dashboard_update.html", version_data=version_data)
 
-@app.route("/update_repo/<name>")
+@app.route("/update_repo/<name>", methods=["POST"])
 @login_required
 def update_repo(name):
     """Update from repository only, skip host configuration updates"""
@@ -2093,7 +2776,7 @@ def disks_index():
     disks = disktool_core.get_disk_list(q)
     return render_template('disks/index.html', disks=disks, auto=disktool_core.auto_enabled)
 
-@app.route("/disks/toggle_auto")
+@app.route("/disks/toggle_auto", methods=["POST"])
 @login_required
 def toggle_auto():
     # Require operator or admin role to toggle automatic mode
@@ -2101,8 +2784,9 @@ def toggle_auto():
         flash('You need operator or admin role to toggle automatic mode.')
         return redirect(url_for('disks_index'))
     
-    disktool_core.auto_enabled = not disktool_core.auto_enabled
-    flash(f"Automatic mode {'ON' if disktool_core.auto_enabled else 'OFF'}")
+    enabled = disktool_core.set_auto_mode(not disktool_core.auto_enabled)
+    flash('Automatic mode is on: disks attached from now on are quick-wiped, formatted as ext4 and SMART-tested.'
+          if enabled else 'Automatic mode is off.')
     return redirect(url_for('disks_index'))
 
 @app.route("/disks/format/<device>", methods=['GET','POST'])
@@ -2141,7 +2825,7 @@ def format_route(device):
         return redirect(url_for('task_status', op_id=op_id))
     return render_template('disks/format.html', device=device)
 
-@app.route("/disks/smart/start/<device>/<mode>")
+@app.route("/disks/smart/start/<device>/<mode>", methods=["POST"])
 @login_required
 def smart_start_route(device, mode):
     # Require operator or admin role to start SMART tests
@@ -2180,7 +2864,12 @@ def validate_route(device):
     except ValueError as e:
         flash(f'Invalid device name: {e}')
         return redirect(url_for('disks_index'))
-    blocks, bad, summary = disktool_core.validate_blocks(device)
+    try:
+        blocks, bad, summary = disktool_core.validate_blocks(device)
+    except Exception as e:
+        flash(f'Validation of /dev/{device} could not run: {e}. '
+              'Check that the FleetPilot disk helper is installed (see the install script).', 'error')
+        return redirect(url_for('disks_index'))
     return render_template(
         'disks/validate.html', device=device, blocks=blocks,
         bad_blocks=bad, summary=summary,
@@ -2200,7 +2889,7 @@ def disk_history():
     ops, smart = disktool_core.fetch_history_data()
     return render_template('disks/history.html', ops=ops, smart=smart)
 
-@app.route("/disks/clear_history")
+@app.route("/disks/clear_history", methods=["POST"])
 @login_required
 def clear_disk_history():
     # Require operator or admin role to clear history
@@ -2265,7 +2954,7 @@ def task_status(op_id):
         return redirect(url_for('disk_tasks'))
     return render_template('disks/task_status.html', op_id=op_id, action=task['action'], task=task)
 
-@app.route("/disks/task/stop/<int:op_id>")
+@app.route("/disks/task/stop/<int:op_id>", methods=["POST"])
 @login_required
 def stop_task(op_id):
     # Require operator or admin role to stop tasks
@@ -2369,7 +3058,7 @@ def remotes_edit(rid):
         return redirect(url_for('remotes'))
     return render_template('disks/remote_edit.html', remote=remote)
 
-@app.route("/disks/remotes/delete/<int:rid>")
+@app.route("/disks/remotes/delete/<int:rid>", methods=["POST"])
 @login_required
 def remotes_delete(rid):
     # Require operator or admin role to delete remotes
@@ -2406,8 +3095,15 @@ def users_list():
     
     return render_template('users/list.html', users=users, roles_by_user=roles_by_user)
 
+def _other_active_admins(uid):
+    """Number of active admins other than ``uid``."""
+    return sum(1 for u in user_management.list_users()
+               if u['id'] != uid and u['active'] and 'admin' in user_management.get_user_role_names(u['id']))
+
+
 @app.route("/users/add", methods=["GET", "POST"])
 @login_required
+@recent_auth_required
 def users_add():
     """Add a new user - only accessible to admins."""
     user_id = session.get("user_id")
@@ -2428,9 +3124,17 @@ def users_add():
         if not username or not password:
             flash('Username and password are required.')
             return redirect(url_for('users_add'))
+        problem = _password_problem(password)
+        if problem:
+            flash(problem, 'error')
+            return redirect(url_for('users_add'))
         
         new_user_id = user_management.create_user(username, password, email, roles)
         if new_user_id:
+            _audit('user_created', f'{username}:{",".join(roles)}')
+            if 'admin' in roles:
+                notify.send('security', 'FleetPilot: new administrator',
+                            f'{session.get("username")} created the administrator account "{username}".', 'warning')
             flash(f'User {username} created successfully.')
             return redirect(url_for('users_list'))
         else:
@@ -2441,6 +3145,7 @@ def users_add():
 
 @app.route("/users/edit/<int:uid>", methods=["GET", "POST"])
 @login_required
+@recent_auth_required
 def users_edit(uid):
     """Edit a user - only accessible to admins."""
     user_id = session.get("user_id")
@@ -2467,6 +3172,13 @@ def users_edit(uid):
         if not username:
             flash('Username is required.')
             return redirect(url_for('users_edit', uid=uid))
+        if password and _password_problem(password):
+            flash(_password_problem(password), 'error')
+            return redirect(url_for('users_edit', uid=uid))
+        was_admin = 'admin' in user_management.get_user_role_names(uid)
+        if was_admin and user['active'] and ('admin' not in roles or not active) and not _other_active_admins(uid):
+            flash('This is the only active administrator. Make someone else an administrator first.', 'error')
+            return redirect(url_for('users_edit', uid=uid))
         
         # Update user
         success = user_management.update_user(
@@ -2480,6 +3192,13 @@ def users_edit(uid):
         if success:
             # Update roles
             user_management.set_user_roles(uid, roles)
+            _audit('user_updated', f'{username}:{",".join(roles)}:{"active" if active else "inactive"}')
+            if not active or password:
+                # A reset password or a disabled account ends every session of that user.
+                account_security.revoke_user_sessions(uid, keep_sid=session.get('sid', '') if uid == user_id else '')
+            if 'admin' in roles and not was_admin:
+                notify.send('security', 'FleetPilot: new administrator',
+                            f'{session.get("username")} gave "{username}" the administrator role.', 'warning')
             flash(f'User {username} updated successfully.')
             return redirect(url_for('users_list'))
         else:
@@ -2491,6 +3210,7 @@ def users_edit(uid):
 
 @app.route("/users/delete/<int:uid>", methods=["POST"])
 @login_required
+@recent_auth_required
 def users_delete(uid):
     """Delete a user - only accessible to admins."""
     user_id = session.get("user_id")
@@ -2509,10 +3229,33 @@ def users_delete(uid):
     
     user = user_management.get_user_by_id(uid)
     if user:
+        if 'admin' in user_management.get_user_role_names(uid) and user['active'] and not _other_active_admins(uid):
+            flash('This is the only active administrator and cannot be deleted.', 'error')
+            return redirect(url_for('users_list'))
         user_management.delete_user(uid)
+        _audit('user_deleted', user['username'])
         flash(f'User {user["username"]} deleted.')
     
     return redirect(url_for('users_list'))
+
+@app.route('/users/accessibility', methods=['GET', 'POST'])
+@login_required
+def users_accessibility():
+    user_id = session.get('user_id')
+    if request.method == 'POST':
+        prefs = {key: request.form.get(key, '') for key in user_management.ACCESSIBILITY_OPTIONS}
+        for flag in ('underline_links', 'easy_language'):
+            prefs[flag] = 'on' if request.form.get(flag) else 'off'
+        prefs['motion'] = 'reduce' if request.form.get('motion') else 'system'
+        prefs['contrast'] = 'high' if request.form.get('contrast') else 'normal'
+        prefs['spacing'] = 'wide' if request.form.get('spacing') else 'normal'
+        prefs['font'] = 'readable' if request.form.get('font') else 'default'
+        user_management.save_accessibility(user_id, prefs)
+        flash('Accessibility settings saved.')
+        return redirect(url_for('users_accessibility'))
+    return render_template('users/accessibility.html',
+                           options=user_management.ACCESSIBILITY_OPTIONS)
+
 
 @app.route("/users/profile", methods=["GET", "POST"])
 @login_required
@@ -2531,13 +3274,26 @@ def users_profile():
     if request.method == "POST":
         email = request.form.get("email", "").strip() or None
         password = request.form.get("password", "")
-        
+        if password:
+            problem = _password_problem(password)
+            current_name = user_management.get_user_by_id(user_id)['username']
+            if not problem and not user_management.verify_password(current_name, request.form.get("current_password", "")):
+                problem = 'Your current password is incorrect.'
+            if problem:
+                flash(problem, 'error')
+                return redirect(url_for('users_profile'))
+
         # Update user
         user_management.update_user(
             user_id,
             email=email,
             password=password if password else None
         )
+        if password:
+            # Keep this session; every other session for the account ends.
+            session['pw_tag'] = _password_tag(user_management.get_user_by_id(user_id))
+            account_security.revoke_user_sessions(user_id, keep_sid=session.get('sid', ''))
+            _audit('password_changed')
         flash('Profile updated successfully.')
         return redirect(url_for('users_profile'))
     
@@ -2545,21 +3301,69 @@ def users_profile():
     return render_template('users/profile.html', user=user, user_roles=user_roles)
 
 # Security: Add security headers
+# ── Error pages ───────────────────────────────────────────────────────────────
+_ERROR_TEXT = {
+    400: ('Bad request', 'The request could not be understood.'),
+    403: ('Not allowed', 'Your account does not have permission for this action.'),
+    404: ('Page not found', 'This page does not exist or has moved.'),
+    405: ('Not allowed', 'This address does not accept that kind of request.'),
+    413: ('Upload too large', 'The file is larger than FleetPilot accepts.'),
+    429: ('Too many requests', 'Please wait a moment and try again.'),
+    500: ('Something went wrong', 'The error has been logged. Please try again.'),
+}
+
+
+def _wants_json():
+    return request.path.startswith('/api/') or request.is_json or request.accept_mimetypes.best == 'application/json'
+
+
+def _error_response(code):
+    title, message = _ERROR_TEXT.get(code, ('Error', 'The request failed.'))
+    if _wants_json():
+        return jsonify({'error': title}), code
+    return render_template('error.html', code=code, title=title, message=message), code
+
+
+for _code in (400, 403, 404, 405, 413, 429):
+    app.register_error_handler(_code, lambda e, _c=_code: _error_response(_c))
+
+
+@app.errorhandler(sqlite3.IntegrityError)
+def _handle_integrity_error(exc):
+    app.logger.info('Rejected duplicate or invalid record on %s: %s', request.path, exc)
+    message = 'A record with that name already exists.' if 'UNIQUE' in str(exc) else 'That record could not be saved.'
+    if _wants_json():
+        return jsonify({'ok': False, 'error': message}), 409
+    flash(message, 'error')
+    ref = request.referrer
+    return redirect(ref if ref and ref.startswith(request.host_url) else url_for('index'))
+
+
+@app.errorhandler(500)
+def _handle_server_error(exc):
+    app.logger.error('Unhandled error on %s %s', request.method, request.path, exc_info=getattr(exc, 'original_exception', exc))
+    return _error_response(500)
+
+
 @app.after_request
 def add_security_headers(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
-    response.headers['X-XSS-Protection'] = '1; mode=block'
+    # The legacy XSS auditor caused more problems than it solved; CSP replaces it.
+    response.headers['X-XSS-Protection'] = '0'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
-    response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
-    # Content-Security-Policy: allow inline styles/scripts for existing UI
+    response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=(), payment=(), usb=()'
+    response.headers['Cross-Origin-Opener-Policy'] = 'same-origin'
+    response.headers['Cross-Origin-Resource-Policy'] = 'same-origin'
+    # Inline scripts/styles are still used by templates; eval is not needed by anything.
     response.headers['Content-Security-Policy'] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; "
-        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com https://fonts.gstatic.com; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "
         "img-src 'self' data: https:; "
-        "connect-src 'self';"
+        "connect-src 'self'; "
+        "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
     )
     # Cache-Control for static assets
     if request.path.startswith('/static/'):
@@ -2745,8 +3549,6 @@ def api_update_notification():
     is_admin = False
     if session.get('user_id'):
         is_admin = current_user_has_role('admin')
-    elif session.get('login'):
-        is_admin = True  # legacy mode
     if notification:
         return jsonify({
             'available': True,
@@ -3171,7 +3973,7 @@ def _sanitize_addon_path(filename: str):
 
 
 @app.route("/plugins")
-@login_required
+@admin_required
 def plugin_manager():
     """Plugin Manager overview page."""
     plugins = addon_mgr.status
@@ -3243,7 +4045,7 @@ def plugin_uninstall(plugin_file):
 
 
 @app.route("/plugins/view/<plugin_file>")
-@login_required
+@admin_required
 def plugin_view_source(plugin_file):
     """Display the source code of an installed plugin."""
     if not re.match(r"^[a-zA-Z0-9_]+\.py$", plugin_file):
@@ -3306,6 +4108,9 @@ def plugin_install_remote(plugin_id):
         plugin_url = plugin_info.get("url", "")
         if not plugin_url:
             flash("Plugin URL missing.", "error")
+            return redirect("/plugins")
+        if not plugin_url.startswith("https://"):
+            flash("Plugin downloads must use HTTPS.", "error")
             return redirect("/plugins")
         resp = requests.get(plugin_url, timeout=10)
         resp.raise_for_status()
@@ -3382,7 +4187,7 @@ def vm_test(ep_id):
     return json.dumps(result), 200, {"Content-Type": "application/json"}
 
 
-@app.route("/vm/<int:ep_id>/update")
+@app.route("/vm/<int:ep_id>/update", methods=["POST"])
 @login_required
 def vm_update(ep_id):
     """Trigger apt update + upgrade on a Proxmox endpoint via SSH using stored credentials."""
@@ -3466,7 +4271,7 @@ def veeam_start_job(ep_id, job_id):
                                  "ok" if result.get("ok") else "error")
         return json.dumps(result), 200, {"Content-Type": "application/json"}
     except Exception as exc:
-        return json.dumps({"ok": False, "error": str(exc)}), 500, {"Content-Type": "application/json"}
+        return json.dumps({"ok": False, "error": str(exc)}), 502, {"Content-Type": "application/json"}
 
 
 @app.route("/vm/<int:ep_id>/disks")
@@ -3728,7 +4533,7 @@ def smart_disk_detail(disk_id):
 
 
 @app.route("/smart/alert/<int:alert_id>/ack", methods=["POST"])
-@login_required
+@operator_required
 def smart_ack_alert(alert_id):
     smart_manager.acknowledge_alert(alert_id)
     flash("Alert acknowledged.", "success")
@@ -3774,11 +4579,14 @@ def _get_or_create_cmk_token() -> str:
 
 
 def _check_cmk_token():
-    """Validate the X-FleetPilot-Token header or query param."""
+    """Validate the API token from X-FleetPilot-Token, a Bearer header or ?token=."""
+    auth = request.headers.get("Authorization", "")
+    bearer = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
     token = (request.headers.get("X-FleetPilot-Token")
+             or bearer
              or request.args.get("token", ""))
     expected = _get_or_create_cmk_token()
-    return token == expected
+    return bool(token) and hmac.compare_digest(str(token).encode(), str(expected).encode())
 
 
 @app.route("/api/checkmk/token_info")
@@ -3798,6 +4606,115 @@ def api_checkmk_token_info():
             "query":  base_url + "/api/checkmk/status?token=" + token,
         }
     })
+
+
+# ── Backup & restore of FleetPilot's own data ────────────────────────────────
+
+def _audit(event_type, target='', outcome='success'):
+    try:
+        audit_log.record_event(actor_id=session.get('user_id'), actor=session.get('username'),
+                               event_type=event_type, target=target, outcome=outcome,
+                               remote_addr=request.remote_addr or '')
+    except Exception:
+        pass
+
+
+@app.route('/system/backups')
+@admin_required
+@recent_auth_required
+def system_backups():
+    return render_template('system_backups.html',
+                           backups=config_backup.list_backups(DATA_DIR),
+                           restore_pending=config_backup.restore_pending(DATA_DIR),
+                           auto_enabled=_AUTO_BACKUP, keep=_BACKUP_KEEP, hour=_BACKUP_HOUR)
+
+
+@app.route('/system/backups/create', methods=['POST'])
+@admin_required
+def system_backups_create():
+    path = config_backup.create_backup(DATA_DIR, fleetpilot_version.release_metadata().get('version', '?'))
+    _audit('backup_created', os.path.basename(path))
+    flash(f'Backup created: {os.path.basename(path)}')
+    return redirect(url_for('system_backups'))
+
+
+@app.route('/system/backups/download/<name>')
+@admin_required
+@recent_auth_required
+def system_backups_download(name):
+    path = config_backup.backup_path(DATA_DIR, name)
+    if not path:
+        abort(404)
+    _audit('backup_downloaded', name)
+    notify.send('backup', 'FleetPilot: backup downloaded',
+                f'{session.get("username")} downloaded {name} from {request.remote_addr}. '
+                'Backups contain the encryption key and stored credentials.', 'info')
+    return send_file(path, as_attachment=True, download_name=name, mimetype='application/gzip')
+
+
+@app.route('/system/backups/delete/<name>', methods=['POST'])
+@admin_required
+@recent_auth_required
+def system_backups_delete(name):
+    path = config_backup.backup_path(DATA_DIR, name)
+    if not path:
+        abort(404)
+    os.remove(path)
+    _audit('backup_deleted', name)
+    flash(f'Deleted {name}')
+    return redirect(url_for('system_backups'))
+
+
+@app.before_request
+def _allow_large_restore_uploads():
+    # Backups can be larger than the 16 MB default; only this admin route accepts them.
+    if request.path == '/system/backups/restore':
+        request.max_content_length = config_backup.MAX_RESTORE_BYTES
+
+
+@app.route('/system/backups/restore', methods=['POST'])
+@admin_required
+@recent_auth_required
+def system_backups_restore():
+    upload = request.files.get('archive')
+    if not upload or not upload.filename:
+        flash('Choose a backup file to restore.', 'error')
+        return redirect(url_for('system_backups'))
+    try:
+        manifest = config_backup.stage_restore(DATA_DIR, upload.stream)
+    except ValueError as exc:
+        _audit('backup_restore_staged', upload.filename, outcome='failure')
+        flash(str(exc), 'error')
+        return redirect(url_for('system_backups'))
+    _audit('backup_restore_staged', upload.filename)
+    notify.send('backup', 'FleetPilot: restore staged',
+                f'{session.get("username")} uploaded a backup to restore. It is applied on the next restart.',
+                'warning')
+    note = (' The backup used SECRET_KEY from the environment; keep the same SECRET_KEY so stored passwords can be decrypted.'
+            if manifest.get('secret_key_from_env') else '')
+    flash(f"Backup from {manifest.get('created_utc', '?')} is ready. Restart FleetPilot to apply it "
+          f"(sudo systemctl restart fleetpilot). The current data is kept in a pre-restore folder.{note}", 'warning')
+    return redirect(url_for('system_backups'))
+
+
+@app.route('/system/backups/restore/cancel', methods=['POST'])
+@admin_required
+def system_backups_restore_cancel():
+    config_backup.cancel_restore(DATA_DIR)
+    _audit('backup_restore_cancelled')
+    flash('Pending restore cancelled.')
+    return redirect(url_for('system_backups'))
+
+
+@app.route("/metrics")
+def prometheus_metrics():
+    """Prometheus metrics. Authenticate with the API token shown on the CheckMK page."""
+    if not _check_cmk_token():
+        return "Unauthorized\n", 401, {"Content-Type": "text/plain; charset=utf-8",
+                                       "WWW-Authenticate": 'Bearer realm="fleetpilot"'}
+    body = metrics.render(fleetpilot_version.release_metadata(), load_hosts(),
+                          smart_manager, system_monitor, disktool_core)
+    return body, 200, {"Content-Type": "text/plain; version=0.0.4; charset=utf-8"}
 
 
 @app.route("/api/checkmk/agent")
@@ -4002,7 +4919,7 @@ def commander_index():
 
 
 @app.route('/commander/add', methods=['GET', 'POST'])
-@login_required
+@operator_required
 def commander_add():
     """Add a new Commander Pro device."""
     if request.method == 'POST':
@@ -4063,7 +4980,7 @@ def commander_detail(dev_id):
 
 
 @app.route('/commander/<int:dev_id>/edit', methods=['GET', 'POST'])
-@login_required
+@operator_required
 def commander_edit(dev_id):
     """Edit Commander Pro device settings."""
     dev = corsair_commander.get_device(dev_id)
@@ -4097,7 +5014,7 @@ def commander_edit(dev_id):
 
 
 @app.route('/commander/<int:dev_id>/delete', methods=['POST'])
-@login_required
+@operator_required
 def commander_delete(dev_id):
     """Delete a Commander Pro device."""
     corsair_commander.delete_device(dev_id)
@@ -4130,7 +5047,7 @@ def commander_test(dev_id):
 
 
 @app.route('/commander/<int:dev_id>/set_fan', methods=['POST'])
-@login_required
+@operator_required
 @_csrf_exempt_safe
 def commander_set_fan(dev_id):
     """Set fan speed on a Commander Pro device."""
@@ -4139,6 +5056,8 @@ def commander_set_fan(dev_id):
         return jsonify({'ok': False, 'error': 'Device not found'}), 404
 
     channel = request.form.get('channel', 'fan1')
+    if not re.fullmatch(r'[A-Za-z0-9_-]{1,32}', channel):
+        return jsonify({'ok': False, 'error': 'Invalid channel'}), 400
     mode    = request.form.get('mode', 'fixed')   # 'fixed' or 'profile'
 
     if mode == 'fixed':
@@ -4272,7 +5191,7 @@ def _get_known_servers_for_module(module: str = None):
 
 
 @app.route('/fans/add', methods=['GET', 'POST'])
-@login_required
+@operator_required
 def fc_add():
     """Add a new fan controller device."""
     from flask_wtf.csrf import generate_csrf
@@ -4351,7 +5270,7 @@ def fc_detail(dev_id):
 
 
 @app.route('/fans/<int:dev_id>/edit', methods=['GET', 'POST'])
-@login_required
+@operator_required
 def fc_edit(dev_id):
     """Edit fan controller device settings."""
     dev = _fc.get_device(dev_id)
@@ -4394,7 +5313,7 @@ def fc_edit(dev_id):
 
 
 @app.route('/fans/<int:dev_id>/delete', methods=['POST'])
-@login_required
+@operator_required
 def fc_delete(dev_id):
     """Delete a fan controller device."""
     dev = _fc.get_device(dev_id)
@@ -4427,7 +5346,7 @@ def fc_test(dev_id):
 
 
 @app.route('/fans/<int:dev_id>/set_fan', methods=['POST'])
-@login_required
+@operator_required
 @_csrf_exempt_safe
 def fc_set_fan(dev_id):
     """Set fan speed on a device."""
@@ -4436,6 +5355,9 @@ def fc_set_fan(dev_id):
         return jsonify({'ok': False, 'error': 'Device not found'}), 404
 
     channel = request.form.get('channel', '0')
+    # Fan index, liquidctl channel name, or hwmon PWM node such as hwmon2/pwm1.
+    if len(channel) > 128 or not re.fullmatch(r'(?:/sys/class/hwmon/)?[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*', channel):
+        return jsonify({'ok': False, 'error': 'Invalid channel'}), 400
     mode = request.form.get('mode', 'fixed')
 
     if mode == 'fixed':
@@ -4468,7 +5390,7 @@ def fc_set_fan(dev_id):
 
 
 @app.route('/fans/<int:dev_id>/install', methods=['POST'])
-@login_required
+@admin_required
 @_csrf_exempt_safe
 def fc_install(dev_id):
     """Install required packages on the remote host."""
@@ -4569,7 +5491,7 @@ def backup_index():
 
 
 @app.route("/backup/add", methods=["GET", "POST"])
-@login_required
+@operator_required
 def backup_add():
     if request.method == "POST":
         name = request.form.get("name", "").strip()
@@ -4630,7 +5552,7 @@ def backup_detail(server_id):
 
 
 @app.route("/backup/<int:server_id>/edit", methods=["GET", "POST"])
-@login_required
+@operator_required
 def backup_edit(server_id):
     srv = _bc.get_server(server_id)
     if not srv:
@@ -4671,7 +5593,7 @@ def backup_edit(server_id):
 
 
 @app.route("/backup/<int:server_id>/delete", methods=["POST"])
-@login_required
+@operator_required
 def backup_delete(server_id):
     _bc.stop_polling(server_id)
     _bc.delete_server(server_id)
@@ -4696,7 +5618,7 @@ def backup_test(server_id):
 
 
 @app.route("/backup/<int:server_id>/trigger", methods=["POST"])
-@login_required
+@operator_required
 @_csrf_exempt_safe
 def backup_trigger(server_id):
     job_id = request.json.get("job_id", "") if request.is_json else request.form.get("job_id", "")
@@ -4757,7 +5679,7 @@ def api_registry_server(server_id):
 
 
 @app.route("/api/registry/servers", methods=["POST"])
-@login_required
+@admin_required
 def api_registry_add_server():
     """Add or update a server in the central registry."""
     if not _REGISTRY_AVAILABLE:
@@ -4787,7 +5709,7 @@ def api_registry_add_server():
 
 
 @app.route("/api/registry/servers/<int:server_id>", methods=["DELETE"])
-@login_required
+@admin_required
 def api_registry_delete_server(server_id):
     """Delete a server from the central registry."""
     if not _REGISTRY_AVAILABLE:
@@ -4849,45 +5771,6 @@ def api_live():
 def setup_page():
     """Setup page - redirect to HW Monitor setup."""
     return redirect('/hw/setup')
-
-
-@app.route('/api/sync/manifest')
-def api_sync_manifest():
-    """Return sync manifest for data replication between instances."""
-    import glob, hashlib
-    manifest = {}
-    data_dir = DATA_DIR
-    for pattern in ['*.db', '*.json']:
-        for f in glob.glob(os.path.join(data_dir, pattern)):
-            try:
-                with open(f, 'rb') as fh:
-                    h = hashlib.md5(fh.read(), usedforsecurity=False).hexdigest()  # nosec B324
-                manifest[os.path.basename(f)] = {
-                    'hash': h,
-                    'size': os.path.getsize(f),
-                    'mtime': os.path.getmtime(f)
-                }
-            except Exception:
-                pass
-    return jsonify({'files': manifest, 'version': '1.0'})
-
-@app.route('/api/sync/pull/<filename>')
-def api_sync_pull(filename):
-    """Pull a file for sync replication."""
-    import re
-    if not re.match(r'^[\w.-]+$', filename):
-        return jsonify({'error': 'Invalid filename'}), 400
-    filepath = os.path.join(DATA_DIR, filename)
-    # Security: Ensure resolved path stays within DATA_DIR (prevent path traversal)
-    real_data_dir = os.path.realpath(DATA_DIR)
-    real_filepath = os.path.realpath(filepath)
-    if not real_filepath.startswith(real_data_dir + os.sep):
-        return jsonify({'error': 'Access denied'}), 403
-    if not os.path.exists(real_filepath):
-        return jsonify({'error': 'File not found'}), 404
-    from flask import send_file
-    return send_file(real_filepath)
-
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -5049,13 +5932,9 @@ def api_host_metrics():
         port = int(h.get('port', 22))
         pwd  = h.get('password', '')
         key  = h.get('ssh_key', '')
-        import paramiko, io
-        connect_kwargs = dict(hostname=ip, port=port, username=user, timeout=8)
-        if key:
-            connect_kwargs['pkey'] = paramiko.RSAKey.from_private_key(io.StringIO(key))
-        else:
-            connect_kwargs['password'] = pwd
-        client.connect(**connect_kwargs)
+        client = ssh_helper.create_client(
+            ip, port=port, username=user, timeout=8,
+            key_filename=key or None, password=None if key else (pwd or None))
         # Single command: cpu%, ram%, uptime, load
         # Use /proc/stat for reliable CPU measurement (two samples 0.5s apart)
         cmd = ("python3 -c \""
@@ -5093,7 +5972,7 @@ def api_host_metrics():
 # ─────────────────────────────────────────────────────────────────────────────
 
 @app.route('/hosts/<name>/wol', methods=['POST'])
-@login_required
+@operator_required
 def host_wol(name):
     """Send Wake-on-LAN magic packet to a host."""
     hosts = load_hosts()
@@ -5122,14 +6001,14 @@ def host_wol(name):
 
 
 @app.route('/api/hosts/<name>/wol', methods=['POST'])
-@login_required
+@operator_required
 def api_host_wol(name):
     """Alias for WOL via API."""
     return host_wol(name)
 
 
 @app.route('/hosts/<name>/shutdown', methods=['POST'])
-@login_required
+@operator_required
 def host_shutdown(name):
     """Shutdown a host — Unraid via GraphQL API, Linux/Proxmox via SSH."""
     hosts = load_hosts()
@@ -5219,7 +6098,7 @@ def host_shutdown(name):
 
 
 @app.route('/api/hosts/<name>/shutdown', methods=['POST'])
-@login_required
+@operator_required
 def api_host_shutdown(name):
     """Alias for shutdown via API."""
     return host_shutdown(name)
@@ -5244,7 +6123,7 @@ def shutdown_schedule_index():
 
 
 @app.route('/shutdown_schedule/add', methods=['POST'])
-@login_required
+@operator_required
 def shutdown_schedule_add():
     days = request.form.getlist('days')
     _ss.add_schedule(
@@ -5265,7 +6144,7 @@ def shutdown_schedule_add():
 
 
 @app.route('/shutdown_schedule/<int:sid>/edit', methods=['POST'])
-@login_required
+@operator_required
 def shutdown_schedule_edit(sid):
     days = request.form.getlist('days')
     _ss.update_schedule(sid,
@@ -5286,7 +6165,7 @@ def shutdown_schedule_edit(sid):
 
 
 @app.route('/shutdown_schedule/<int:sid>/delete', methods=['POST'])
-@login_required
+@operator_required
 def shutdown_schedule_delete(sid):
     _ss.delete_schedule(sid)
     flash('Schedule deleted.', 'success')
@@ -5294,7 +6173,7 @@ def shutdown_schedule_delete(sid):
 
 
 @app.route('/shutdown_schedule/<int:sid>/toggle', methods=['POST'])
-@login_required
+@operator_required
 def shutdown_schedule_toggle(sid):
     s = _ss.get_schedule(sid)
     if s:
@@ -5303,7 +6182,7 @@ def shutdown_schedule_toggle(sid):
 
 
 @app.route('/shutdown_schedule/<int:sid>/run_now', methods=['POST'])
-@login_required
+@operator_required
 def shutdown_schedule_run_now(sid):
     s = _ss.get_schedule(sid)
     if not s:
@@ -5333,10 +6212,6 @@ if __name__ == "__main__":
     if user_management.migrate_env_user_to_db():
         print(f"INFO: Migrated environment variable user '{USERNAME}' to database.")
 
-    # Initialize Disk Tools database
-    disktool_core.init_db()
-    # Start Disk Tools auto-mode worker
-    threading.Thread(target=disktool_core.auto_mode_worker, daemon=True).start()
 
     # Configure automatic update scheduler
     scheduler.configure_scheduler()

@@ -175,6 +175,7 @@ FLASK_DEBUG=false
 SESSION_COOKIE_SECURE=false
 SESSION_COOKIE_HTTPONLY=true
 SESSION_COOKIE_SAMESITE=Lax
+WTF_CSRF_ENABLED=true
 EOF
 
     chmod 600 "${ENV_FILE}"
@@ -188,7 +189,7 @@ step "Installing systemd service"
 cat > /etc/systemd/system/fleetpilot.service << EOF
 [Unit]
 Description=FleetPilot — Linux Fleet Management Dashboard
-Documentation=https://github.com/ChristianHandy/Linux-Magement-Dashbord
+Documentation=https://github.com/ChristianHandy/FleetPilot
 After=network.target
 Wants=network-online.target
 
@@ -198,10 +199,8 @@ User=${SERVICE_USER}
 Group=${SERVICE_USER}
 WorkingDirectory=${INSTALL_DIR}
 EnvironmentFile=${ENV_FILE}
-ExecStart=${VENV_DIR}/bin/gunicorn \\
-    --bind ${SERVER_IP}:${APP_PORT} \\
-    --workers 2 \\
-    --timeout 120 \\
+Environment=GUNICORN_BIND=${SERVER_IP}:${APP_PORT}
+ExecStart=${VENV_DIR}/bin/gunicorn --config ${INSTALL_DIR}/gunicorn.conf.py \\
     --access-logfile /var/log/fleetpilot/access.log \\
     --error-logfile /var/log/fleetpilot/error.log \\
     app:app
@@ -212,11 +211,23 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=fleetpilot
 
-# Hardening
+# Hardening (sudo must keep working for the Disk Tools helper, so NoNewPrivileges stays off)
 NoNewPrivileges=false
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+UMask=0027
 PrivateTmp=true
 ProtectSystem=full
-ReadWritePaths=${INSTALL_DIR} /var/log/fleetpilot
+ProtectHome=true
+ReadWritePaths=${INSTALL_DIR}/data /var/log/fleetpilot
 
 [Install]
 WantedBy=multi-user.target

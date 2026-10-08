@@ -1,8 +1,10 @@
-# Web Framework
-flask>=3.0.0
+# Web Framework (minimums include the fixes for known CVEs in Flask/Werkzeug/Jinja2)
+flask>=3.1.3
+werkzeug>=3.1.9
+jinja2>=3.1.6
 
 # SSH Client
-paramiko>=3.4.0
+paramiko>=5.0.0
 
 # Task Scheduler
 apscheduler>=3.10.4
@@ -11,10 +13,14 @@ apscheduler>=3.10.4
 psutil>=5.9.0
 
 # For environment variable loading (optional but recommended)
-python-dotenv>=1.0.0
+python-dotenv>=1.2.2
 
 # HTTP requests for version checking
-requests>=2.31.0
+requests>=2.33.0
+urllib3>=2.8.0
+
+# Encrypts stored VM/storage controller credentials (without it they fall back to base64)
+cryptography>=50.0.0
 
 # CSRF Protection (Security fix)
 flask-wtf>=1.2.0
@@ -23,7 +29,7 @@ flask-wtf>=1.2.0
 flask-compress>=1.14
 
 # Gunicorn WSGI server
-gunicorn>=21.2.0
+gunicorn>=23.0.0
 
 # 2FA / TOTP support
 pyotp>=2.9.0
