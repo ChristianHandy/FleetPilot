@@ -1,19 +1,18 @@
 {% extends 'disks/base.html' %}
 {% block title %}Format Remote Disk – {{ device }}{% endblock %}
+{% block page_heading %}{{ _('Format Remote Disk') }}{% endblock %}
+{% block page_subtitle %}Remote: {{ remote.name }} ({{ remote.host }}:{{ remote.port }}){% endblock %}
 {% block content %}
-<div class="container mt-4">
-  <h2>{{ _('Format Remote Disk') }}</h2>
-  <p class="text-muted">Remote: {{ remote.name }} ({{ remote.host }}:{{ remote.port }})</p>
   
   <div class="alert alert-danger">
-    <h5><i class="bi bi-exclamation-triangle-fill"></i> WARNING</h5>
+    <h2><i class="bi bi-exclamation-triangle-fill"></i> WARNING</h2>
     <p><strong>This will PERMANENTLY ERASE ALL DATA on device {{ device|e }}!</strong></p>
     <p>{{ _('This action cannot be undone. Make sure you have selected the correct device and have backed up any important data.') }}</p>
   </div>
   
   <div class="card">
     <div class="card-header bg-warning">
-      <h5>Format Device: <code>{{ device|e }}</code></h5>
+      <h2>Format Device: <code>{{ device|e }}</code></h2>
     </div>
     <div class="card-body">
       <form method="post">
@@ -56,7 +55,7 @@
   
   <div class="card mt-4">
     <div class="card-header">
-      <h6>{{ _('Important Notes') }}</h6>
+      <h3>{{ _('Important Notes') }}</h3>
     </div>
     <div class="card-body">
       <ul>
@@ -67,5 +66,5 @@
       </ul>
     </div>
   </div>
-</div>
+
 {% endblock %}

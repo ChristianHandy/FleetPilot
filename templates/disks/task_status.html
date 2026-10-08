@@ -1,13 +1,16 @@
 {% extends 'disks/base.html' %}{% block title %}Task Status{% endblock %}
-{% block content %}
-<div class="d-flex justify-content-between align-items-start gap-3">
-  <div>
-    <h2>Task #{{ op_id }}: {{ action }}</h2>
-    <p class="text-muted mb-1">Device: <code>/dev/{{ task.device }}</code></p>
+{% block page_heading %}Task #{{ op_id }}: {{ action }}{% endblock %}
+{% block page_subtitle %}Device: <code>/dev/{{ task.device }}</code>{% endblock %}
+{% block page_actions %}
+<div>
+    
+    
     <p class="text-muted small">Started: {{ task.started_ts or task.ts }} · Finished: <span id="finished">{{ task.finished_ts or '—' }}</span></p>
   </div>
   <span id="status-badge" class="badge bg-secondary">{{ task.status }}</span>
-</div>
+{% endblock %}
+{% block content %}
+
 <div class="alert alert-info">This task runs on the FleetPilot server. Closing this browser tab does not stop it; return through <strong>Disk Tools → Tasks</strong> after signing in.</div>
 <div class="progress" style="height:30px"><div id="bar" class="progress-bar" style="width:{{ task.progress or 0 }}%">{{ task.progress or 0 }}%</div></div>
 <p id="status" class="mt-2">{{ _('Status:') }} {{ task.status }}</p>

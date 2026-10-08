@@ -1,12 +1,11 @@
 {% extends 'base.html' %}
 {% block title %}HW Monitor Setup{% endblock %}
 
+{% block page_heading %}Server Setup{% endblock %}
+{% block page_back %}<a href="/hw">{{ icon('arrow-left', 14) }} HW Monitor</a>{% endblock %}
 {% block content %}
-<div class="module-toolbar">
-  <a href="/hw" class="btn btn-secondary btn-sm">&#x2190; Dashboard</a>
-  <h1>&#x2699; Server Setup</h1>
-</div>
-<p class="text-muted mb-4">Installiere alle benötigten Abhängigkeiten für Stress-Tests und PWM-Lüftersteuerung auf jedem Server.</p>
+
+<p class="text-muted mb-4">Install everything stress tests and PWM fan control need on each server.</p>
 
 <div class="server-tabs" id="tabs"></div>
 
@@ -15,16 +14,16 @@
   <div class="col-md-6">
     <div class="setup-card">
       <div class="setup-card-head">
-        <h2>&#x1F4E6; Abhängigkeiten</h2>
-        <button class="btn btn-secondary btn-sm" onclick="checkDeps()">&#x1F50D; Prüfen</button>
+        <h2>Dependencies</h2>
+        <button class="btn btn-secondary btn-sm" onclick="checkDeps()">Check</button>
       </div>
       <div class="setup-card-body">
         <div class="dep-list" id="depList">
-          <div style="color:var(--text-muted);font-size:.85rem;text-align:center;padding:20px">Server auswählen und "Prüfen" klicken</div>
+          <div style="color:var(--text-muted);font-size:.85rem;text-align:center;padding:20px">Choose a server and select "Check"</div>
         </div>
         <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
           <button class="btn btn-primary w-100" id="installBtn" onclick="installAll()" disabled>
-            &#x2B07; Alle fehlenden Pakete installieren
+            Install all missing packages
           </button>
           <div class="log-output" id="logOutput" style="display:none"></div>
         </div>
@@ -36,11 +35,11 @@
   <div class="col-md-6">
     <div class="setup-card">
       <div class="setup-card-head">
-        <h2>&#x1F300; PWM-Lüfterkanäle</h2>
-        <button class="btn btn-secondary btn-sm" onclick="detectPWM()">&#x1F50D; Erkennen</button>
+        <h2>PWM fan channels</h2>
+        <button class="btn btn-secondary btn-sm" onclick="detectPWM()">Detect</button>
       </div>
       <div class="setup-card-body">
-        <div id="pwmInfo" style="color:var(--text-muted);font-size:.85rem;text-align:center;padding:20px">Server auswählen und "Erkennen" klicken</div>
+        <div id="pwmInfo" style="color:var(--text-muted);font-size:.85rem;text-align:center;padding:20px">Choose a server and select "Detect"</div>
       </div>
     </div>
   </div>
@@ -51,17 +50,17 @@
 <script>
 let servers = [], selSid = null;
 const DEPS = [
-  {key:'stress-ng', icon:'&#x1F4AA;', name:'stress-ng', desc:'CPU, RAM, I/O Stress-Tests'},
-  {key:'fio', icon:'&#x1F4BE;', name:'fio', desc:'Disk I/O Benchmarks'},
-  {key:'sensors', icon:'&#x1F321;', name:'lm-sensors', desc:'Temperatur-Sensoren auslesen'},
-  {key:'fancontrol', icon:'&#x1F300;', name:'fancontrol', desc:'PWM-Lüftersteuerung'},
-  {key:'i2cdetect', icon:'&#x1F50C;', name:'i2c-tools', desc:'I2C-Bus für Hardware-Sensoren'},
-  {key:'nvidia_smi', icon:'&#x1F3AE;', name:'nvidia-smi', desc:'NVIDIA GPU Monitoring'},
+  {key:'stress-ng', icon:'', name:'stress-ng', desc:'CPU, RAM and I/O stress tests'},
+  {key:'fio', icon:'', name:'fio', desc:'Disk I/O Benchmarks'},
+  {key:'sensors', icon:'', name:'lm-sensors', desc:'Read temperature sensors'},
+  {key:'fancontrol', icon:'', name:'fancontrol', desc:'PWM fan control'},
+  {key:'i2cdetect', icon:'', name:'i2c-tools', desc:'I2C bus for hardware sensors'},
+  {key:'nvidia_smi', icon:'', name:'nvidia-smi', desc:'NVIDIA GPU Monitoring'},
 ];
 
 async function loadServers() {
   const r = await fetch('/api/hw/servers');
-  servers = (await r.json()).filter(s=>s.enabled);
+  servers = fpEscDeep(await r.json()).filter(s=>s.enabled);
   const tabs = document.getElementById('tabs');
   tabs.innerHTML = servers.map(s =>
     `<div class="s-tab ${selSid===s.id?'active':''}" onclick="selectServer(${s.id})">
@@ -81,21 +80,21 @@ function selectServer(sid) {
   document.querySelectorAll('.s-tab').forEach(t => {
     if(t.textContent.includes(servers.find(s=>s.id===sid)?.name||'')) t.classList.add('active');
   });
-  document.getElementById('depList').innerHTML = '<div style="color:var(--text-muted);font-size:.85rem;text-align:center;padding:20px">Klicke "Prüfen" um den Status zu laden</div>';
-  document.getElementById('pwmInfo').innerHTML = '<div style="color:var(--text-muted);font-size:.85rem;text-align:center;padding:20px">Klicke "Erkennen" um PWM-Kanäle zu suchen</div>';
+  document.getElementById('depList').innerHTML = '<div style="color:var(--text-muted);font-size:.85rem;text-align:center;padding:20px">Select "Check" to load the status</div>';
+  document.getElementById('pwmInfo').innerHTML = '<div style="color:var(--text-muted);font-size:.85rem;text-align:center;padding:20px">Select "Detect" to look for PWM channels</div>';
   document.getElementById('installBtn').disabled = true;
   document.getElementById('logOutput').style.display = 'none';
 }
 
 async function checkDeps() {
-  if(!selSid) { showToast('Bitte Server auswählen','danger'); return; }
-  showToast('Prüfe Abhängigkeiten...','info');
+  if(!selSid) { showToast('Choose a server first','danger'); return; }
+  showToast('Checking dependencies…','info');
   const r = await fetch(`/api/hw/server/${selSid}/action`, {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({action:'check_deps'})
   });
   const d = await r.json();
-  if(!d.ok) { showToast('Fehler: '+d.output,'danger'); return; }
+  if(!d.ok) { showToast('Error: '+d.output,'danger'); return; }
   const status = {};
   d.output.split('\n').forEach(l => { const [k,v]=l.split(':'); if(k&&v) status[k.trim()]=v.trim(); });
   const list = document.getElementById('depList');
@@ -107,25 +106,25 @@ async function checkDeps() {
     if(isMissing) anyMissing = true;
     const cls = isOk ? 'ds-ok' : isMissing ? 'ds-missing' : 'ds-unknown';
     const label = isOk ? '&#x2713; Installiert' : isMissing ? '&#x2717; Fehlt' : val;
-    return `<div class="dep-item"><div class="dep-left"><span class="dep-icon">${dep.icon}</span><div><div class="dep-name">${dep.name}</div><div class="dep-desc">${dep.desc}</div></div></div><span class="dep-status ${cls}">${label}</span></div>`;
+    return `<div class="dep-item"><div class="dep-left"><div><div class="dep-name">${dep.name}</div><div class="dep-desc">${dep.desc}</div></div></div><span class="dep-status ${cls}">${label}</span></div>`;
   }).join('');
   const pwmCount = parseInt(status['pwm_channels'] || '0');
-  list.innerHTML += `<div class="dep-item"><div class="dep-left"><span class="dep-icon">&#x26A1;</span><div><div class="dep-name">PWM-Kanäle</div><div class="dep-desc">Steuerbare Lüfterkanäle via sysfs</div></div></div><span class="dep-status ${pwmCount>0?'ds-ok':'ds-missing'}">${pwmCount>0?`&#x2713; ${pwmCount} Kanal(e)`:'&#x2717; Keine'}</span></div>`;
+  list.innerHTML += `<div class="dep-item"><div class="dep-left"><div><div class="dep-name">PWM channels</div><div class="dep-desc">Controllable fan channels via sysfs</div></div></div><span class="dep-status ${pwmCount>0?'ds-ok':'ds-missing'}">${pwmCount>0?`${pwmCount} channel(s)`:'None'}</span></div>`;
   document.getElementById('installBtn').disabled = !anyMissing;
-  if(!anyMissing) showToast('&#x2713; Alle Pakete installiert','success');
-  else showToast(`${DEPS.filter(d=>status[d.key]?.includes('MISSING')).length} Pakete fehlen`,'warning');
+  if(!anyMissing) showToast('All packages installed','success');
+  else showToast(`${DEPS.filter(d=>status[d.key]?.includes('MISSING')).length} package(s) missing`,'warning');
 }
 
 async function installAll() {
   if(!selSid) return;
   const btn = document.getElementById('installBtn');
   const log = document.getElementById('logOutput');
-  btn.disabled = true; btn.textContent = '&#x23F3; Installiere...';
+  btn.disabled = true; btn.textContent = 'Installiere...';
   log.style.display = 'block';
   log.innerHTML = '<span class="log-info">Starte Installation...</span>\n';
-  showToast('Installation gestartet...','info');
+  showToast('Installation started…','info');
   const r = await fetch(`/api/hw/server/${selSid}/action`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'setup_all'})});
-  const d = await r.json();
+  const d = fpEscDeep(await r.json());
   const lines = (d.output||'').split('\n');
   log.innerHTML = lines.map(l => {
     if(l.includes('SETUP_DONE')||l.includes('OK')||l.includes('installed')) return `<span class="log-ok">${l}</span>`;
@@ -139,43 +138,43 @@ async function installAll() {
     btn.textContent = '&#x2713; Installiert';
     setTimeout(checkDeps, 1000);
   } else {
-    showToast('Installation abgeschlossen (prüfe Log)','warning');
-    btn.disabled = false; btn.textContent = '&#x2B07; Erneut versuchen';
+    showToast('Installation finished (check the log)','warning');
+    btn.disabled = false; btn.textContent = 'Erneut versuchen';
   }
 }
 
 async function detectPWM() {
-  if(!selSid) { showToast('Bitte Server auswählen','danger'); return; }
-  showToast('Erkenne PWM-Kanäle...','info');
+  if(!selSid) { showToast('Choose a server first','danger'); return; }
+  showToast('Detecting PWM channels…','info');
   const r = await fetch(`/api/hw/server/${selSid}/action`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'detect_fans'})});
-  const d = await r.json();
+  const d = fpEscDeep(await r.json());
   const pwmInfo = document.getElementById('pwmInfo');
-  if(!d.ok || !d.fans) { pwmInfo.innerHTML = `<div style="color:var(--accent-red);font-size:.85rem;text-align:center;padding:20px">Fehler: ${d.output||'Keine Antwort'}</div>`; return; }
+  if(!d.ok || !d.fans) { pwmInfo.innerHTML = `<div style="color:var(--accent-red);font-size:.85rem;text-align:center;padding:20px">Error: ${d.output||'No response'}</div>`; return; }
   const pwmChannels = d.fans.filter(f=>f.path&&f.path.includes('/pwm')&&!f.type);
   const rpmSensors = d.fans.filter(f=>f.type==='rpm');
   if(!pwmChannels.length && !rpmSensors.length) {
-    pwmInfo.innerHTML = `<div style="color:var(--text-muted);font-size:.85rem;text-align:center;padding:20px">Keine steuerbaren PWM-Kanäle gefunden.<br><span style="font-size:.75rem">Manche Server unterstützen keine Software-Lüftersteuerung.</span></div>`;
-    showToast('Keine PWM-Kanäle gefunden','warning'); return;
+    pwmInfo.innerHTML = `<div style="color:var(--text-muted);font-size:.85rem;text-align:center;padding:20px">No controllable PWM channels found.<br><span style="font-size:.75rem">Some servers do not support fan control from software.</span></div>`;
+    showToast('No PWM channels found','warning'); return;
   }
   let html = '<div class="pwm-info">';
   if(pwmChannels.length) {
-    html += `<div style="font-size:.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;font-weight:600">PWM-Steuerkanäle (${pwmChannels.length})</div>`;
-    pwmChannels.forEach(f => { const pct=f.current!=null?Math.round(f.current/255*100):null; html+=`<div class="pwm-channel"><div><div class="pwm-name">${f.name} · Kanal ${f.channel}</div><div class="pwm-path">${f.path}</div></div><span class="pwm-val">${pct!=null?pct+'%':'—'}</span></div>`; });
+    html += `<div style="font-size:.72rem;color:var(--text-muted);margin-bottom:8px;font-weight:600">PWM control channels (${pwmChannels.length})</div>`;
+    pwmChannels.forEach(f => { const pct=f.current!=null?Math.round(f.current/255*100):null; html+=`<div class="pwm-channel"><div><div class="pwm-name">${f.name} · channel ${f.channel}</div><div class="pwm-path">${f.path}</div></div><span class="pwm-val">${pct!=null?pct+'%':'—'}</span></div>`; });
   }
   if(rpmSensors.length) {
-    html += `<div style="font-size:.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin:12px 0 8px;font-weight:600">RPM-Sensoren (${rpmSensors.length})</div>`;
-    rpmSensors.forEach(f => { html+=`<div class="pwm-channel"><div><div class="pwm-name">${f.name} · Lüfter ${f.channel}</div><div class="pwm-path">${f.path}</div></div><span class="pwm-val">${f.rpm} RPM</span></div>`; });
+    html += `<div style="font-size:.72rem;color:var(--text-muted);margin:12px 0 8px;font-weight:600">RPM sensors (${rpmSensors.length})</div>`;
+    rpmSensors.forEach(f => { html+=`<div class="pwm-channel"><div><div class="pwm-name">${f.name} · fan ${f.channel}</div><div class="pwm-path">${f.path}</div></div><span class="pwm-val">${f.rpm} RPM</span></div>`; });
   }
-  html += `</div><div style="margin-top:12px;text-align:center"><a href="/fans" class="btn btn-secondary btn-sm">&#x2192; Zur Fan-Control-Seite</a></div>`;
+  html += `</div><div style="margin-top:12px;text-align:center"><a href="/fans" class="btn btn-secondary btn-sm">Open fan control</a></div>`;
   pwmInfo.innerHTML = html;
-  showToast(`&#x2713; ${pwmChannels.length} PWM-Kanal(e), ${rpmSensors.length} RPM-Sensor(en)`,'success');
+  showToast(`${pwmChannels.length} PWM channel(s), ${rpmSensors.length} RPM sensor(s)`,'success');
 }
 
 function showToast(msg, type='info') {
   const el = document.createElement('div');
   el.className = `toast align-items-center border-0 text-bg-${type==='info'?'secondary':type} position-fixed bottom-0 end-0 m-3`;
   el.style.zIndex = '9999';
-  el.innerHTML = `<div class="d-flex"><div class="toast-body">${msg}</div></div>`;
+  el.innerHTML = `<div class="d-flex"><div class="toast-body">${msg}</div></div>`;  // msg is built from escaped values
   document.body.appendChild(el);
   new bootstrap.Toast(el, {delay:3000}).show();
   setTimeout(()=>el.remove(), 4000);

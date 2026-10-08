@@ -1,0 +1,21 @@
+{# Shared template helpers. #}
+{% macro post_button(url, label, cls='btn btn-sm', confirm=None, title=None) -%}
+<form method="post" action="{{ url }}" class="d-inline-block m-0"{% if confirm %} onsubmit="return confirm({{ confirm|tojson|forceescape }})"{% endif %}>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+  <button type="submit" class="{{ cls }}"{% if title %} title="{{ title }}" aria-label="{{ title }}"{% endif %}>{{ label }}</button>
+</form>
+{%- endmacro %}
+
+{# Number tile used across pages (same look as the Home page stat cards). #}
+{% macro stat_tile(value, label, ico=None, tone='', note=None, id=None) -%}
+<div class="stat-card-v4 {{ tone }}">
+  <div class="sc4-top">
+    <div>
+      <div class="sc4-value"{% if id %} id="{{ id }}"{% endif %}>{{ value }}</div>
+      <div class="sc4-label">{{ label }}</div>
+    </div>
+    {% if ico %}<div class="sc4-icon {{ tone }}">{{ icon(ico) }}</div>{% endif %}
+  </div>
+  {% if note %}<div class="sc4-trend flat">{{ note }}</div>{% endif %}
+</div>
+{%- endmacro %}

@@ -2,115 +2,114 @@
 {% block title %}{{ server.name }} — HW Details{% endblock %}
 
 {% block head %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" integrity="sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g" crossorigin="anonymous"></script>
 <style>
 .action-bar{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;align-items:center;}
-.action-bar .page-title{font-size:1.2rem;font-weight:800;flex:1;}
+.action-bar .page-title{font-size:1.2rem;font-weight:600;flex:1;}
 .act-btn{padding:7px 16px;border-radius:9px;border:none;cursor:pointer;font-size:.8rem;font-weight:600;transition:all .15s;}
-.act-btn:hover{opacity:.85;transform:translateY(-1px);}
-.ab-green{background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.25);}
-.ab-red{background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.25);}
-.ab-blue{background:rgba(59,130,246,.15);color:#3b82f6;border:1px solid rgba(59,130,246,.25);}
-.ab-orange{background:rgba(249,115,22,.15);color:#f97316;border:1px solid rgba(249,115,22,.25);}
-.ab-yellow{background:rgba(245,158,11,.15);color:#f59e0b;border:1px solid rgba(245,158,11,.25);}
-.ab-ghost{background:var(--card-bg2,#1a2235);color:#94a3b8;border:1px solid var(--border-color,#1e2d45);}
+.act-btn:hover{opacity:.85;transform:none;}
+.ab-green{background:color-mix(in srgb, var(--accent-green) 12%, transparent);color:var(--accent-green);border:1px solid color-mix(in srgb, var(--accent-green) 25%, transparent);}
+.ab-red{background:color-mix(in srgb, var(--accent-red) 12%, transparent);color:var(--accent-red);border:1px solid color-mix(in srgb, var(--accent-red) 25%, transparent);}
+.ab-blue{background:color-mix(in srgb, var(--accent-blue) 12%, transparent);color:var(--accent-blue);border:1px solid color-mix(in srgb, var(--accent-blue) 25%, transparent);}
+.ab-orange{background:color-mix(in srgb, var(--accent-orange) 12%, transparent);color:var(--accent-orange);border:1px solid color-mix(in srgb, var(--accent-orange) 25%, transparent);}
+.ab-yellow{background:color-mix(in srgb, var(--accent-amber) 12%, transparent);color:var(--accent-amber);border:1px solid color-mix(in srgb, var(--accent-amber) 25%, transparent);}
+.ab-ghost{background:var(--card-bg2,var(--bg-elevated));color:var(--text-secondary);border:1px solid var(--border-color,#1e2d45);}
 
 .stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;}
-.stat-card{background:var(--card-bg,#111827);border:1px solid var(--border-color,#1e2d45);border-radius:14px;padding:16px 18px;position:relative;overflow:hidden;}
+.stat-card{background:var(--card-bg,var(--bg-surface));border:1px solid var(--border-color,#1e2d45);border-radius:var(--radius-lg);padding:16px 18px;position:relative;overflow:hidden;}
 .stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
-.sc-blue::before{background:linear-gradient(90deg,transparent,#3b82f6,transparent);}
-.sc-green::before{background:linear-gradient(90deg,transparent,#10b981,transparent);}
-.sc-orange::before{background:linear-gradient(90deg,transparent,#f97316,transparent);}
-.sc-purple::before{background:linear-gradient(90deg,transparent,#a855f7,transparent);}
-.sc-cyan::before{background:linear-gradient(90deg,transparent,#06b6d4,transparent);}
-.sc-yellow::before{background:linear-gradient(90deg,transparent,#f59e0b,transparent);}
-.stat-val{font-size:1.8rem;font-weight:800;line-height:1;letter-spacing:-1px;}
-.stat-lbl{font-size:.68rem;color:var(--text-muted,#64748b);margin-top:5px;text-transform:uppercase;letter-spacing:.06em;font-weight:500;}
-.stat-sub{font-size:.75rem;color:#94a3b8;margin-top:3px;}
+.sc-blue::before{background:var(--accent-blue);}
+.sc-green::before{background:var(--accent-green);}
+.sc-orange::before{background:var(--accent-orange);}
+.sc-purple::before{background:var(--accent-purple);}
+.sc-cyan::before{background:var(--accent-cyan);}
+.sc-yellow::before{background:var(--accent-amber);}
+.stat-val{font-size:1.8rem;font-weight:600;line-height:1;letter-spacing:-1px;}
+.stat-lbl{font-size:.68rem;color:var(--text-muted,var(--text-muted));margin-top:5px;font-weight:500;}
+.stat-sub{font-size:.75rem;color:var(--text-secondary);margin-top:3px;}
 
 .charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
 @media(max-width:900px){.charts-grid{grid-template-columns:1fr;}}
-.chart-card{background:var(--card-bg,#111827);border:1px solid var(--border-color,#1e2d45);border-radius:14px;padding:18px;}
-.chart-card h3{font-size:.75rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px;}
+.chart-card{background:var(--card-bg,var(--bg-surface));border:1px solid var(--border-color,#1e2d45);border-radius:var(--radius-lg);padding:18px;}
+.chart-card h2{font-size:.75rem;font-weight:600;color:var(--text-secondary);margin-bottom:14px;}
 .chart-wrap{position:relative;height:160px;}
 
 .bottom-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
 @media(max-width:900px){.bottom-grid{grid-template-columns:1fr;}}
-.panel{background:var(--card-bg,#111827);border:1px solid var(--border-color,#1e2d45);border-radius:14px;overflow:hidden;}
+.panel{background:var(--card-bg,var(--bg-surface));border:1px solid var(--border-color,#1e2d45);border-radius:var(--radius-lg);overflow:hidden;}
 .panel-head{padding:14px 18px;border-bottom:1px solid var(--border-color,#1e2d45);display:flex;align-items:center;justify-content:space-between;}
-.panel-head h3{font-size:.8rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;}
+.panel-head h2{font-size:.8rem;font-weight:600;color:var(--text-secondary);}
 .panel-body{padding:14px 18px;}
 
 .fan-chips{display:flex;flex-wrap:wrap;gap:8px;}
-.fan-chip{background:var(--card-bg2,#1a2235);border:1px solid var(--border-color,#1e2d45);border-radius:8px;padding:8px 12px;text-align:center;}
-.fan-chip .fc-name{font-size:.68rem;color:#64748b;margin-bottom:3px;}
-.fan-chip .fc-rpm{font-size:1.1rem;font-weight:800;color:#06b6d4;}
-.fan-chip .fc-unit{font-size:.65rem;color:#64748b;}
+.fan-chip{background:var(--card-bg2,var(--bg-elevated));border:1px solid var(--border-color,#1e2d45);border-radius:8px;padding:8px 12px;text-align:center;}
+.fan-chip .fc-name{font-size:.68rem;color:var(--text-muted);margin-bottom:3px;}
+.fan-chip .fc-rpm{font-size:1.1rem;font-weight:600;color:var(--accent-cyan);}
+.fan-chip .fc-unit{font-size:.65rem;color:var(--text-muted);}
 .fan-spin{display:inline-block;animation:spin 2s linear infinite;}
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 
-.log-box{background:#030712;font-family:'Courier New',monospace;font-size:.7rem;line-height:1.7;height:280px;overflow-y:auto;padding:12px;white-space:pre-wrap;word-break:break-all;border-radius:0 0 14px 14px;}
-.log-info{color:#64748b;}.log-mon{color:#3b82f6;}.log-test{color:#a855f7;}
-.log-warn{color:#f59e0b;}.log-crit{color:#ef4444;font-weight:bold;}.log-ok{color:#10b981;}
+.log-box{background:var(--pre-bg);font-family:var(--font-mono);font-size:.7rem;line-height:1.7;height:280px;overflow-y:auto;padding:12px;white-space:pre-wrap;word-break:break-all;border-radius:0 0 14px 14px;}
+.log-info{color:var(--text-muted);}.log-mon{color:var(--accent-blue);}.log-test{color:var(--accent-purple);}
+.log-warn{color:var(--accent-amber);}.log-crit{color:var(--accent-red);font-weight:bold;}.log-ok{color:var(--accent-green);}
 
-.error-banner{background:linear-gradient(135deg,rgba(127,29,29,.4),rgba(239,68,68,.08));border:1px solid rgba(239,68,68,.4);border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:flex-start;gap:12px;}
+.error-banner{background:color-mix(in srgb, var(--accent-red) 40%, transparent);border:1px solid color-mix(in srgb, var(--accent-red) 40%, transparent);border-radius:var(--radius-lg);padding:14px 18px;margin-bottom:16px;display:flex;align-items:flex-start;gap:12px;}
 .err-icon{font-size:1.3rem;flex-shrink:0;}
 .err-body{flex:1;}
-.err-title{font-size:.85rem;font-weight:700;color:#ef4444;margin-bottom:4px;}
-.err-msg{font-size:.8rem;color:#fca5a5;line-height:1.5;}
-.ack-btn{padding:7px 16px;border-radius:8px;border:1px solid rgba(239,68,68,.5);background:rgba(239,68,68,.15);color:#ef4444;cursor:pointer;font-size:.78rem;font-weight:700;transition:all .15s;flex-shrink:0;}
-.ack-btn:hover{background:rgba(239,68,68,.3);}
+.err-title{font-size:.85rem;font-weight:600;color:var(--accent-red);margin-bottom:4px;}
+.err-msg{font-size:.8rem;color:var(--accent-red);line-height:1.5;}
+.ack-btn{padding:7px 16px;border-radius:8px;border:1px solid color-mix(in srgb, var(--accent-red) 50%, transparent);background:color-mix(in srgb, var(--accent-red) 12%, transparent);color:var(--accent-red);cursor:pointer;font-size:.78rem;font-weight:600;transition:all .15s;flex-shrink:0;}
+.ack-btn:hover{background:color-mix(in srgb, var(--accent-red) 12%, transparent);}
 
-.offline-panel{background:rgba(239,68,68,.05);border:1px solid rgba(239,68,68,.2);border-radius:12px;padding:16px;margin-bottom:16px;}
-.offline-title{font-size:.78rem;font-weight:700;color:#ef4444;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;}
+.offline-panel{background:color-mix(in srgb, var(--accent-red) 6%, transparent);border:1px solid color-mix(in srgb, var(--accent-red) 20%, transparent);border-radius:var(--radius-lg);padding:16px;margin-bottom:16px;}
+.offline-title{font-size:.78rem;font-weight:600;color:var(--accent-red);margin-bottom:10px;}
 .offline-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;}
 .offline-item{background:rgba(0,0,0,.2);border-radius:8px;padding:8px 10px;}
-.offline-item .oi-label{font-size:.65rem;color:#64748b;text-transform:uppercase;letter-spacing:.04em;}
-.offline-item .oi-val{font-size:.9rem;font-weight:700;margin-top:2px;}
-.offline-log-preview{margin-top:10px;background:rgba(0,0,0,.3);border-radius:8px;padding:8px;font-family:monospace;font-size:.68rem;color:#94a3b8;max-height:80px;overflow:hidden;line-height:1.6;}
+.offline-item .oi-label{font-size:.65rem;color:var(--text-muted);}
+.offline-item .oi-val{font-size:.9rem;font-weight:600;margin-top:2px;}
+.offline-log-preview{margin-top:10px;background:rgba(0,0,0,.3);border-radius:8px;padding:8px;font-family:var(--font-mono);font-size:.68rem;color:var(--text-secondary);max-height:80px;overflow:hidden;line-height:1.6;}
 
 .alert-list{display:flex;flex-direction:column;gap:6px;}
-.alert-item{background:var(--card-bg2,#1a2235);border:1px solid var(--border-color,#1e2d45);border-radius:8px;padding:10px 12px;font-size:.78rem;}
-.alert-item .ai-time{font-size:.68rem;color:#64748b;margin-bottom:3px;}
-.alert-item .ai-msg{color:#94a3b8;}
+.alert-item{background:var(--card-bg2,var(--bg-elevated));border:1px solid var(--border-color,#1e2d45);border-radius:8px;padding:10px 12px;font-size:.78rem;}
+.alert-item .ai-time{font-size:.68rem;color:var(--text-muted);margin-bottom:3px;}
+.alert-item .ai-msg{color:var(--text-secondary);}
 .alert-item.acked{opacity:.5;}
-.alert-item .ai-ack{font-size:.68rem;color:#10b981;margin-top:3px;}
+.alert-item .ai-ack{font-size:.68rem;color:var(--accent-green);margin-top:3px;}
 
-.status-pill{font-size:.72rem;padding:4px 12px;border-radius:999px;font-weight:700;}
-.sp-online{background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3);}
-.sp-offline{background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.3);}
-.sp-error{background:rgba(239,68,68,.2);color:#ef4444;border:1px solid rgba(239,68,68,.5);}
+.status-pill{font-size:.72rem;padding:4px 12px;border-radius:999px;font-weight:600;}
+.sp-online{background:color-mix(in srgb, var(--accent-green) 12%, transparent);color:var(--accent-green);border:1px solid color-mix(in srgb, var(--accent-green) 30%, transparent);}
+.sp-offline{background:color-mix(in srgb, var(--accent-red) 12%, transparent);color:var(--accent-red);border:1px solid color-mix(in srgb, var(--accent-red) 30%, transparent);}
+.sp-error{background:color-mix(in srgb, var(--accent-red) 12%, transparent);color:var(--accent-red);border:1px solid color-mix(in srgb, var(--accent-red) 50%, transparent);}
 </style>
 {% endblock %}
 
+{% block page_back %}<a href="/hw">{{ icon('arrow-left', 14) }} HW Monitor</a>{% endblock %}
+{% block page_heading %}{{ server.name }}{% endblock %}
+{% block page_subtitle %}<span class="font-monospace">{{ server.ip }}</span> <span class="status-pill" id="statusPill" role="status">Loading…</span>{% endblock %}
+{% block page_actions %}
+  <button class="btn btn-primary btn-sm" onclick="act('start')">{{ icon('play', 14) }} Start test</button>
+  <button class="btn btn-sm" onclick="act('stop')">Stop test</button>
+  <button class="btn btn-sm" onclick="act('install')">Install tools</button>
+  <button class="btn btn-sm" onclick="act('clear_log')">Clear log</button>
+  <a class="btn btn-sm" href="/fans?hw_sid={{ server.id }}">Fan control</a>
+  <a class="btn btn-sm" href="/hw/setup?sid={{ server.id }}">Setup</a>
+  <button class="btn btn-sm" onclick="refreshAll()">{{ icon('refresh', 14) }} Refresh</button>
+{% endblock %}
 {% block content %}
-<!-- Action Bar -->
-<div class="action-bar">
-  <a href="/hw" class="btn btn-secondary btn-sm">&#x2190; Dashboard</a>
-  <span class="page-title">{{ server.name }} <span class="status-pill sp-online" id="statusPill" style="font-size:.65rem;vertical-align:middle">Lade...</span></span>
-  <span style="font-size:.75rem;color:#64748b;font-family:monospace">{{ server.ip }}</span>
-  <button class="act-btn ab-green" onclick="act('start')">&#x25B6; Test starten</button>
-  <button class="act-btn ab-red" onclick="act('stop')">&#x25A0; Test stoppen</button>
-  <button class="act-btn ab-yellow" onclick="act('install')">&#x2B07; Tools installieren</button>
-  <button class="act-btn ab-ghost" onclick="act('clear_log')">&#x1F5D1; Log leeren</button>
-  <button class="act-btn ab-orange" onclick="location='/fans?hw_sid={{ server.id }}'">&#x1F300; Fan Control</button>
-  <button class="act-btn ab-blue" onclick="location='/hw/setup?sid={{ server.id }}'">&#x2699; Setup</button>
-  <button class="act-btn ab-ghost" onclick="refreshAll()">&#x21BB; Aktualisieren</button>
-</div>
 
 <!-- Error Banner -->
 <div class="error-banner" id="errorBanner" style="display:none">
-  <span class="err-icon">&#x26A0;</span>
+  <span class="err-icon">{{ icon('alert') }}</span>
   <div class="err-body">
-    <div class="err-title">Hardware-Fehler erkannt</div>
+    <div class="err-title">Hardware error detected</div>
     <div class="err-msg" id="errorMsg"></div>
   </div>
-  <button class="ack-btn" onclick="openAck()">&#x2713; Bestätigen</button>
+  <button class="ack-btn" onclick="openAck()">Acknowledge</button>
 </div>
 
 <!-- Offline Panel -->
 <div class="offline-panel" id="offlinePanel" style="display:none">
-  <div class="offline-title">&#x1F534; Server offline — Letzte bekannte Daten</div>
+  <div class="offline-title">Server offline — Last known data</div>
   <div class="offline-grid" id="offlineGrid"></div>
   <div class="offline-log-preview" id="offlineLog"></div>
 </div>
@@ -127,51 +126,51 @@
 
 <!-- Charts -->
 <div class="charts-grid">
-  <div class="chart-card"><h3>CPU Temperatur &amp; Auslastung</h3><div class="chart-wrap"><canvas id="cpuChart"></canvas></div></div>
-  <div class="chart-card"><h3>RAM &amp; Swap Verlauf</h3><div class="chart-wrap"><canvas id="ramChart"></canvas></div></div>
-  <div class="chart-card"><h3>Netzwerk I/O</h3><div class="chart-wrap"><canvas id="netChart"></canvas></div></div>
-  <div class="chart-card"><h3>Disk I/O</h3><div class="chart-wrap"><canvas id="diskChart"></canvas></div></div>
+  <div class="chart-card"><h2>CPU temperature &amp; load</h2><div class="chart-wrap"><canvas id="cpuChart" role="img" aria-label="CPU temperature and load chart. The numbers are also shown on this page."></canvas></div></div>
+  <div class="chart-card"><h2>RAM &amp; swap history</h2><div class="chart-wrap"><canvas id="ramChart" role="img" aria-label="RAM swap history chart. The numbers are also shown on this page."></canvas></div></div>
+  <div class="chart-card"><h2>Network I/O</h2><div class="chart-wrap"><canvas id="netChart" role="img" aria-label="Network I/O chart. The numbers are also shown on this page."></canvas></div></div>
+  <div class="chart-card"><h2>Disk I/O</h2><div class="chart-wrap"><canvas id="diskChart" role="img" aria-label="Disk I/O chart. The numbers are also shown on this page."></canvas></div></div>
 </div>
 
 <!-- Bottom: Fans + Log -->
 <div class="bottom-grid">
   <div class="panel">
     <div class="panel-head">
-      <h3>&#x1F300; Lüfter (Live-RPM)</h3>
+      <h2>Fans (live RPM)</h2>
       <a href="/fans?hw_sid={{ server.id }}" class="btn btn-sm btn-secondary" style="font-size:.72rem">Fan Control &#x2192;</a>
     </div>
     <div class="panel-body">
-      <div class="fan-chips" id="fanChips"><span style="color:#64748b;font-size:.82rem">Keine Lüfterdaten</span></div>
+      <div class="fan-chips" id="fanChips"><span style="color:var(--text-muted);font-size:.82rem">No fan data</span></div>
       <div style="margin-top:16px">
-        <div style="font-size:.72rem;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;font-weight:600">Alert-Verlauf</div>
-        <div class="alert-list" id="alertList"><div style="color:#64748b;font-size:.8rem">Keine Alerts</div></div>
+        <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:8px;font-weight:600">Alert history</div>
+        <div class="alert-list" id="alertList"><div style="color:var(--text-muted);font-size:.8rem">No alerts</div></div>
       </div>
     </div>
   </div>
   <div class="panel">
     <div class="panel-head">
-      <h3>&#x1F4CB; Stress-Test Log</h3>
-      <span style="font-size:.65rem;color:#64748b">Auto-Refresh 8s</span>
+      <h2>Stress-Test Log</h2>
+      <span style="font-size:.65rem;color:var(--text-muted)">Auto-Refresh 8s</span>
     </div>
-    <div class="log-box" id="logBox">Lade...</div>
+    <div class="log-box" id="logBox">Loading…</div>
   </div>
 </div>
 
 <!-- Acknowledge Modal -->
 <div class="modal fade" id="ackModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content" style="background:var(--card-bg,#111827);border:1px solid var(--border-color,#1e2d45);">
+    <div class="modal-content" style="background:var(--card-bg,var(--bg-surface));border:1px solid var(--border-color,#1e2d45);">
       <div class="modal-header" style="border-color:var(--border-color,#1e2d45);">
-        <h5 class="modal-title">&#x26A0; Fehler bestätigen</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        <h3 class="modal-title">Acknowledge error</h3>
+        <button type="button" class="btn-close btn-close-white" aria-label="Close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <p class="text-muted mb-3">Fehler auf <strong>{{ server.name }}</strong> quittieren und archivieren.</p>
-        <div class="mb-3"><label class="form-label">Notiz (optional)</label><input class="form-control" id="ackNote" placeholder="z.B. Untersucht, Ursache gefunden..."></div>
+        <p class="text-muted mb-3">Acknowledge and archive the error on <strong>{{ server.name }}</strong>.</p>
+        <div class="mb-3"><label class="form-label" for="ackNote">Note (optional)</label><input class="form-control" id="ackNote" placeholder="e.g. investigated, cause found"></div>
       </div>
       <div class="modal-footer" style="border-color:var(--border-color,#1e2d45);">
-        <button class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
-        <button class="btn btn-danger" onclick="confirmAck()">&#x2713; Bestätigen</button>
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-danger" onclick="confirmAck()">Acknowledge</button>
       </div>
     </div>
   </div>
@@ -193,10 +192,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
 const co = {
   responsive:true, maintainAspectRatio:false,
-  plugins:{legend:{labels:{color:'#64748b',font:{size:10},boxWidth:10}}},
+  plugins:{legend:{labels:{color: fpColor('--text-muted'),font:{size:10},boxWidth:10}}},
   scales:{
-    x:{ticks:{color:'#475569',maxTicksLimit:6,font:{size:9}},grid:{color:'#1e2d45'}},
-    y:{ticks:{color:'#475569',font:{size:9}},grid:{color:'#1e2d45'}}
+    x:{ticks:{color: fpColor('--text-muted'),maxTicksLimit:6,font:{size:9}},grid:{color:fpColor('--border')}},
+    y:{ticks:{color: fpColor('--text-muted'),font:{size:9}},grid:{color:fpColor('--border')}}
   },
   elements:{point:{radius:0},line:{tension:.35}}
 };
@@ -208,21 +207,21 @@ function mkChart(id, datasets) {
 }
 function initCharts() {
   mkChart('cpuChart',[
-    {label:'CPU °C',data:[],borderColor:'#f97316',borderWidth:2,fill:true,backgroundColor:'rgba(249,115,22,.06)'},
-    {label:'CPU %',data:[],borderColor:'#3b82f6',borderWidth:1.5,fill:false,borderDash:[3,3]},
-    {label:'85°C Warn',data:[],borderColor:'#f59e0b',borderWidth:1,borderDash:[4,4],fill:false},
+    {label:'CPU °C',data:[],borderColor:'#e08a52',borderWidth:2,fill:true,backgroundColor:'rgba(224,138,82,.06)'},
+    {label:'CPU %',data:[],borderColor:'#6b98ee',borderWidth:1.5,fill:false,borderDash:[3,3]},
+    {label:'85°C Warn',data:[],borderColor:'#d8a645',borderWidth:1,borderDash:[4,4],fill:false},
   ]);
   mkChart('ramChart',[
-    {label:'RAM GB',data:[],borderColor:'#10b981',borderWidth:2,fill:true,backgroundColor:'rgba(16,185,129,.06)'},
-    {label:'Swap GB',data:[],borderColor:'#a855f7',borderWidth:1.5,fill:false},
+    {label:'RAM GB',data:[],borderColor:'#4fb383',borderWidth:2,fill:true,backgroundColor:'rgba(79,179,131,.06)'},
+    {label:'Swap GB',data:[],borderColor:'#a093dc',borderWidth:1.5,fill:false},
   ]);
   mkChart('netChart',[
-    {label:'&#x2193; RX',data:[],borderColor:'#06b6d4',borderWidth:2,fill:true,backgroundColor:'rgba(6,182,212,.06)'},
-    {label:'&#x2191; TX',data:[],borderColor:'#a855f7',borderWidth:2,fill:false},
+    {label:'&#x2193; RX',data:[],borderColor:'#5ab6c1',borderWidth:2,fill:true,backgroundColor:'rgba(90,182,193,.06)'},
+    {label:'&#x2191; TX',data:[],borderColor:'#a093dc',borderWidth:2,fill:false},
   ]);
   mkChart('diskChart',[
-    {label:'Read',data:[],borderColor:'#f97316',borderWidth:2,fill:true,backgroundColor:'rgba(249,115,22,.06)'},
-    {label:'Write',data:[],borderColor:'#f59e0b',borderWidth:2,fill:false},
+    {label:'Read',data:[],borderColor:'#e08a52',borderWidth:2,fill:true,backgroundColor:'rgba(224,138,82,.06)'},
+    {label:'Write',data:[],borderColor:'#d8a645',borderWidth:2,fill:false},
   ]);
 }
 function pushChart(id, label, values) {
@@ -233,29 +232,29 @@ function pushChart(id, label, values) {
   c.update('none');
 }
 
-const tc = t => { if(t==null) return '#94a3b8'; if(t>=90) return '#ef4444'; if(t>=80) return '#f59e0b'; if(t>=70) return '#f97316'; return '#10b981'; };
+const tc = t => { if(t==null) return 'var(--text-secondary)'; if(t>=90) return '#e46a63'; if(t>=80) return '#d8a645'; if(t>=70) return '#e08a52'; return '#4fb383'; };
 const fmtKB = kb => { if(kb==null) return '—'; if(kb>1024) return `${(kb/1024).toFixed(1)}M`; return `${kb.toFixed(0)}K`; };
 const fmtUp = s => { if(!s) return '—'; const d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60); return d>0?`${d}d ${h}h`:h>0?`${h}h ${m}m`:`${m}m`; };
-const fmtTime = ts => { try { return new Date(ts).toLocaleString('de-DE',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}); } catch { return ts?.slice(0,16)||'—'; } };
+const fmtTime = ts => { try { return new Date(ts).toLocaleString(undefined,{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}); } catch { return ts?.slice(0,16)||'—'; } };
 
 async function refreshLive() {
   const r=await fetch(`/api/hw/server/${SID}/live`);
-  const d=await r.json();
+  const d=fpEscDeep(await r.json());
   if(!d||!d.ts) return;
   const pill=document.getElementById('statusPill');
   if(!d.reachable) {
-    pill.className='status-pill sp-offline'; pill.textContent='● OFFLINE';
+    pill.className='status-pill offline'; pill.textContent='Offline';
     document.getElementById('offlinePanel').style.display='block';
     const og=document.getElementById('offlineGrid');
     og.innerHTML=[
-      d.last_seen_ts?`<div class="offline-item"><div class="oi-label">Zuletzt online</div><div class="oi-val" style="font-size:.75rem;color:#94a3b8">${fmtTime(d.last_seen_ts)}</div></div>`:'',
+      d.last_seen_ts?`<div class="offline-item"><div class="oi-label">Last online</div><div class="oi-val" style="font-size:.75rem;color:var(--text-secondary)">${fmtTime(d.last_seen_ts)}</div></div>`:'',
       d.last_cpu_temp!=null?`<div class="offline-item"><div class="oi-label">CPU Temp</div><div class="oi-val" style="color:${tc(d.last_cpu_temp)}">${d.last_cpu_temp}°C</div></div>`:'',
       d.last_gpu_temp!=null?`<div class="offline-item"><div class="oi-label">GPU Temp</div><div class="oi-val" style="color:${tc(d.last_gpu_temp)}">${d.last_gpu_temp}°C</div></div>`:'',
     ].join('');
     if(d.last_log){const lines=d.last_log.split('\n').filter(l=>l.trim()).slice(-4).join('\n');document.getElementById('offlineLog').textContent=lines;}
   } else {
-    pill.className=d.stress_failure?'status-pill sp-error':'status-pill sp-online';
-    pill.textContent=d.stress_failure?'⚠ FEHLER':'● ONLINE';
+    pill.className=d.stress_failure?'status-pill critical':'status-pill online';
+    pill.textContent=d.stress_failure?'Error':'Online';
     document.getElementById('offlinePanel').style.display='none';
   }
   const eb=document.getElementById('errorBanner');
@@ -267,7 +266,7 @@ async function refreshLive() {
   document.getElementById('s_cpu_pct').textContent=(d.cpu_pct!=null?d.cpu_pct+'%':'—')+' Last';
   document.getElementById('s_gpu_temp').textContent=d.gpu_temp!=null?d.gpu_temp+'°C':'—';
   document.getElementById('s_gpu_temp').style.color=tc(d.gpu_temp);
-  document.getElementById('s_gpu_bus').textContent='Bus: '+(d.gpu_on_bus===0?'⚠ FEHLT':'OK');
+  document.getElementById('s_gpu_bus').textContent='Bus: '+(d.gpu_on_bus===0?'FEHLT':'OK');
   document.getElementById('s_ram').textContent=d.ram_used_mb&&d.ram_total_mb?`${(d.ram_used_mb/1024).toFixed(1)}G`:'—';
   document.getElementById('s_swap').textContent='Swap: '+(d.swap_used_mb!=null?`${(d.swap_used_mb/1024).toFixed(1)} GB`:'—');
   document.getElementById('s_uptime').textContent=fmtUp(d.uptime_s);
@@ -277,7 +276,7 @@ async function refreshLive() {
   document.getElementById('s_disk_r').textContent=fmtKB(d.disk_read_kbps);
   document.getElementById('s_disk_w').textContent='W: '+fmtKB(d.disk_write_kbps);
 
-  const ts=new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const ts=new Date().toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   pushChart('cpuChart',ts,[d.cpu_temp,d.cpu_pct,85]);
   pushChart('ramChart',ts,[d.ram_used_mb?(d.ram_used_mb/1024):null,d.swap_used_mb?(d.swap_used_mb/1024):null]);
   pushChart('netChart',ts,[d.net_rx_kbps,d.net_tx_kbps]);
@@ -285,12 +284,12 @@ async function refreshLive() {
 
   const fans=(d.fans||[]).filter(f=>f.rpm>0);
   const fc=document.getElementById('fanChips');
-  fc.innerHTML=fans.length?fans.map(f=>`<div class="fan-chip"><div class="fc-name">${f.chip?.split('-')[0]||'Fan'} ${f.channel||''}</div><div class="fc-rpm"><span class="fan-spin">&#x27F3;</span> ${f.rpm}</div><div class="fc-unit">RPM</div></div>`).join(''):'<span style="color:#64748b;font-size:.82rem">Keine Lüfterdaten</span>';
+  fc.innerHTML=fans.length?fans.map(f=>`<div class="fan-chip"><div class="fc-name">${f.chip?.split('-')[0]||'Fan'} ${f.channel||''}</div><div class="fc-rpm"><span class="fan-spin">&#x27F3;</span> ${f.rpm}</div><div class="fc-unit">RPM</div></div>`).join(''):'<span style="color:var(--text-muted);font-size:.82rem">No fan data</span>';
 }
 
 async function refreshLog() {
   const r=await fetch(`/api/hw/server/${SID}/log`);
-  const d=await r.json();
+  const d=fpEscDeep(await r.json());
   const box=document.getElementById('logBox');
   if(d.lines&&d.lines.length) {
     box.innerHTML=d.lines.map(l=>{
@@ -302,15 +301,15 @@ async function refreshLog() {
       return `<span class="log-info">${l}</span>`;
     }).join('\n');
     box.scrollTop=box.scrollHeight;
-  } else box.textContent='Kein Log vorhanden.';
+  } else box.textContent='No log yet.';
 }
 
 async function refreshAlerts() {
   try {
     const r=await fetch(`/api/hw/server/${SID}/alerts`);
-    const alerts=await r.json();
+    const alerts=fpEscDeep(await r.json());
     const list=document.getElementById('alertList');
-    if(!alerts.length){list.innerHTML='<div style="color:#64748b;font-size:.8rem">Keine Alerts</div>';return;}
+    if(!alerts.length){list.innerHTML='<div style="color:var(--text-muted);font-size:.8rem">No alerts</div>';return;}
     list.innerHTML=alerts.slice(0,5).map(a=>`<div class="alert-item ${a.acknowledged?'acked':''}"><div class="ai-time">${fmtTime(a.ts)} · ${a.type}</div><div class="ai-msg">${(a.message||'').slice(0,80)}</div>${a.ack_note?`<div class="ai-ack">&#x2713; ${a.ack_note}</div>`:''}</div>`).join('');
   } catch(e) {}
 }
@@ -319,7 +318,7 @@ async function loadHistory() {
   const r=await fetch(`/api/hw/server/${SID}/history?limit=120`);
   const data=await r.json();
   if(!data.length) return;
-  const labels=data.map(d=>new Date(d.ts).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}));
+  const labels=data.map(d=>new Date(d.ts).toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'}));
   const set=(id,vals)=>{const c=charts[id];if(!c)return;c.data.labels=labels;vals.forEach((v,i)=>{if(c.data.datasets[i])c.data.datasets[i].data=v;});c.update('none');};
   set('cpuChart',[data.map(d=>d.cpu_temp),data.map(d=>d.cpu_pct),data.map(()=>85)]);
   set('ramChart',[data.map(d=>d.ram_used_mb?(d.ram_used_mb/1024):null),data.map(d=>d.swap_used_mb?(d.swap_used_mb/1024):null)]);
@@ -335,7 +334,7 @@ async function act(action) {
     const toastEl=document.createElement('div');
     toastEl.className=`toast align-items-center border-0 text-bg-${d.ok?'success':'danger'} position-fixed bottom-0 end-0 m-3`;
     toastEl.style.zIndex='9999';
-    toastEl.innerHTML=`<div class="d-flex"><div class="toast-body">${d.ok?'&#x2713;':' &#x2717;'} ${action} ${d.ok?'OK':d.output||''}</div></div>`;
+    toastEl.innerHTML=`<div class="d-flex"><div class="toast-body">${d.ok?'&#x2713;':' &#x2717;'} ${fpEsc(action)} ${d.ok?'OK':fpEsc(d.output||'')}</div></div>`;
     document.body.appendChild(toastEl);
     new bootstrap.Toast(toastEl,{delay:3000}).show();
     setTimeout(()=>toastEl.remove(),4000);

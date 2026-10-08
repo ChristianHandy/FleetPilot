@@ -1,10 +1,11 @@
-{% extends 'disks/base.html' %}{% block title %}Dashboard{% endblock %}
+{% extends 'disks/base.html' %}
+{% from '_macros.html' import stat_tile %}{% block title %}Dashboard{% endblock %}
+{% block page_heading %}{{ _('Dashboard') }}{% endblock %}
 {% block content %}
-<h1>{{ _('Dashboard') }}</h1>
-<div class="row mb-4">
-  <div class="col"><div class="card p-3"><h3>{{ _('Total Disks') }}</h3><p>{{ total }}</p></div></div>
-  <div class="col"><div class="card p-3"><h3>{{ _('Bad Disks') }}</h3><p>{{ bad }}</p></div></div>
-  <div class="col"><div class="card p-3"><h3>{{ _('Running Tasks') }}</h3><p>{{ running }}</p></div></div>
+<div class="stat-grid-v4">
+  {{ stat_tile(total, _('Total Disks'), 'hard-drive', 'blue') }}
+  {{ stat_tile(bad, _('Bad Disks'), 'alert', 'red') }}
+  {{ stat_tile(running, _('Running Tasks'), 'activity', 'amber') }}
 </div>
 <h2>{{ _('Runtimes') }}</h2>
 <table class="table table-striped"><thead><tr><th>{{ _('Device') }}</th><th>{{ _('Uptime') }}</th></tr></thead><tbody>

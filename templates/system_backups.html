@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% from "_macros.html" import post_button %}
+{% block title %}Backups{% endblock %}
+{% block page_subtitle %}Users, hosts, controller settings, SMART history and the generated secret key.{% endblock %}
+{% block page_actions %}{{ post_button(url_for('system_backups_create'), icon('download') ~ ' Create backup now', 'btn btn-primary') }}{% endblock %}
+{% block content %}
+{% if restore_pending %}
+<div class="alert alert-warning">{{ icon('alert') }}
+  <div>
+    <strong>A restore is waiting.</strong> Restart FleetPilot to apply it
+    (<code>sudo systemctl restart fleetpilot</code>). The current data will be moved to a <code>pre-restore-…</code> folder first.
+    <div class="mt-2">{{ post_button(url_for('system_backups_restore_cancel'), 'Cancel restore', 'btn btn-sm') }}</div>
+  </div>
+</div>
+{% endif %}
+
+<div class="card-v4 mb-3">
+  <div class="card-v4-header"><span class="card-v4-header-title">Saved backups</span>
+    <span class="text-muted small">
+      {% if auto_enabled %}Automatic backup daily at {{ '%02d' % hour }}:00, keeping {{ keep }}.{% else %}Automatic backups are off (FLEETPILOT_AUTO_BACKUP=false).{% endif %}
+    </span>
+  </div>
+  {% if backups %}
+  <div class="table-responsive">
+    <table class="table">
+      <thead><tr><th>File</th><th>Created</th><th class="text-end">Size</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+      <tbody>
+      {% for b in backups %}
+        <tr>
+          <td><code>{{ b.name }}</code></td>
+          <td>{{ b.created }}</td>
+          <td class="text-end num">{{ (b.size / 1048576)|round(1) }} MB</td>
+          <td class="text-end">
+            <a class="btn btn-sm" href="{{ url_for('system_backups_download', name=b.name) }}">Download</a>
+            {{ post_button(url_for('system_backups_delete', name=b.name), 'Delete', 'btn btn-sm btn-danger', confirm='Delete ' ~ b.name ~ '?') }}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">No backups yet.</div>
+  {% endif %}
+</div>
+
+<div class="card-v4">
+  <div class="card-v4-header"><span class="card-v4-header-title">Restore from a backup</span></div>
+  <div class="card-v4-body">
+    <p>Upload a FleetPilot backup file. It is checked (manifest, checksums, database integrity) and applied the next time FleetPilot starts.</p>
+    <form method="post" action="{{ url_for('system_backups_restore') }}" enctype="multipart/form-data" class="d-flex gap-2 flex-wrap align-items-center"
+          onsubmit="return confirm('Replace all FleetPilot data with this backup at the next restart?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="file" name="archive" accept=".tar.gz,.tgz,application/gzip" required style="max-width:420px">
+      <button class="btn" type="submit">Stage restore</button>
+    </form>
+    <p class="form-hint mt-2">Backups contain password hashes, 2FA secrets and encrypted credentials. Store them somewhere private.</p>
+  </div>
+</div>
+{% endblock %}

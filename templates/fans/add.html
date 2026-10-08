@@ -1,18 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Add Fan Controller{% endblock %}
+{% block page_back %}<a href="/fans">{{ icon('arrow-left', 14) }} Fan controllers</a>{% endblock %}
 {% block content %}
-<div class="container py-4" style="max-width:760px">
+<div class="page-narrow" style="max-width:760px">
 
-  <div class="d-flex align-items-center mb-3">
-    <a href="/fans" class="btn btn-sm btn-outline-secondary me-2"><i class="bi bi-arrow-left"></i></a>
-    <h4 class="mb-0"><i class="bi bi-wind me-2"></i>Add Fan Controller</h4>
-  </div>
-
-  {% with messages = get_flashed_messages(with_categories=true) %}
-    {% for cat, msg in messages %}
-      <div class="alert alert-{{ cat }}">{{ msg }}</div>
-    {% endfor %}
-  {% endwith %}
+  
 
   <!-- ── Step 0: Pick from known servers ─────────────────────────────────── -->
   {% if known_servers %}
@@ -26,7 +18,7 @@
         {% for s in known_servers %}
         <div class="col-12 col-md-6">
           <button type="button" class="btn btn-outline-secondary w-100 text-start py-2"
-                  onclick="pickKnownServer('{{ s.host }}', {{ s.port|default(22) }}, '{{ s.user|default('root') }}', '{{ s.password|default('') }}', '{{ s.ssh_key|default('') }}', '{{ s.name }}')">
+                  onclick="pickKnownServer({{ (s.host)|tojson|forceescape }}, {{ s.port|default(22) }}, {{ (s.user|default('root'))|tojson|forceescape }}, {{ (s.password|default(''))|tojson|forceescape }}, {{ (s.ssh_key|default(''))|tojson|forceescape }}, {{ (s.name)|tojson|forceescape }})">
             <div class="fw-semibold"><i class="bi bi-hdd-network me-1"></i>{{ s.name }}</div>
             <div class="text-muted small">{{ s.host }}{% if s.port and s.port != 22 %}:{{ s.port }}{% endif %} — {{ s.user|default('root') }}</div>
           </button>
@@ -48,28 +40,28 @@
     <div class="card-body">
       <div class="row g-2 mb-3">
         <div class="col-9">
-          <label class="form-label">Host / IP <span class="text-danger">*</span></label>
+          <label class="form-label" for="d_host">Host / IP <span class="text-danger">*</span></label>
           <input type="text" id="d_host" class="form-control" placeholder="192.168.1.100"
                  onkeydown="if(event.key==='Enter'){runDetect();event.preventDefault();}">
         </div>
         <div class="col-3">
-          <label class="form-label">SSH Port</label>
+          <label class="form-label" for="d_port">SSH Port</label>
           <input type="number" id="d_port" class="form-control" value="22">
         </div>
       </div>
       <div class="row g-2 mb-2">
         <div class="col-6">
-          <label class="form-label">Username</label>
+          <label class="form-label" for="d_user">Username</label>
           <input type="text" id="d_user" class="form-control" value="root">
         </div>
         <div class="col-6">
-          <label class="form-label">Password</label>
+          <label class="form-label" for="d_pass">Password</label>
           <input type="password" id="d_pass" class="form-control" placeholder="SSH password"
                  onkeydown="if(event.key==='Enter'){runDetect();event.preventDefault();}">
         </div>
       </div>
       <div class="mb-2">
-        <label class="form-label">SSH Key Path <span class="text-muted small">(optional)</span></label>
+        <label class="form-label" for="d_key">SSH Key Path <span class="text-muted small">(optional)</span></label>
         <input type="text" id="d_key" class="form-control" placeholder="/root/.ssh/id_rsa">
       </div>
 
@@ -86,12 +78,12 @@
 
   <!-- ── Step 2: Detection Results ────────────────────────────────────────── -->
   <div id="detectResults" style="display:none" class="mb-3">
-    <h6 class="text-muted mb-2">
+    <h2 class="text-muted mb-2">
       <i class="bi bi-check2-circle me-1 text-success"></i>
       Detected on <span id="detectedHost" class="fw-semibold"></span>
       <span id="detectedOS" class="badge bg-secondary ms-2"></span>
       <span id="detectedLaptop" class="badge bg-info ms-1" style="display:none">Laptop</span>
-    </h6>
+    </h2>
     <div id="suggestionCards" class="row g-2 mb-3"></div>
   </div>
 
@@ -118,22 +110,22 @@
       <div class="card-header fw-semibold">Device Details</div>
       <div class="card-body">
         <div class="mb-3">
-          <label class="form-label">Display Name <span class="text-danger">*</span></label>
+          <label class="form-label" for="f_name">Display Name <span class="text-danger">*</span></label>
           <input type="text" name="name" id="f_name" class="form-control"
                  placeholder="e.g. gaming-pc-fans" required>
         </div>
         <div class="mb-3">
-          <label class="form-label">Controller Type</label>
+          <label class="form-label" for="f_ctype">Controller Type</label>
           <select name="controller_type" id="f_ctype" class="form-select" onchange="updateTypeUI()">
             {% for key, info in controller_types.items() %}
-            <option value="{{ key }}">{{ info.icon }} {{ info.label }}</option>
+            <option value="{{ key }}">{{ info.label }}</option>
             {% endfor %}
           </select>
           <div id="typeDesc" class="form-text mt-1 text-muted"></div>
         </div>
         <div class="mb-2">
-          <label class="form-label">Notes</label>
-          <input type="text" name="notes" class="form-control" placeholder="Optional description">
+          <label class="form-label" for="add-notes">Notes</label>
+          <input id="add-notes" type="text" name="notes" class="form-control" placeholder="Optional description">
         </div>
         <div class="mb-2">
           <div class="form-check form-switch">
@@ -179,7 +171,7 @@
 <script>
 const TYPES = {{ controller_types | tojson }};
 const CONFIDENCE_COLORS = {high: 'success', medium: 'warning', low: 'secondary'};
-const CONFIDENCE_ICONS  = {high: '✅', medium: '⚠️', low: '❓'};
+const CONFIDENCE_ICONS  = {high: '', medium: '', low: ''};
 
 // ── Auto-Detect ───────────────────────────────────────────────────────────────
 function runDetect() {
@@ -213,7 +205,7 @@ function runDetect() {
 
       if (!data.ok) {
         document.getElementById('detectError').style.display = '';
-        document.getElementById('detectError').textContent = '✘ ' + (data.error || 'Detection failed');
+        document.getElementById('detectError').textContent = '' + (data.error || 'Detection failed');
         return;
       }
 
@@ -232,7 +224,7 @@ function runDetect() {
       btn.innerHTML = '<i class="bi bi-search me-1"></i>Auto-Detect Controllers';
       document.getElementById('detectSpinner').style.display = 'none';
       document.getElementById('detectError').style.display = '';
-      document.getElementById('detectError').textContent = '✘ Network error: ' + e;
+      document.getElementById('detectError').textContent = 'Network error: ' + e;
     });
 }
 
@@ -259,16 +251,16 @@ function renderSuggestions(suggestions, host, port, user, pass, key) {
         <div class="card-body py-2 px-3">
           <div class="d-flex justify-content-between align-items-start">
             <div>
-              <span class="fs-5 me-1">${s.icon}</span>
-              <strong>${s.label}</strong>
-              <span class="badge bg-${color} ms-2">${icon} ${s.confidence} confidence</span>
+              
+              <strong>${fpEsc(s.label)}</strong>
+              <span class="badge bg-${color} ms-2">${icon} ${fpEsc(s.confidence)} confidence</span>
               ${isFirst ? '<span class="badge bg-primary ms-1">Recommended</span>' : ''}
             </div>
             <button class="btn btn-sm btn-${color}" onclick="event.stopPropagation();selectSuggestion(${idx})">
               Use This
             </button>
           </div>
-          <div class="text-muted small mt-1">${s.reason}</div>
+          <div class="text-muted small mt-1">${fpEsc(s.reason)}</div>
           ${s.detected_devices ? `
             <details class="mt-1">
               <summary class="small text-muted" style="cursor:pointer">Show detected devices</summary>

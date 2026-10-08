@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
-{% block title %}Email Configuration — FleetPilot{% endblock %}
-{% block page_icon %}&#x2709;{% endblock %}
+{% block title %}Email Configuration{% endblock %}
+{% block page_icon %}{% endblock %}
 {% block page_title %}Email Configuration{% endblock %}
 
 {% block content %}
@@ -12,11 +12,11 @@
   <div>
     <div class="card">
       <div class="card-header">
-        <h3>&#x2699; SMTP Settings</h3>
+        <h2>SMTP Settings</h2>
       </div>
       <form method="POST" action="/email_settings">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="section" value="smtp">
 
         <div class="form-check">
           <input type="checkbox" name="email_enabled" id="email_enabled"
@@ -28,15 +28,15 @@
         </div>
 
         <div class="form-group">
-          <label class="form-label">{{ _('SMTP Server') }}</label>
-          <input type="text" name="smtp_server" value="{{ settings.smtp_server }}"
+          <label class="form-label" for="email-settings-smtp-server">{{ _('SMTP Server') }}</label>
+          <input id="email-settings-smtp-server" type="text" name="smtp_server" value="{{ settings.smtp_server }}"
                  placeholder="smtp.gmail.com">
           <p class="form-hint">{{ _('e.g. smtp.gmail.com, smtp.office365.com') }}</p>
         </div>
 
         <div class="form-group">
-          <label class="form-label">{{ _('SMTP Port') }}</label>
-          <input type="number" name="smtp_port" value="{{ settings.smtp_port }}"
+          <label class="form-label" for="email-settings-smtp-port">{{ _('SMTP Port') }}</label>
+          <input id="email-settings-smtp-port" type="number" name="smtp_port" value="{{ settings.smtp_port }}"
                  placeholder="587">
           <p class="form-hint">587 (TLS) &nbsp;|&nbsp; 465 (SSL) &nbsp;|&nbsp; 25 (unencrypted)</p>
         </div>
@@ -51,35 +51,35 @@
         </div>
 
         <div class="form-group">
-          <label class="form-label">{{ _('SMTP Username') }}</label>
-          <input type="text" name="smtp_username" value="{{ settings.smtp_username }}"
+          <label class="form-label" for="email-settings-smtp-username">{{ _('SMTP Username') }}</label>
+          <input id="email-settings-smtp-username" type="text" name="smtp_username" value="{{ settings.smtp_username }}"
                  placeholder="{{ _('your-email@example.com') }}">
           <p class="form-hint">{{ _('Usually your email address.') }}</p>
         </div>
 
         <div class="form-group">
-          <label class="form-label">{{ _('SMTP Password') }}</label>
-          <input type="password" name="smtp_password" value="{{ settings.smtp_password }}"
-                 placeholder="{{ _('Password or app-specific password') }}">
+          <label class="form-label" for="email-settings-smtp-password">{{ _('SMTP Password') }}</label>
+          <input id="email-settings-smtp-password" type="password" name="smtp_password" value="" autocomplete="new-password"
+                 placeholder="{{ 'Saved. Leave blank to keep it.' if has_smtp_password else _('Password or app-specific password') }}">
           <p class="form-hint">{{ _('For Gmail, use an app-specific password.') }}</p>
         </div>
 
         <div class="form-group">
-          <label class="form-label">{{ _('Sender Email') }}</label>
-          <input type="email" name="sender_email" value="{{ settings.sender_email }}"
+          <label class="form-label" for="email-settings-sender-email">{{ _('Sender Email') }}</label>
+          <input id="email-settings-sender-email" type="email" name="sender_email" value="{{ settings.sender_email }}"
                  placeholder="{{ _('dashboard@example.com') }}">
         </div>
 
         <div class="form-group">
-          <label class="form-label">{{ _('Recipient Emails') }}</label>
-          <textarea name="recipient_emails" rows="3"
-                    placeholder="{{ _('admin@example.com&#10;ops@example.com') }}">{{ settings.recipient_emails|join('\n') }}</textarea>
+          <label class="form-label" for="email-settings-recipient-emails">{{ _('Recipient Emails') }}</label>
+          <textarea id="email-settings-recipient-emails" name="recipient_emails" rows="3"
+                    placeholder="admin@example.com&#10;ops@example.com">{{ settings.recipient_emails|join('\n') }}</textarea>
           <p class="form-hint">{{ _('One email address per line.') }}</p>
         </div>
 
         <div class="btn-group">
-          <button type="submit" class="btn btn-primary">&#x1F4BE; Save Settings</button>
-          <button type="submit" name="test_email" value="true" class="btn btn-success">&#x2709; Send Test Email</button>
+          <button type="submit" class="btn btn-primary">Save Settings</button>
+          <button type="submit" name="test_email" value="true" class="btn btn-success">Send Test Email</button>
           <a class="btn btn-ghost" href="/index">{{ _('Cancel') }}</a>
         </div>
       </form>
@@ -90,9 +90,11 @@
   <div>
     <div class="card">
       <div class="card-header">
-        <h3>&#x1F4CA; Report Configuration</h3>
+        <h2>Report Configuration</h2>
       </div>
       <form method="POST" action="/email_settings">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+        <input type="hidden" name="section" value="notifications">
 
         <div class="form-check">
           <input type="checkbox" name="report_enabled" id="report_enabled"
@@ -104,8 +106,8 @@
         </div>
 
         <div class="form-group">
-          <label class="form-label">{{ _('Report Interval') }}</label>
-          <select name="report_interval">
+          <label class="form-label" for="email-settings-report-interval">{{ _('Report Interval') }}</label>
+          <select id="email-settings-report-interval" name="report_interval">
             <option value="daily"   {% if settings.report_interval == 'daily'   %}selected{% endif %}>Daily</option>
             <option value="weekly"  {% if settings.report_interval == 'weekly'  %}selected{% endif %}>Weekly</option>
             <option value="monthly" {% if settings.report_interval == 'monthly' %}selected{% endif %}>Monthly</option>
@@ -121,24 +123,33 @@
           </label>
         </div>
 
-        <button type="submit" class="btn btn-primary">&#x1F4BE; Save Report Settings</button>
+        <div class="form-check">
+          <input type="checkbox" name="smart_alerts_enabled" id="smart_alerts"
+                 {% if settings.smart_alerts_enabled %}checked{% endif %}>
+          <label class="form-check-label" for="smart_alerts">
+            <strong>Email SMART disk alerts</strong>
+            <span>A message when a disk is newly flagged as warning, critical or failed.</span>
+          </label>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Save Report Settings</button>
       </form>
     </div>
 
     <!-- Features -->
     <div class="card">
-      <h3 style="margin-bottom:1rem;">&#x2728; Email Features</h3>
+      <h2 style="margin-bottom:1rem;">Email Features</h2>
       <div class="feature-grid" style="grid-template-columns:1fr;">
         <div class="feature-item">
-          <div class="feature-item-title text-blue">&#x1F4CA; Scheduled Reports</div>
+          <div class="feature-item-title text-blue">Scheduled Reports</div>
           <div class="feature-item-desc">Regular system status reports with host online/offline status and recent update history.</div>
         </div>
         <div class="feature-item">
-          <div class="feature-item-title text-red">&#x26A0; Error Notifications</div>
+          <div class="feature-item-title text-red">Error Notifications</div>
           <div class="feature-item-desc">Immediate alerts when system updates fail, including error details and troubleshooting info.</div>
         </div>
         <div class="feature-item">
-          <div class="feature-item-title text-green">&#x2709; HTML Emails</div>
+          <div class="feature-item-title text-green">HTML Emails</div>
           <div class="feature-item-desc">Professional HTML-formatted emails with rich formatting for better readability.</div>
         </div>
       </div>
@@ -146,11 +157,11 @@
 
     <!-- Notes -->
     <div class="card card-amber">
-      <h3 style="margin-bottom:0.75rem;">&#x1F4DD; Important Notes</h3>
+      <h2 style="margin-bottom:0.75rem;">Important Notes</h2>
       <ul style="font-size:0.875rem; line-height:1.8;">
         <li><strong>{{ _('Gmail:') }}</strong> Use an app-specific password. Enable 2FA and generate an app password in Google Account settings.</li>
         <li><strong>{{ _('Office 365:') }}</strong> Use your full email address as username and enable Modern Authentication if required.</li>
-        <li><strong>{{ _('Security:') }}</strong> Credentials are stored in <code>email_settings.json</code>. Ensure proper file permissions.</li>
+        <li><strong>{{ _('Security:') }}</strong> The SMTP password is stored encrypted in the data folder and is never shown again after saving.</li>
         <li><strong>{{ _('Testing:') }}</strong> Use "Send Test Email" to verify your configuration before enabling automatic reports.</li>
         <li><strong>{{ _('Port:') }}</strong> Port 587 with TLS is recommended for most providers.</li>
       </ul>

@@ -1,13 +1,12 @@
 {% extends 'disks/base.html' %}
 {% block title %}Tasks{% endblock %}
+{% block page_heading %}Server Tasks{% endblock %}
+{% block page_subtitle %}Disk Tools tasks run on FleetPilot’s server, not in this browser tab.{% endblock %}
+{% block page_actions %}
+<a class="btn btn-secondary" href="{{ url_for('disks_index') }}">Back to Disk Tools</a>
+{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <div>
-    <h1 class="mb-1">Server Tasks</h1>
-    <p class="text-muted mb-0">Disk Tools tasks run on FleetPilot’s server, not in this browser tab.</p>
-  </div>
-  <a class="btn btn-secondary" href="{{ url_for('disks_index') }}">Back to Disk Tools</a>
-</div>
+
 
 <div class="alert alert-info">
   You may close the browser or sign out after a task has started. Sign back in and open this page to see its current or final status. A server restart marks unfinished tasks as <strong>Interrupted</strong> rather than silently losing their result.
@@ -20,7 +19,7 @@
   </div>
   <div class="table-responsive">
     <table class="table table-hover mb-0">
-      <thead><tr><th>ID</th><th>Device</th><th>Action</th><th>Status</th><th>Progress</th><th>Started</th><th>Finished</th><th></th></tr></thead>
+      <thead><tr><th>ID</th><th>Device</th><th>Action</th><th>Status</th><th>Progress</th><th>Started</th><th>Finished</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
       <tbody>
       {% for task in tasks %}
         <tr>

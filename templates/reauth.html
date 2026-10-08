@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Confirm your password{% endblock %}
+{% block page_subtitle %}This action changes security-relevant data. Confirm it is really you.{% endblock %}
+{% block content %}
+<div class="card-v4 page-narrow" style="max-width:440px">
+  <div class="card-v4-body">
+    <form method="post" action="{{ url_for('reauth') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="next" value="{{ next }}">
+      <div class="form-group">
+        <label class="form-label" for="reauth-user">Account</label>
+        <input id="reauth-user" class="form-control" type="text" value="{{ session.username }}" autocomplete="username" readonly>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="reauth-password">Password</label>
+        <input id="reauth-password" class="form-control" type="password" name="password" autocomplete="current-password" required autofocus>
+        <div class="form-hint">You will not be asked again for {{ fp_reauth_minutes }} minutes.</div>
+      </div>
+      <div class="d-flex gap-2">
+        <button class="btn btn-primary" type="submit">Confirm</button>
+        <a class="btn" href="{{ url_for('index') }}">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

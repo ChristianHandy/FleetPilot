@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% from "_macros.html" import post_button, stat_tile %}
+{% block title %}Security center{% endblock %}
+{% block page_subtitle %}Checks of this installation, sign-in rules, and every active session and API token.{% endblock %}
+{% block page_actions %}<a class="btn btn-sm" href="{{ url_for('system_audit') }}">{{ icon('scroll') }} Audit trail</a>{% endblock %}
+{% block head %}
+<style>
+.sec-checks { list-style: none; margin: 0; padding: 0; }
+.sec-checks li { display: grid; grid-template-columns: 1.5rem 1fr auto; gap: .75rem; padding: .8rem 1.1rem; border-top: 1px solid var(--border); align-items: start; }
+.sec-checks li:first-child { border-top: 0; }
+.sec-checks .sec-ok   { color: var(--accent-green); }
+.sec-checks .sec-warn { color: var(--accent-amber); }
+.sec-checks .sec-bad  { color: var(--accent-red); }
+.sec-checks .sec-info { color: var(--text-muted); }
+.sec-checks .title { font-weight: 600; }
+.sec-checks .detail { color: var(--text-secondary); font-size: .875rem; }
+</style>
+{% endblock %}
+{% block content %}
+{% set bad = checks|selectattr('status', 'equalto', 'bad')|list %}
+{% set warn = checks|selectattr('status', 'equalto', 'warn')|list %}
+<div class="stat-grid-v4 mb-3">
+  {{ stat_tile(passed ~ ' / ' ~ total, 'Checks passed', 'shield', 'green' if passed == total else ('red' if bad else 'amber')) }}
+  {{ stat_tile(bad|length, 'Need fixing', 'alert', 'red' if bad else '') }}
+  {{ stat_tile(sessions|length, 'Active sessions', 'users') }}
+  {{ stat_tile(tokens|selectattr('expired', 'equalto', false)|list|length, 'Active API tokens', 'key') }}
+</div>
+
+<section class="card-v4 mb-3" aria-labelledby="checks-title">
+  <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="checks-title">Checks</h2></div>
+  <ul class="sec-checks">
+    {% for group in ['bad', 'warn', 'ok', 'info'] %}{% for c in checks if c.status == group %}
+    <li>
+      <span class="sec-{{ c.status }}">{{ icon({'ok': 'check-circle', 'warn': 'alert', 'bad': 'x-circle', 'info': 'dot'}[c.status], 18) }}</span>
+      <div>
+        <div class="title">{{ c.title }} <span class="visually-hidden">— {{ {'ok': 'passed', 'warn': 'warning', 'bad': 'needs fixing', 'info': 'information'}[c.status] }}</span></div>
+        <div class="detail">{{ c.detail }}</div>
+      </div>
+      {% if c.href and c.status != 'ok' %}<a class="btn btn-sm" href="{{ c.href }}">Open<span class="visually-hidden"> {{ c.title }}</span></a>{% else %}<span></span>{% endif %}
+    </li>
+    {% endfor %}{% endfor %}
+  </ul>
+</section>
+
+<section class="card-v4 mb-3" aria-labelledby="rules-title">
+  <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="rules-title">Sign-in rules</h2></div>
+  <div class="card-v4-body">
+    <form method="post" action="{{ url_for('system_security_settings') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="a11y-option">
+        <input type="checkbox" id="require_2fa_admins" name="require_2fa_admins" value="1" {% if settings.require_2fa_admins %}checked{% endif %} aria-describedby="r2fa-hint">
+        <div><label for="require_2fa_admins">Require two-factor sign-in for administrators</label>
+          <div class="form-hint" id="r2fa-hint">Administrators without 2FA are sent to the 2FA page after signing in and cannot use anything else until they set it up.</div></div>
+      </div>
+      <div class="row g-3 mt-1">
+        <div class="col-sm-6 col-lg-3">
+          <label class="form-label" for="idle_minutes">Sign out after inactivity (minutes)</label>
+          <input class="form-control" type="number" id="idle_minutes" name="idle_minutes" min="0" max="1440" value="{{ settings.idle_minutes }}" aria-describedby="idle-hint">
+          <div class="form-hint" id="idle-hint">0 = never.</div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+          <label class="form-label" for="reauth_minutes">Password confirmation lasts (minutes)</label>
+          <input class="form-control" type="number" id="reauth_minutes" name="reauth_minutes" min="1" max="120" value="{{ settings.reauth_minutes }}" aria-describedby="reauth-hint">
+          <div class="form-hint" id="reauth-hint">For user management, backups and these settings.</div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+          <label class="form-label" for="max_token_days">Longest API token life (days)</label>
+          <input class="form-control" type="number" id="max_token_days" name="max_token_days" min="0" max="3650" value="{{ settings.max_token_days }}" aria-describedby="tok-hint">
+          <div class="form-hint" id="tok-hint">0 allows tokens that never expire.</div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+          <label class="form-label" for="audit_retention_days">Keep audit events (days)</label>
+          <input class="form-control" type="number" id="audit_retention_days" name="audit_retention_days" min="30" max="3650" value="{{ settings.audit_retention_days }}">
+        </div>
+        <div class="col-12">
+          <label class="form-label" for="ip_allowlist">Allowed networks</label>
+          <textarea class="form-control" id="ip_allowlist" name="ip_allowlist" rows="3" placeholder="192.168.1.0/24&#10;10.8.0.0/16" aria-describedby="allow-hint" style="font-family:var(--font-mono, monospace)">{{ settings.ip_allowlist|join('\n') }}</textarea>
+          <div class="form-hint" id="allow-hint">One address or network per line. Leave empty to allow every address. This server itself is always allowed,
+            and so is the public status page. Your address is <code>{{ client_ip }}</code>; a list that leaves it out is refused.
+            Behind a reverse proxy, make sure FleetPilot sees real client addresses (FLEETPILOT_TRUST_PROXY).</div>
+        </div>
+      </div>
+      <button class="btn btn-primary mt-3" type="submit">Save rules</button>
+    </form>
+  </div>
+</section>
+
+<section class="card-v4 mb-3" aria-labelledby="all-sessions-title">
+  <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="all-sessions-title">Active sessions</h2></div>
+  <div class="table-responsive">
+    <table class="table">
+      <thead><tr><th>User</th><th>Device</th><th>Address</th><th>Signed in</th><th>Last active</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+      <tbody>
+      {% for s in sessions %}
+        <tr>
+          <td>{{ s.username }}</td>
+          <td>{{ s.user_agent|fp_agent }}{% if s.id == current_key %} <span class="badge badge-green">You</span>{% endif %}</td>
+          <td><code>{{ s.ip or '—' }}</code></td>
+          <td>{{ s.created_at|fp_ts }}</td>
+          <td>{{ s.last_seen|fp_ts }}</td>
+          <td class="text-end">{% if s.id != current_key %}{{ post_button(url_for('system_security_end_session', key=s.id), 'Sign out', 'btn btn-sm', title='Sign out ' ~ s.username ~ ' at ' ~ s.ip) }}{% endif %}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="text-muted">No active sessions.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card-v4 mb-3" aria-labelledby="all-tokens-title">
+  <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="all-tokens-title">API tokens</h2></div>
+  {% if tokens %}
+  <div class="table-responsive">
+    <table class="table">
+      <thead><tr><th>User</th><th>Name</th><th>Access</th><th>Expires</th><th>Last used</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+      <tbody>
+      {% for t in tokens %}
+        <tr>
+          <td>{{ t.username }}</td>
+          <td>{{ t.name }} <code class="small">{{ t.prefix }}…</code></td>
+          <td>{{ 'Read and change' if t.scope == 'write' else 'Read-only' }}</td>
+          <td>{% if t.expired %}<span class="badge badge-gray">Expired</span>{% elif t.expires_at %}{{ t.expires_at|fp_ts }}{% else %}<span class="badge badge-amber">Never</span>{% endif %}</td>
+          <td>{{ t.last_used_at|fp_ts }}{% if t.last_used_ip %} <span class="text-muted small">from {{ t.last_used_ip }}</span>{% endif %}</td>
+          <td class="text-end">{% if not t.expired %}{{ post_button(url_for('system_security_revoke_token', token_id=t.id), 'Revoke', 'btn btn-sm btn-danger', confirm='Revoke ' ~ t.name ~ ' of ' ~ t.username ~ '?', title='Revoke ' ~ t.name) }}{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">No API tokens. Users create them under Sign-in &amp; security.</div>
+  {% endif %}
+</section>
+
+<section class="card-v4" aria-labelledby="failed-title">
+  <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="failed-title">Recent failed sign-ins</h2>
+    <a class="btn btn-sm" href="{{ url_for('system_audit', type='login_', outcome='failure') }}">Show all</a></div>
+  <div class="table-responsive">
+    <table class="table">
+      <thead><tr><th>When (UTC)</th><th>Account tried</th><th>Event</th><th>Address</th></tr></thead>
+      <tbody>
+      {% for e in events %}
+        <tr><td>{{ e.occurred_at.replace('T', ' ')[:19] }}</td><td>{{ e.actor }}</td>
+          <td>{{ 'Locked out' if e.event_type == 'login_locked' else 'Wrong password or code' }}</td><td><code>{{ e.remote_addr }}</code></td></tr>
+      {% else %}
+        <tr><td colspan="4" class="text-muted">No failed sign-ins recorded.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

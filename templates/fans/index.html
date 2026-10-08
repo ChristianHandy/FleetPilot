@@ -1,22 +1,15 @@
 {% extends "base.html" %}
+{% from "_macros.html" import stat_tile %}
 {% block title %}Fan Controllers{% endblock %}
-{% block content %}
-<div class="container-fluid py-3">
-
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h4 class="mb-0"><i class="bi bi-wind me-2"></i>Fan Controllers</h4>
-    <a href="/fans/add" class="btn btn-success btn-sm">
+{% block page_actions %}
+<a href="/fans/add" class="btn btn-success btn-sm">
       <i class="bi bi-plus-circle me-1"></i>Add Device
     </a>
-  </div>
+{% endblock %}
+{% block content %}
 
-  {% with messages = get_flashed_messages(with_categories=true) %}
-    {% for cat, msg in messages %}
-      <div class="alert alert-{{ cat }} alert-dismissible fade show" role="alert">
-        {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-      </div>
-    {% endfor %}
-  {% endwith %}
+
+  
 
   {% if not devices %}
     <div class="alert alert-info">
@@ -26,65 +19,30 @@
   {% else %}
 
   <!-- Summary cards -->
-  <div class="row g-3 mb-4">
-    {% set total = devices|length %}
-    {% set online = devices|selectattr('enabled')|list|length %}
-    <div class="col-6 col-md-3">
-      <div class="card text-center h-100">
-        <div class="card-body py-2">
-          <div class="fs-2 fw-bold text-primary">{{ total }}</div>
-          <div class="small text-muted">Total Devices</div>
-        </div>
-      </div>
-    </div>
-    <div class="col-6 col-md-3">
-      <div class="card text-center h-100">
-        <div class="card-body py-2">
-          <div class="fs-2 fw-bold text-success">{{ online }}</div>
-          <div class="small text-muted">Enabled</div>
-        </div>
-      </div>
-    </div>
-    <div class="col-6 col-md-3">
-      <div class="card text-center h-100">
-        <div class="card-body py-2">
-          {% set total_fans = namespace(n=0) %}
-          {% for d in devices %}
-            {% set lat = latest_map.get(d.id) %}
-            {% if lat and lat.fans %}
-              {% set total_fans.n = total_fans.n + lat.fans|length %}
-            {% endif %}
-          {% endfor %}
-          <div class="fs-2 fw-bold text-info">{{ total_fans.n }}</div>
-          <div class="small text-muted">Fan Channels</div>
-        </div>
-      </div>
-    </div>
-    <div class="col-6 col-md-3">
-      <div class="card text-center h-100">
-        <div class="card-body py-2">
-          {% set total_temps = namespace(n=0) %}
-          {% for d in devices %}
-            {% set lat = latest_map.get(d.id) %}
-            {% if lat and lat.temperatures %}
-              {% set total_temps.n = total_temps.n + lat.temperatures|length %}
-            {% endif %}
-          {% endfor %}
-          <div class="fs-2 fw-bold text-warning">{{ total_temps.n }}</div>
-          <div class="small text-muted">Temp Sensors</div>
-        </div>
-      </div>
-    </div>
+  {% set total = devices|length %}
+  {% set online = devices|selectattr('enabled')|list|length %}
+  {% set total_fans = namespace(n=0) %}
+  {% set total_temps = namespace(n=0) %}
+  {% for d in devices %}
+    {% set lat = latest_map.get(d.id) %}
+    {% if lat and lat.fans %}{% set total_fans.n = total_fans.n + lat.fans|length %}{% endif %}
+    {% if lat and lat.temperatures %}{% set total_temps.n = total_temps.n + lat.temperatures|length %}{% endif %}
+  {% endfor %}
+  <div class="stat-grid-v4">
+    {{ stat_tile(total, 'Devices', 'cpu', 'blue') }}
+    {{ stat_tile(online, 'Enabled', 'check-circle', 'green') }}
+    {{ stat_tile(total_fans.n, 'Fan channels', 'fan', 'cyan') }}
+    {{ stat_tile(total_temps.n, 'Temperature sensors', 'thermometer', 'amber') }}
   </div>
 
   <!-- Live sensor overview (auto-refresh every 10s) -->
   <div class="card mb-3">
     <div class="card-header d-flex align-items-center justify-content-between py-2">
-      <span class="fw-semibold small">&#x1F321; Live Sensor Overview — alle Ger&#228;te</span>
-      <span class="text-muted" style="font-size:.7rem" id="overviewLastUpdate">Lade...</span>
+      <span class="fw-semibold small">Live Sensor Overview — alle Ger&#228;te</span>
+      <span class="text-muted" style="font-size:.7rem" id="overviewLastUpdate">Loading…</span>
     </div>
     <div class="card-body py-2" id="overviewRows">
-      <span class="text-muted small">Verbinde...</span>
+      <span class="text-muted small">Connecting…</span>
     </div>
   </div>
 
@@ -102,7 +60,7 @@
               <th>Temperatures</th>
               <th>Last Poll</th>
               <th>Status</th>
-              <th></th>
+              <th><span class="visually-hidden">Actions</span></th>
             </tr>
           </thead>
           <tbody>
@@ -113,7 +71,7 @@
             <tr>
               <td>
                 <a href="/fans/{{ d.id }}" class="fw-semibold text-decoration-none">
-                  {{ type_info.get('icon','⚙') }} {{ d.name }}
+                  {{ d.name }}
                 </a>
               </td>
               <td>
@@ -184,18 +142,18 @@
             {% endfor %}
             {# ── Commander Pro Devices ── #}
             {% if commander_devices is defined and commander_devices %}
-            <tr><td colspan="8" class="py-1 px-3" style="background:rgba(99,102,241,.06);border-top:1px solid rgba(99,102,241,.2)">
-              <span class="small fw-semibold" style="color:#818cf8">&#x1F4A8; Commander Pro Devices</span>
+            <tr><td colspan="8" class="py-1 px-3" style="background:color-mix(in srgb, var(--accent-blue) 6%, transparent);border-top:1px solid color-mix(in srgb, var(--accent-blue) 20%, transparent)">
+              <span class="small fw-semibold" style="color:#818cf8">Commander Pro Devices</span>
             </td></tr>
             {% for d in commander_devices %}
             {% set lat = commander_latest.get(d.id) if commander_latest is defined else none %}
             <tr>
               <td>
                 <a href="/commander/{{ d.id }}" class="fw-semibold text-decoration-none">
-                  &#x1F4A8; {{ d.name }}
+                  {{ d.name }}
                 </a>
               </td>
-              <td><span class="badge" style="background:rgba(99,102,241,.2);color:#818cf8">Commander Pro</span></td>
+              <td><span class="badge" style="background:color-mix(in srgb, var(--accent-blue) 12%, transparent);color:#818cf8">Commander Pro</span></td>
               <td class="font-monospace small">{{ d.host }}:{{ d.port }}</td>
               <td>
                 {% if lat and lat.fans %}
@@ -248,13 +206,13 @@
 
   <!-- Controller type info cards -->
   <div class="mt-4">
-    <h6 class="text-muted mb-3">Supported Controller Types</h6>
+    <h2 class="text-muted mb-3">Supported Controller Types</h2>
     <div class="row g-2">
       {% for key, info in controller_types.items() %}
       <div class="col-12 col-md-6 col-xl-4">
         <div class="card h-100 border-secondary">
           <div class="card-body py-2 px-3">
-            <div class="fw-semibold">{{ info.icon }} {{ info.label }}</div>
+            <div class="fw-semibold">{{ info.label }}</div>
             <div class="small text-muted">{{ info.description }}</div>
             {% if info.packages_apt %}
               <div class="mt-1">
@@ -270,7 +228,7 @@
     </div>
   </div>
 
-</div>
+
 
 <script>
 // Device IDs for live polling
@@ -278,11 +236,11 @@ const DEVICE_IDS = [{% for d in devices %}{{ d.id }}{% if not loop.last %},{% en
 const DEVICE_NAMES = { {% for d in devices %}{{ d.id }}: "{{ d.name }}"{% if not loop.last %}, {% endif %}{% endfor %} };
 
 function tcColor(v) {
-  if (v == null) return '#64748b';
-  if (v >= 90) return '#ef4444';
-  if (v >= 75) return '#f97316';
-  if (v >= 60) return '#f59e0b';
-  return '#10b981';
+  if (v == null) return 'var(--text-muted)';
+  if (v >= 90) return '#e46a63';
+  if (v >= 75) return '#e08a52';
+  if (v >= 60) return '#d8a645';
+  return '#4fb383';
 }
 
 async function refreshOverview() {
@@ -301,19 +259,19 @@ async function refreshOverview() {
       const col = tcColor(t.value);
       const lbl = t.label.split('/').pop().trim();
       chips.push(`<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(0,0,0,.2);border:1px solid rgba(255,255,255,.08);border-radius:7px;padding:3px 9px;font-size:.75rem">`+
-        `<span>&#x1F321;</span><span style="color:#94a3b8">${lbl}</span><span style="font-weight:700;color:${col}">${t.value}&#x00B0;C</span></span>`);
+        `<span></span><span style="color:var(--text-secondary)">${fpEsc(lbl)}</span><span style="font-weight:600;color:${col}">${fpEsc(t.value)}&#x00B0;C</span></span>`);
     });
     (data.fans || []).filter(f => f.rpm > 0).forEach(f => {
       const lbl = f.label.split('/').pop().trim();
       const isPump = f.is_pump;
-      const rpmCol = f.rpm < 200 ? '#ef4444' : '#06b6d4';
-      chips.push(`<span style="display:inline-flex;align-items:center;gap:4px;background:${isPump?'rgba(59,130,246,.08)':'rgba(0,0,0,.2)'};border:1px solid ${isPump?'rgba(59,130,246,.3)':'rgba(255,255,255,.08)'};border-radius:7px;padding:3px 9px;font-size:.75rem">`+
-        `<span style="animation:${isPump?'none':'fp-spin 3s linear infinite'}">${isPump?'&#x1F4A7;':'&#x1F300;'}</span>`+
-        `<span style="color:#94a3b8">${lbl}</span><span style="font-weight:700;color:${rpmCol}">${f.rpm} RPM</span></span>`);
+      const rpmCol = f.rpm < 200 ? '#e46a63' : '#5ab6c1';
+      chips.push(`<span style="display:inline-flex;align-items:center;gap:4px;background:${isPump?'rgba(107,152,238,.08)':'rgba(0,0,0,.2)'};border:1px solid ${isPump?'rgba(107,152,238,.3)':'rgba(255,255,255,.08)'};border-radius:7px;padding:3px 9px;font-size:.75rem">`+
+        `<span style="animation:${isPump?'none':'fp-spin 3s linear infinite'}">${isPump?'':''}</span>`+
+        `<span style="color:var(--text-secondary)">${fpEsc(lbl)}</span><span style="font-weight:600;color:${rpmCol}">${fpEsc(f.rpm)} RPM</span></span>`);
     });
-    const status = data.ok ? '<span style="color:#10b981;font-size:.7rem">&#x25CF; Online</span>' : `<span style="color:#ef4444;font-size:.7rem">&#x25CF; ${data.error||'Offline'}</span>`;
+    const status = data.ok ? '<span style="color:#4fb383;font-size:.7rem">&#x25CF; Online</span>' : `<span style="color:#e46a63;font-size:.7rem">&#x25CF; ${fpEsc(data.error||'Offline')}</span>`;
     html += `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">`+
-      `<a href="/fans/${id}" style="font-size:.82rem;font-weight:700;color:var(--text-primary,#e2e8f0);text-decoration:none;min-width:120px">${name}</a>`+
+      `<a href="/fans/${fpEsc(id)}" style="font-size:.82rem;font-weight:600;color:var(--text-primary,#e2e8f0);text-decoration:none;min-width:120px">${fpEsc(name)}</a>`+
       status+
       `<div style="display:flex;flex-wrap:wrap;gap:5px">${chips.join('')}</div>`+
       `</div>`;
@@ -321,7 +279,7 @@ async function refreshOverview() {
   html += '</div>';
   rows.innerHTML = html;
   const upd = document.getElementById('overviewLastUpdate');
-  if (upd) upd.textContent = 'Aktualisiert: ' + new Date().toLocaleTimeString('de-DE');
+  if (upd) upd.textContent = 'Updated ' + new Date().toLocaleTimeString();
 }
 
 document.addEventListener('DOMContentLoaded', function() {

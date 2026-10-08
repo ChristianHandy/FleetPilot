@@ -1,8 +1,7 @@
 {% extends 'disks/base.html' %}
 {% block title %}Plugin Manager{% endblock %}
+{% block page_heading %}{{ _('Plugin Manager') }}{% endblock %}
 {% block content %}
-<div class="container mt-4">
-  <h1 class="mb-4">{{ _('Plugin Manager') }}</h1>
   
   <!-- Installed Plugins Section -->
   <h2 class="mb-3">{{ _('Installed Plugins') }}</h2>
@@ -19,7 +18,7 @@
       {% for p in plugins %}
       <tr class="{{ 'table-success' if p.status == 'ok' else 'table-danger' }}">
         <td>{{ p.name }}</td>
-        <td><strong>{{ '✅ OK' if p.status == 'ok' else '❌ Error' }}</strong></td>
+        <td><strong>{{ 'OK' if p.status == 'ok' else 'Error' }}</strong></td>
         <td>
           {% if p.error %}
           <pre class="bg-dark text-light p-2 rounded" style="white-space: pre-wrap;">{{ p.error }}</pre>
@@ -46,11 +45,11 @@
   <h2 class="mb-3 mt-5">{{ _('Available Remote Plugins') }}</h2>
   {% if is_admin %}
   <div class="alert alert-info">
-    <strong>💡 Tip:</strong> Install plugins to extend the dashboard functionality. After installation, restart the application to activate the plugins.
+    <strong>Tip:</strong> Install plugins to extend the dashboard functionality. After installation, restart the application to activate the plugins.
   </div>
   {% else %}
   <div class="alert alert-warning">
-    <strong>⚠️ Note:</strong> Only administrators can install or uninstall plugins.
+    <strong>Note:</strong> Only administrators can install or uninstall plugins.
   </div>
   {% endif %}
   
@@ -60,12 +59,12 @@
     <div class="col-md-6 mb-3">
       <div class="card {% if plugin.installed %}border-success{% endif %}">
         <div class="card-body">
-          <h5 class="card-title">
+          <h3 class="card-title">
             {{ plugin.name }}
             {% if plugin.installed %}
             <span class="badge bg-success">{{ _('Installed') }}</span>
             {% endif %}
-          </h5>
+          </h3>
           <p class="card-text">{{ plugin.description }}</p>
           <p class="card-text">
             <small class="text-muted">Version: {{ plugin.version }}</small><br>
@@ -88,10 +87,10 @@
   </div>
   {% else %}
   <div class="alert alert-warning">
-    <strong>⚠️ Note:</strong> Could not fetch remote plugins. Please check your internet connection or try again later.
+    <strong>Note:</strong> Could not fetch remote plugins. Please check your internet connection or try again later.
   </div>
   {% endif %}
   
   <a href="{{ url_for('disks_index') }}" class="btn btn-secondary mt-3">{{ _('Back') }}</a>
-</div>
+
 {% endblock %}

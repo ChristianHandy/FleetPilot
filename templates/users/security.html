@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% from "_macros.html" import post_button %}
+{% block title %}Sign-in &amp; security{% endblock %}
+{% block page_subtitle %}Where your account is signed in, your recent sign-ins, and keys for scripts and integrations.{% endblock %}
+{% block content %}
+
+{% if not has_2fa %}
+<div class="alert alert-warning">{{ icon('alert') }}
+  <div><strong>Two-factor sign-in is off.</strong> Anyone who learns your password can sign in.
+    <a href="{{ url_for('tfa_setup') }}">Set up an authenticator app or security key</a>.</div>
+</div>
+{% endif %}
+
+<section class="card-v4 mb-3" aria-labelledby="sessions-title">
+  <div class="card-v4-header">
+    <h2 class="card-v4-header-title h6 m-0" id="sessions-title">Active sessions</h2>
+    {% if sessions|length > 1 %}
+      {{ post_button(url_for('users_security_end_others'), 'Sign out all other sessions', 'btn btn-sm', confirm='Sign out every other device?') }}
+    {% endif %}
+  </div>
+  <div class="table-responsive">
+    <table class="table">
+      <thead><tr><th>Device</th><th>Address</th><th>Signed in</th><th>Last active</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+      <tbody>
+      {% for s in sessions %}
+        <tr>
+          <td>{{ s.user_agent|fp_agent }}{% if s.id == current_key %} <span class="badge badge-green">This device</span>{% endif %}
+            <div class="text-muted small">{{ s.method }}</div></td>
+          <td><code>{{ s.ip or '—' }}</code></td>
+          <td>{{ s.created_at|fp_ts }}</td>
+          <td>{{ s.last_seen|fp_ts }}</td>
+          <td class="text-end">{% if s.id != current_key %}{{ post_button(url_for('users_security_end_session', key=s.id), 'Sign out', 'btn btn-sm', title='Sign out ' ~ (s.user_agent|fp_agent) ~ ' at ' ~ s.ip) }}{% endif %}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="text-muted">No active sessions.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-v4-body pt-0">
+    <p class="form-hint mb-0">
+      {% if settings.idle_minutes %}Sessions end after {{ settings.idle_minutes }} minutes without activity.{% else %}Sessions do not end on their own.{% endif %}
+      Changing your password signs out every other session.
+    </p>
+  </div>
+</section>
+
+<section class="card-v4 mb-3" aria-labelledby="history-title">
+  <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="history-title">Recent sign-ins</h2></div>
+  <div class="table-responsive">
+    <table class="table">
+      <thead><tr><th>When (UTC)</th><th>Result</th><th>Address</th><th>Method</th></tr></thead>
+      <tbody>
+      {% for e in history %}
+        <tr>
+          <td>{{ e.occurred_at.replace('T', ' ')[:19] }}</td>
+          <td>{% if e.event_type == 'login_success' %}<span class="badge badge-green">Signed in</span>
+              {% elif e.event_type == 'login_locked' %}<span class="badge badge-red">Locked</span>
+              {% else %}<span class="badge badge-red">Failed</span>{% endif %}</td>
+          <td><code>{{ e.remote_addr or '—' }}</code></td>
+          <td>{{ e.target if e.event_type == 'login_success' else '' }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4" class="text-muted">No sign-ins recorded yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-v4-body pt-0"><p class="form-hint mb-0">If you see a sign-in you do not recognise, change your password and sign out all other sessions.</p></div>
+</section>
+
+<section class="card-v4 mb-3" aria-labelledby="tokens-title">
+  <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="tokens-title">API tokens</h2></div>
+  <div class="card-v4-body">
+    {% if new_token %}
+    <div class="alert alert-success" role="status">{{ icon('key') }}
+      <div style="min-width:0;flex:1">
+        <strong>Copy your new token now.</strong> It will not be shown again.
+        <div class="d-flex gap-2 mt-2 flex-wrap">
+          <input class="form-control" id="new-token" type="text" value="{{ new_token }}" readonly aria-label="New API token" style="font-family:var(--font-mono, monospace);flex:1;min-width:0">
+          <button class="btn btn-sm" type="button" onclick="navigator.clipboard.writeText(document.getElementById('new-token').value).then(function(){fpAnnounce('Token copied')})">Copy</button>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <p>Scripts, Home Assistant or monitoring tools can call the FleetPilot <code>/api/</code> with a token instead of your password.
+      A token can do what your account can do, limited to reading if you choose <em>read-only</em>.</p>
+
+    <form method="post" action="{{ url_for('users_security_create_token') }}" class="row g-2 align-items-end mb-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="col-sm-5">
+        <label class="form-label" for="token-name">Name</label>
+        <input class="form-control" id="token-name" name="name" maxlength="64" required placeholder="e.g. Home Assistant">
+      </div>
+      <div class="col-sm-3">
+        <label class="form-label" for="token-scope">Access</label>
+        <select class="form-select" id="token-scope" name="scope">
+          <option value="read">Read-only</option>
+          {% if can_write %}<option value="write">Read and change</option>{% endif %}
+        </select>
+      </div>
+      <div class="col-sm-2">
+        <label class="form-label" for="token-days">Expires</label>
+        <select class="form-select" id="token-days" name="days">
+          {% for d in [30, 90, 365] if not settings.max_token_days or d <= settings.max_token_days %}
+            <option value="{{ d }}" {% if d == 90 %}selected{% endif %}>{{ d }} days</option>
+          {% endfor %}
+          {% if not settings.max_token_days %}<option value="0">Never</option>{% endif %}
+        </select>
+      </div>
+      <div class="col-sm-2"><button class="btn btn-primary w-100" type="submit">Create token</button></div>
+    </form>
+
+    {% if tokens %}
+    <div class="table-responsive">
+      <table class="table">
+        <thead><tr><th>Name</th><th>Token</th><th>Access</th><th>Expires</th><th>Last used</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+        <tbody>
+        {% for t in tokens %}
+          <tr>
+            <td>{{ t.name }}</td>
+            <td><code>{{ t.prefix }}…</code></td>
+            <td>{{ 'Read and change' if t.scope == 'write' else 'Read-only' }}</td>
+            <td>{% if t.revoked %}<span class="badge badge-gray">Revoked</span>{% elif t.expired %}<span class="badge badge-gray">Expired</span>{% elif t.expires_at %}{{ t.expires_at|fp_ts }}{% else %}<span class="badge badge-amber">Never</span>{% endif %}</td>
+            <td>{{ t.last_used_at|fp_ts }}{% if t.last_used_ip %} <span class="text-muted small">from {{ t.last_used_ip }}</span>{% endif %}</td>
+            <td class="text-end">{% if not t.revoked and not t.expired %}{{ post_button(url_for('users_security_revoke_token', token_id=t.id), 'Revoke', 'btn btn-sm btn-danger', confirm='Revoke ' ~ t.name ~ '? Programs using it will stop working.', title='Revoke ' ~ t.name) }}{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    <details class="mt-2">
+      <summary>How to use a token</summary>
+      <pre class="mt-2 mb-0"><code>curl -H "Authorization: Bearer fp_…" {{ request.host_url }}api/me</code></pre>
+    </details>
+  </div>
+</section>
+{% endblock %}

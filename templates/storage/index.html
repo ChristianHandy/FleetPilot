@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% block title %}Storage Controller — FleetPilot{% endblock %}
-{% block page_icon %}&#x1F5C4;{% endblock %}
+{% block title %}Storage Controller{% endblock %}
+{% block page_icon %}{% endblock %}
 {% block page_title %}Storage Controller{% endblock %}
 
 {% block nav_extra %}
@@ -35,7 +35,7 @@
 {% if endpoints %}
 <div class="card" style="margin-bottom:1.5rem">
   <div class="card-header">
-    <h3>&#x1F5C4; Registered NAS Endpoints</h3>
+    <h2>Registered NAS Endpoints</h2>
   </div>
   <div style="overflow-x:auto">
   <table class="table">
@@ -50,9 +50,9 @@
       </td>
       <td>
         {% if ep.platform == "truenas" %}
-          <span class="badge badge-blue">&#x1F30A; TrueNAS</span>
+          <span class="badge badge-blue">TrueNAS</span>
         {% elif ep.platform == "unraid" %}
-          <span class="badge badge-orange" style="background:rgba(251,146,60,0.15);color:#fb923c">&#x1F40B; Unraid</span>
+          <span class="badge badge-orange" style="background:color-mix(in srgb, var(--accent-orange) 12%, transparent);color:var(--accent-orange)">Unraid</span>
         {% else %}
           <span class="badge">{{ ep.platform }}</span>
         {% endif %}
@@ -62,17 +62,17 @@
       <td>{% if ep.verify_ssl %}<span class="badge badge-green">{{ _('Yes') }}</span>{% else %}<span class="badge">{{ _('No') }}</span>{% endif %}</td>
       <td>
         <div class="btn-group">
-          <a href="/storage/{{ ep.id }}" class="btn btn-sm btn-primary">&#x1F50D; View</a>
-          <button class="btn btn-sm btn-secondary" onclick="testConn({{ ep.id }}, this)">&#x1F50C; Test</button>
+          <a href="/storage/{{ ep.id }}" class="btn btn-sm btn-primary">View</a>
+          <button class="btn btn-sm btn-secondary" onclick="testConn({{ ep.id }}, this)">Test</button>
           {% if is_admin %}
           <form method="POST" action="/storage/{{ ep.id }}/poll" style="display:inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-sm btn-secondary">&#x1F504; Poll</button>
+            <button class="btn btn-sm btn-secondary">Poll</button>
           </form>
           <form method="POST" action="/storage/delete/{{ ep.id }}" style="display:inline"
-                onsubmit="return confirm('Delete endpoint {{ ep.name }}?')">
+                onsubmit="return confirm({{ ('Delete endpoint ' ~ (ep.name) ~ '?')|tojson|forceescape }})">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-sm btn-danger">&#x1F5D1;</button>
+            <button class="btn btn-sm btn-danger" aria-label="Delete {{ ep.name }}" title="Delete">{{ icon('trash') }}</button>
           </form>
           {% endif %}
         </div>
@@ -86,7 +86,7 @@
 </div>
 {% else %}
 <div class="card card-blue" style="margin-bottom:1.5rem">
-  <div class="card-header"><h3>&#x1F4A1; No Storage Endpoints Yet</h3></div>
+  <div class="card-header"><h2>No Storage Endpoints Yet</h2></div>
   <p>{{ _('Add a TrueNAS SCALE/CORE or Unraid server to monitor pools, disks, and shares.') }}</p>
   {% if is_admin %}
   <a href="/storage/add" class="btn btn-success">&#x2B; Add First Endpoint</a>
@@ -97,7 +97,7 @@
 <!-- ── Recent Events ─────────────────────────────────────────── -->
 {% if events %}
 <div class="card">
-  <div class="card-header"><h3>&#x1F4CB; Recent Events</h3></div>
+  <div class="card-header"><h2>Recent Events</h2></div>
   <div style="overflow-x:auto">
   <table class="table">
     <thead>
@@ -133,11 +133,11 @@ function testConn(epId, btn) {
   fetch("/storage/test/" + epId)
     .then(r => r.json())
     .then(d => {
-      span.textContent = d.ok ? "✅ " + d.message : "❌ " + d.message;
+      span.textContent = d.ok ? "" + d.message : "" + d.message;
       span.style.color = d.ok ? "var(--success)" : "var(--danger)";
     })
-    .catch(e => { span.textContent = "❌ " + e; span.style.color = "var(--danger)"; })
-    .finally(() => { btn.disabled = false; btn.textContent = "🔌 Test"; });
+    .catch(e => { span.textContent = "" + e; span.style.color = "var(--danger)"; })
+    .finally(() => { btn.disabled = false; btn.textContent = "Test"; });
 }
 </script>
 {% endblock %}

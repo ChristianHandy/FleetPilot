@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Accessibility') }}{% endblock %}
+{% block page_subtitle %}Make FleetPilot easier to read and use. Your choices follow your account on every device.{% endblock %}
+{% block content %}
+<form method="post" action="{{ url_for('users_accessibility') }}" class="page-narrow" id="a11yForm">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <section class="card-v4 mb-3" aria-labelledby="read-title">
+    <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="read-title">Reading</h2></div>
+    <div class="card-v4-body">
+      <fieldset class="a11y-option" style="display:block;border:0;margin:0">
+        <legend class="form-label" style="font-weight:600;font-size:0.95rem">Text size</legend>
+        <div class="d-flex gap-3 flex-wrap" role="radiogroup">
+          {% for value, label in [('normal', 'Normal'), ('large', 'Large'), ('larger', 'Extra large')] %}
+          <label class="d-inline-flex align-items-center gap-2" style="font-weight:400">
+            <input type="radio" name="text_size" value="{{ value }}" {% if a11y.text_size == value %}checked{% endif %} data-attr="text">
+            {{ label }}
+          </label>
+          {% endfor %}
+        </div>
+      </fieldset>
+      <div class="a11y-option">
+        <input type="checkbox" id="font" name="font" value="readable" {% if a11y.font == 'readable' %}checked{% endif %} data-attr="font" data-on="readable" data-off="default" aria-describedby="font-hint">
+        <div><label for="font">Easy-to-read font</label>
+          <div class="form-hint" id="font-hint">Uses Atkinson Hyperlegible, a font made so letters like I, l and 1 are easy to tell apart.</div></div>
+      </div>
+      <div class="a11y-option">
+        <input type="checkbox" id="spacing" name="spacing" value="wide" {% if a11y.spacing == 'wide' %}checked{% endif %} data-attr="spacing" data-on="wide" data-off="normal" aria-describedby="spacing-hint">
+        <div><label for="spacing">More space between lines and letters</label>
+          <div class="form-hint" id="spacing-hint">Helps with dyslexia and low vision.</div></div>
+      </div>
+      <div class="a11y-option">
+        <input type="checkbox" id="easy_language" name="easy_language" value="on" {% if a11y.easy_language == 'on' %}checked{% endif %} aria-describedby="easy-hint">
+        <div><label for="easy_language">Easy language</label>
+          <div class="form-hint" id="easy-hint">Shows simple menu names and a short explanation at the top of each page, in short sentences without technical words. Available in English and German (Leichte Sprache).</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card-v4 mb-3" aria-labelledby="see-title">
+    <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="see-title">Seeing</h2></div>
+    <div class="card-v4-body">
+      <div class="a11y-option">
+        <input type="checkbox" id="contrast" name="contrast" value="high" {% if a11y.contrast == 'high' %}checked{% endif %} data-attr="contrast" data-on="high" data-off="normal" aria-describedby="contrast-hint">
+        <div><label for="contrast">High contrast</label>
+          <div class="form-hint" id="contrast-hint">Black and white backgrounds, stronger text and borders, a bright focus outline. Works with the light and dark theme.</div></div>
+      </div>
+      <div class="a11y-option">
+        <input type="checkbox" id="underline_links" name="underline_links" value="on" {% if a11y.underline_links == 'on' %}checked{% endif %} data-attr="links" data-on="on" data-off="off" aria-describedby="links-hint">
+        <div><label for="underline_links">Underline links</label>
+          <div class="form-hint" id="links-hint">So links can be found without relying on color.</div></div>
+      </div>
+      <div class="a11y-option">
+        <input type="checkbox" id="motion" name="motion" value="reduce" {% if a11y.motion == 'reduce' %}checked{% endif %} data-attr="motion" data-on="reduce" data-off="system" aria-describedby="motion-hint">
+        <div><label for="motion">Reduce motion</label>
+          <div class="form-hint" id="motion-hint">Turns off animations and sliding effects. FleetPilot also follows this setting from your operating system.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card-v4 mb-3" aria-labelledby="sr-title">
+    <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="sr-title">Screen readers and keyboard</h2></div>
+    <div class="card-v4-body">
+      <p>These work all the time and need no setting:</p>
+      <ul>
+        <li>Press <kbd>Tab</kbd> on any page and choose <strong>Skip to content</strong> to jump past the menu.</li>
+        <li>Every page has one main heading, the menu is a navigation landmark, and menu groups announce whether they are open.</li>
+        <li>Messages that appear after an action (saved, failed, started) are read out automatically.</li>
+        <li>All buttons and fields have names, including buttons that only show an icon.</li>
+        <li>On the Home page, use <strong>Customize</strong> and then the <strong>Move up</strong> and <strong>Move down</strong> buttons to reorder cards without a mouse.</li>
+      </ul>
+      <p class="mb-0">Tested with keyboard only and with the axe accessibility checker. Report anything that does not work with your screen reader so it can be fixed.</p>
+    </div>
+  </section>
+
+  <div class="a11y-preview mb-3" aria-label="Preview">
+    <strong>Preview</strong>
+    <p class="mb-0">FleetPilot checked 12 servers. <a href="#a11yForm">2 need updates.</a> The disk in <code>nas-01</code> is healthy.</p>
+  </div>
+
+  <div class="d-flex gap-2">
+    <button type="submit" class="btn btn-primary">{{ _('Save') }}</button>
+    <a class="btn" href="{{ url_for('users_accessibility') }}">Undo changes</a>
+  </div>
+</form>
+
+<script>
+// Show each change immediately; it is stored only when the form is saved.
+document.querySelectorAll('#a11yForm [data-attr]').forEach(function (input) {
+  input.addEventListener('change', function () {
+    var value = input.type === 'radio' ? input.value : (input.checked ? input.dataset.on : input.dataset.off);
+    document.documentElement.setAttribute('data-' + input.dataset.attr, value);
+    if (input.dataset.attr === 'font' && value === 'readable' && !document.getElementById('fp-readable-font')) {
+      var link = document.createElement('link');
+      link.id = 'fp-readable-font'; link.rel = 'stylesheet';
+      link.href = 'https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap';
+      document.head.appendChild(link);
+    }
+  });
+});
+</script>
+{% endblock %}

@@ -1,19 +1,16 @@
 {% extends 'base.html' %}
-{% block title %}{{ filename }} — Plugin Source — FleetPilot{% endblock %}
+{% block title %}{{ filename }} — Plugin Source{% endblock %}
 
+{% block page_heading %}{{ _('Plugin Source') }}{% endblock %}
+{% block page_back %}<a href="/plugins">{{ icon('arrow-left', 14) }} Plugins</a>{% endblock %}
+{% block page_subtitle %}addons/{{ filename }}{% endblock %}
 {% block content %}
-<div class="page-header">
-  <div>
-    <h1 class="page-title">{{ _('Plugin Source') }}</h1>
-    <p class="page-subtitle" style="font-family:monospace">addons/{{ filename }}</p>
-  </div>
-  <a href="/plugins" class="btn btn-secondary">← Back to Plugin Manager</a>
-</div>
+
 
 <div class="card">
   <div class="card-body" style="padding:0">
     <div style="display:flex; align-items:center; justify-content:space-between; padding:0.75rem 1.25rem; border-bottom:1px solid var(--border-color)">
-      <span style="font-size:0.85rem; color:var(--text-muted); font-family:monospace">{{ filename }}</span>
+      <span style="font-size:0.85rem; color:var(--text-muted); font-family:var(--font-mono)">{{ filename }}</span>
       <button onclick="copySource()" class="btn btn-sm btn-secondary">
         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="margin-right:4px"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
         Copy
@@ -30,7 +27,7 @@ function copySource() {
     const btn = event.target.closest('button');
     const orig = btn.innerHTML;
     btn.textContent = '✓ Copied!';
-    btn.style.color = '#10b981';
+    btn.style.color = '#4fb383';
     setTimeout(() => { btn.innerHTML = orig; btn.style.color = ''; }, 2000);
   });
 }

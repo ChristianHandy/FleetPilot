@@ -1,14 +1,11 @@
 {% extends 'disks/base.html' %}
 {% block title %}Format /dev/{{ device }}{% endblock %}
+{% block page_heading %}Format <code>/dev/{{ device }}</code>{% endblock %}
+{% block page_back %}<a href="{{ url_for('disks_index') }}">{{ icon('arrow-left', 14) }} Disks</a>{% endblock %}
+{% block page_subtitle %}Choose the erase depth before creating a new filesystem.{% endblock %}
 {% block content %}
-<div class="container mt-4">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <div>
-      <h1>Format <code>/dev/{{ device }}</code></h1>
-      <p class="text-muted mb-0">Choose the erase depth before creating a new filesystem.</p>
-    </div>
-    <a href="{{ url_for('disks_index') }}" class="btn btn-secondary">← Back to Disk Overview</a>
-  </div>
+
+  
 
   <div class="alert alert-danger" role="alert">
     <strong>Destructive action.</strong> This permanently removes all partitions and data on <code>/dev/{{ device }}</code>.
@@ -19,8 +16,8 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
     <div class="col-12">
-      <label class="form-label fw-semibold">Erase mode</label>
-      <div class="row g-3">
+      <span class="form-label fw-semibold" id="erase-mode-label">Erase mode</span>
+      <div role="group" aria-labelledby="erase-mode-label" class="row g-3">
         <div class="col-md-6">
           <label class="card h-100 border-primary cursor-pointer">
             <div class="card-body">
@@ -68,7 +65,7 @@
       <a href="{{ url_for('disks_index') }}" class="btn btn-outline-secondary">Cancel</a>
     </div>
   </form>
-</div>
+
 
 <script>
 (() => {

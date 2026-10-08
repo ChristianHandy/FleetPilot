@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}Update Dashboard — FleetPilot{% endblock %}
-{% block page_icon %}&#x2B06;{% endblock %}
+{% block title %}Update Dashboard{% endblock %}
+{% block page_icon %}{% endblock %}
 {% block page_title %}Update Dashboard Application{% endblock %}
 
 {% block content %}
 
 <div class="warning-box">
-  <h3>&#x26A0; Important Warning</h3>
+  <h2>Important Warning</h2>
   <p>{{ _('You are about to update the FleetPilot to the latest version. This will pull the latest code from GitHub and may require restarting the application.') }}</p>
   <ul style="margin-top:0.5rem;">
     <li><strong>{{ _('The application must be restarted') }}</strong> after the update completes.</li>
@@ -20,7 +20,7 @@
 {% if version_data.update_available %}
 <div class="card card-blue">
   <div class="card-header">
-    <h3>&#x1F4E6; Available Update</h3>
+    <h2>Available Update</h2>
     <span class="badge badge-blue">{{ version_data.update_type|capitalize }}</span>
   </div>
   <p>
@@ -29,24 +29,24 @@
   </p>
   {% if version_data.update_url %}
   <a href="{{ version_data.update_url }}" target="_blank" class="btn btn-secondary btn-sm">
-    &#x1F517; View Changes on GitHub
+    View Changes on GitHub
   </a>
   {% endif %}
 </div>
 {% else %}
 <div class="card card-green">
   <div class="card-header">
-    <h3>&#x2714; No Update Available</h3>
+    <h2>No Update Available</h2>
   </div>
   <p>{{ _('The dashboard is currently up to date.') }}</p>
-  <a class="btn btn-primary btn-sm" href="/dashboard_version/check">&#x1F504; Check for Updates</a>
+  <a class="btn btn-primary btn-sm" href="/dashboard_version/check">Check for Updates</a>
 </div>
 {% endif %}
 
 {% if version_data.update_available %}
 <div class="card">
   <div class="card-header">
-    <h3>&#x2699; Update Options</h3>
+    <h2>Update Options</h2>
   </div>
   <form method="POST" action="/dashboard_version/update"
         onsubmit="return confirm('Are you sure you want to update the dashboard? This will require restarting the application.');">
@@ -64,12 +64,12 @@
       <input type="radio" name="preserve_configs" value="no" id="preserve_no">
       <label class="form-check-label" for="preserve_no">
         <strong>{{ _('Clean Update (Reset Configurations)') }}</strong>
-        <span style="color:#fca5a5;">Replace all files with fresh versions. <strong>{{ _('This will delete your configuration!') }}</strong></span>
+        <span style="color:var(--accent-red);">Replace all files with fresh versions. <strong>{{ _('This will delete your configuration!') }}</strong></span>
       </label>
     </div>
 
     <div class="btn-group" style="margin-top:1rem;">
-      <button type="submit" class="btn btn-danger">&#x2B06; Update Dashboard Now</button>
+      <button type="submit" class="btn btn-danger">Update Dashboard Now</button>
       <a class="btn btn-ghost" href="/index">{{ _('Cancel') }}</a>
     </div>
   </form>
@@ -79,7 +79,7 @@
 <!-- Update Process -->
 <div class="card">
   <div class="card-header">
-    <h3>&#x1F4CB; Update Process</h3>
+    <h2>Update Process</h2>
   </div>
   <ol style="line-height:2; color:var(--text-secondary); font-size:0.9rem;">
     <li>{{ _('Configuration files are backed up (if "Preserve Configuration Files" is selected).') }}</li>
@@ -89,7 +89,7 @@
     <li>{{ _('You must restart the application manually to complete the update.') }}</li>
   </ol>
 
-  <h4 style="margin-top:1.25rem; margin-bottom:0.5rem;">{{ _('Restart the application:') }}</h4>
+  <h3 style="margin-top:1.25rem; margin-bottom:0.5rem;">{{ _('Restart the application:') }}</h3>
   <pre># Stop the current process (Ctrl+C), then restart:
 sudo -E python3 app.py
 

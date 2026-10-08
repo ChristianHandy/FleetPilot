@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
-{% block title %}Server Update — FleetPilot{% endblock %}
-{% block page_icon %}🔄{% endblock %}
+{% block title %}Server Update{% endblock %}
+{% block page_icon %}{% endblock %}
 {% block page_title %}{{ _('Server Update') }}{% endblock %}
 
 {% block topbar_actions %}
@@ -13,7 +13,7 @@
 <!-- Info Card -->
 <div class="card" style="margin-bottom:1.25rem;">
   <div class="card-header">
-    <h3>🖥️ {{ _('FleetPilot Host — Package Update') }}</h3>
+    <h2>{{ _('FleetPilot Host — Package Update') }}</h2>
     <span class="badge badge-amber">{{ _('Admin Only') }}</span>
   </div>
   <p>{{ _('This tool runs apt-get update and apt-get upgrade directly on the server that hosts FleetPilot. It requires sudo privileges on the host system. The update runs in the background and streams live output below.') }}</p>
@@ -30,19 +30,19 @@
 <!-- Controls -->
 <div class="card" style="margin-bottom:1.25rem;" id="controlCard">
   <div class="card-header">
-    <h3>⚙️ {{ _('Update Controls') }}</h3>
+    <h2>{{ _('Update Controls') }}</h2>
   </div>
 
   <div id="startForm" style="{% if running %}display:none;{% endif %}">
     <div class="form-grid-2" style="margin-bottom:1rem;">
       <div class="form-group">
-        <label class="form-label">{{ _('Sudo Password') }} <span style="color:var(--text-muted);font-weight:400;">{{ _('(required for apt)') }}</span></label>
+        <label class="form-label" for="sudoPassword">{{ _('Sudo Password') }} <span style="color:var(--text-muted);font-weight:400;">{{ _('(required for apt)') }}</span></label>
         <input type="password" id="sudoPassword" placeholder="{{ _('Enter sudo password for this server') }}"
                autocomplete="current-password">
         <div class="form-hint">{{ _('The password is sent over your encrypted session and never stored.') }}</div>
       </div>
       <div class="form-group">
-        <label class="form-label">{{ _('Update Scope') }}</label>
+        <label class="form-label" for="updateScope">{{ _('Update Scope') }}</label>
         <select id="updateScope">
           <option value="upgrade">{{ _('Security + Regular Updates (apt upgrade)') }}</option>
           <option value="dist-upgrade">{{ _('Full Upgrade incl. new deps (apt dist-upgrade)') }}</option>
@@ -56,13 +56,13 @@
         &#9654; {{ _('Start Update') }}
       </button>
       <button class="btn btn-secondary" onclick="checkUpdates()">
-        🔍 {{ _('Check for Updates Only') }}
+        {{ _('Check for Updates Only') }}
       </button>
       <button class="btn btn-ghost" onclick="clearLog()">
-        🗑 {{ _('Clear Log') }}
+        {{ _('Clear Log') }}
       </button>
       <button class="btn btn-danger" id="rebootBtn" onclick="rebootServer()" style="margin-left:auto;">
-        🔁 {{ _('Reboot Server') }}
+        {{ _('Reboot Server') }}
       </button>
     </div>
   </div>
@@ -78,7 +78,7 @@
 <!-- Live Log -->
 <div class="card">
   <div class="card-header">
-    <h3>📋 {{ _('Live Output') }}</h3>
+    <h2>{{ _('Live Output') }}</h2>
     <div style="display:flex;gap:0.5rem;align-items:center;">
       <span id="logCount" class="badge badge-blue">0 {{ _('lines') }}</span>
       <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.8rem;cursor:pointer;">
@@ -92,7 +92,7 @@
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
     padding: 1rem;
-    font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+    font-family:var(--font-mono);
     font-size: 0.8rem;
     line-height: 1.6;
     min-height: 200px;
@@ -122,7 +122,7 @@
 .log-error span:last-child { color: var(--accent-red); font-weight: 600; }
 .log-warn  span:last-child { color: var(--accent-amber); }
 .stat-mini { display:flex;flex-direction:column;gap:0.2rem;padding:0.5rem 0.75rem;background:var(--bg-surface);border-radius:var(--radius-sm);border:1px solid var(--border-subtle); }
-.stat-mini-label { font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em; }
+.stat-mini-label { font-size:0.7rem;color:var(--text-muted);}
 .stat-mini-value { font-size:0.9rem;font-weight:600;color:var(--text-primary); }
 .spinner { border:3px solid var(--border-subtle);border-top-color:var(--accent-amber);border-radius:50%;animation:spin 0.8s linear infinite; }
 @keyframes spin { to { transform:rotate(360deg); } }
@@ -153,7 +153,7 @@ function startUpdate() {
     return;
   }
   document.getElementById('startBtn').disabled = true;
-  document.getElementById('startBtn').textContent = '⏳ {{ _("Starting…") }}';
+  document.getElementById('startBtn').textContent = '{{ _("Starting…") }}';
 
   const fd = new FormData();
   fd.append('action', 'start');
@@ -172,13 +172,13 @@ function startUpdate() {
       } else {
         alert(data.error || '{{ _("Failed to start update.") }}');
         document.getElementById('startBtn').disabled = false;
-        document.getElementById('startBtn').textContent = '▶ {{ _("Start Update") }}';
+        document.getElementById('startBtn').textContent = '{{ _("Start Update") }}';
       }
     })
     .catch(e => {
       alert('{{ _("Error:") }} ' + e);
       document.getElementById('startBtn').disabled = false;
-      document.getElementById('startBtn').textContent = '▶ {{ _("Start Update") }}';
+      document.getElementById('startBtn').textContent = '{{ _("Start Update") }}';
     });
 }
 
@@ -234,7 +234,7 @@ function pollLog() {
         document.getElementById('startForm').style.display = 'block';
         document.getElementById('runningControls').style.display = 'none';
         document.getElementById('startBtn').disabled = false;
-        document.getElementById('startBtn').textContent = '▶ {{ _("Start Update") }}';
+        document.getElementById('startBtn').textContent = '{{ _("Start Update") }}';
         document.getElementById('statusBadge').innerHTML = '<span class="badge badge-green">{{ _("Done") }}</span>';
       }
     })
@@ -275,10 +275,10 @@ function rebootServer() {
     document.getElementById('sudoPassword').focus();
     return;
   }
-  if (!confirm('{{ _("Are you sure you want to reboot this server? FleetPilot will be unavailable for 1-2 minutes.") }}')) return;
+  if (!confirm({{ ('' ~ (_("Are you sure you want to reboot this server? FleetPilot will be unavailable for 1-2 minutes.")) ~ '')|tojson|forceescape }})) return;
 
   document.getElementById('rebootBtn').disabled = true;
-  document.getElementById('rebootBtn').textContent = '⏳ {{ _("Rebooting…") }}';
+  document.getElementById('rebootBtn').textContent = '{{ _("Rebooting…") }}';
 
   const fd = new FormData();
   fd.append('action', 'reboot');
@@ -291,14 +291,14 @@ function rebootServer() {
         document.getElementById('logContainer').innerHTML = '';
         const div = document.createElement('div');
         div.className = 'log-line log-warn';
-        div.innerHTML = '<span style="color:var(--text-muted)">--:--:--</span> <span>🔁 Reboot command sent. Server will restart shortly. This page will auto-reload in 60 seconds…</span>';
+        div.innerHTML = '<span style="color:var(--text-muted)">--:--:--</span> <span>Reboot command sent. Server will restart shortly. This page will auto-reload in 60 seconds…</span>';
         document.getElementById('logContainer').appendChild(div);
         document.getElementById('statusBadge').innerHTML = '<span class="badge badge-amber">{{ _("Rebooting") }}</span>';
         // Auto-reload after 60s to check if server is back
         let countdown = 60;
         const timer = setInterval(() => {
           countdown--;
-          document.getElementById('rebootBtn').textContent = '⏳ {{ _("Rebooting…") }} (' + countdown + 's)';
+          document.getElementById('rebootBtn').textContent = '{{ _("Rebooting…") }} (' + countdown + 's)';
           if (countdown <= 0) {
             clearInterval(timer);
             window.location.reload();
@@ -307,12 +307,12 @@ function rebootServer() {
       } else {
         alert(data.error || '{{ _("Reboot failed.") }}');
         document.getElementById('rebootBtn').disabled = false;
-        document.getElementById('rebootBtn').textContent = '🔁 {{ _("Reboot Server") }}';
+        document.getElementById('rebootBtn').textContent = '{{ _("Reboot Server") }}';
       }
     })
     .catch(() => {
       // Connection lost = reboot likely started
-      document.getElementById('rebootBtn').textContent = '⏳ {{ _("Rebooting…") }}';
+      document.getElementById('rebootBtn').textContent = '{{ _("Rebooting…") }}';
       setTimeout(() => window.location.reload(), 60000);
     });
 }

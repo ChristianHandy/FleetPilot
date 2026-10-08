@@ -1,17 +1,17 @@
 {% extends "base.html" %}
 
-{% block title %}User Management — FleetPilot{% endblock %}
-{% block page_icon %}&#x1F465;{% endblock %}
+{% block title %}User Management{% endblock %}
+{% block page_icon %}{% endblock %}
 {% block page_title %}User Management{% endblock %}
 
 {% block topbar_actions %}
-<a class="btn btn-primary btn-sm" href="/users/add">&#x2795; Add User</a>
+<a class="btn btn-primary btn-sm" href="/users/add">Add User</a>
 {% endblock %}
 
 {% block content %}
 
 <div class="card-header" style="margin-bottom:1rem; padding:0;">
-  <h3>&#x1F465; Existing Users</h3>
+  <h2>Existing Users</h2>
   <span class="badge badge-blue">{{ users|length }} users</span>
 </div>
 
@@ -30,20 +30,20 @@
           {% endif %}
         </div>
         <div class="host-card-meta">
-          {% if user.email %}&#x2709; {{ user.email }} &bull; {% endif %}
-          &#x1F464; {% if user.id in roles_by_user %}{{ roles_by_user[user.id]|join(', ') }}{% else %}<em>{{ _('No roles') }}</em>{% endif %}
+          {% if user.email %}{{ user.email }} &bull; {% endif %}
+          {% if user.id in roles_by_user %}{{ roles_by_user[user.id]|join(', ') }}{% else %}<em>{{ _('No roles') }}</em>{% endif %}
         </div>
         <div class="host-card-meta" style="margin-top:0.2rem;">
-          &#x1F4C5; Created: {{ user.created_at }}
+          Created: {{ user.created_at }}
         </div>
       </div>
     </div>
     <div class="host-card-actions">
-      <a class="btn btn-secondary btn-sm" href="/users/edit/{{ user.id }}">&#x270F; Edit</a>
+      <a class="btn btn-secondary btn-sm" href="/users/edit/{{ user.id }}">Edit</a>
       <form action="/users/delete/{{ user.id }}" method="post" style="display:inline; margin:0;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button class="btn btn-danger btn-sm" type="submit"
-                onclick="return confirm('Delete user \'{{ user.username }}\'?')">&#x1F5D1; Delete</button>
+                onclick="return confirm({{ ('Delete user ' ~ user.username ~ '?')|tojson|forceescape }})">Delete</button>
       </form>
     </div>
   </div>
@@ -51,10 +51,10 @@
 </div>
 {% else %}
 <div class="empty-state">
-  <div class="empty-state-icon">&#x1F465;</div>
-  <h3>{{ _('No users found') }}</h3>
+  <div class="empty-state-icon">{{ icon('users') }}</div>
+  <h2>{{ _('No users found') }}</h2>
   <p>{{ _('Create the first user to get started.') }}</p>
-  <a class="btn btn-primary" href="/users/add" style="margin-top:1rem;">&#x2795; Add User</a>
+  <a class="btn btn-primary" href="/users/add" style="margin-top:1rem;">Add User</a>
 </div>
 {% endif %}
 

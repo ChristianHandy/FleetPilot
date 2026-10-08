@@ -1,31 +1,39 @@
 {% extends "base.html" %}
 {% block title %}{{ server_name }} — Hardware{% endblock %}
+{% block page_back %}<a href="/hw_overview">{{ icon('arrow-left', 14) }} Hardware overview</a>{% endblock %}
+{% block page_heading %}<span id="page-hostname">{{ server_name }}</span>{% endblock %}
+{% block page_subtitle %}<span id="page-os" aria-live="polite">Loading hardware information…</span>{% endblock %}
+{% block page_actions %}
+  <button class="btn" onclick="refresh()" id="refresh-btn">
+    <span id="refresh-icon" aria-hidden="true">{{ icon('refresh') }}</span> Refresh
+  </button>
+{% endblock %}
 {% block content %}
 <style>
 :root {
-  --hw-bg: #0d1117; --hw-card: #161b22; --hw-border: #30363d;
-  --hw-text: #e6edf3; --hw-muted: #8b949e;
-  --hw-green: #3fb950; --hw-blue: #58a6ff; --hw-purple: #bc8cff;
-  --hw-orange: #ffa657; --hw-red: #f85149; --hw-yellow: #d29922;
+  --hw-bg: var(--bg-base); --hw-card: var(--bg-surface); --hw-border: var(--border);
+  --hw-text: var(--text-primary); --hw-muted: var(--text-muted);
+  --hw-green: var(--accent-green); --hw-blue: var(--accent-blue); --hw-purple: var(--accent-purple);
+  --hw-orange: var(--accent-amber); --hw-red: var(--accent-red); --hw-yellow: var(--accent-amber);
   --hw-nvidia: #76b900; --hw-amd: #ed1c24;
 }
-.hw-page { padding: 24px; max-width: 1200px; margin: 0 auto; }
+.hw-page { padding: 0; }
 .hw-back { color: var(--hw-blue); text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; margin-bottom: 20px; }
 .hw-back:hover { text-decoration: underline; }
-.hw-title { font-size: 28px; font-weight: 800; color: var(--hw-text); margin-bottom: 4px; }
+.hw-title { font-size: 28px; font-weight:600; color: var(--hw-text); margin-bottom: 4px; }
 .hw-subtitle { color: var(--hw-muted); font-size: 14px; margin-bottom: 28px; }
 .hw-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px; }
 .hw-section {
   background: var(--hw-card); border: 1px solid var(--hw-border);
-  border-radius: 12px; overflow: hidden;
+  border-radius:var(--radius-lg); overflow: hidden;
 }
 .hw-section-header {
   padding: 14px 18px; border-bottom: 1px solid var(--hw-border);
   display: flex; align-items: center; gap: 10px;
-  background: linear-gradient(135deg, #161b22 0%, #0d1117 100%);
+  background: var(--bg-surface);
 }
 .hw-section-icon { font-size: 18px; }
-.hw-section-title { font-size: 14px; font-weight: 700; color: var(--hw-text); }
+.hw-section-title { font-size: 14px; font-weight:600; color: var(--hw-text); }
 .hw-section-body { padding: 16px 18px; font-family: 'Cascadia Code','Fira Code','Consolas',monospace; font-size: 12.5px; }
 .hw-row { display: flex; gap: 0; margin-bottom: 6px; line-height: 1.5; }
 .hw-key { min-width: 130px; color: var(--hw-blue); font-weight: 600; flex-shrink: 0; }
@@ -43,7 +51,7 @@
 .bar-fill.green { background: var(--hw-green); }
 .bar-fill.yellow { background: var(--hw-yellow); }
 .bar-fill.red { background: var(--hw-red); }
-.temp-badge { display: inline-block; padding: 1px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+.temp-badge { display: inline-block; padding: 1px 8px; border-radius: 4px; font-size: 11px; font-weight:600; }
 .temp-ok { background: rgba(63,185,80,0.15); color: var(--hw-green); }
 .temp-warn { background: rgba(210,153,34,0.15); color: var(--hw-yellow); }
 .temp-hot { background: rgba(248,81,73,0.15); color: var(--hw-red); }
@@ -54,44 +62,33 @@
 .gpu-card:last-child { margin-bottom: 0; }
 .gpu-vendor-badge {
   display: inline-block; padding: 2px 10px; border-radius: 4px;
-  font-size: 11px; font-weight: 800; letter-spacing: 0.05em;
+  font-size: 11px; font-weight:600; letter-spacing: 0.05em;
   margin-bottom: 8px;
 }
 .gpu-vendor-nvidia { background: rgba(118,185,0,0.2); color: var(--hw-nvidia); border: 1px solid rgba(118,185,0,0.3); }
 .gpu-vendor-amd { background: rgba(237,28,36,0.2); color: #ff6b6b; border: 1px solid rgba(237,28,36,0.3); }
 .gpu-vendor-other { background: rgba(88,166,255,0.15); color: var(--hw-blue); border: 1px solid rgba(88,166,255,0.3); }
 .nic-row { background: rgba(255,255,255,0.02); border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; }
-.nic-name { font-weight: 700; color: var(--hw-blue); font-size: 13px; }
+.nic-name { font-weight:600; color: var(--hw-blue); font-size: 13px; }
 .disk-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid rgba(48,54,61,0.5); }
 .disk-row:last-child { border-bottom: none; }
 .disk-icon { font-size: 20px; }
-.disk-name { font-weight: 700; color: var(--hw-text); font-size: 13px; }
+.disk-name { font-weight:600; color: var(--hw-text); font-size: 13px; }
 .disk-size { color: var(--hw-muted); font-size: 12px; }
-.disk-type { padding: 1px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; }
+.disk-type { padding: 1px 8px; border-radius: 4px; font-size: 10px; font-weight:600; }
 .disk-ssd { background: rgba(88,166,255,0.15); color: var(--hw-blue); }
 .disk-hdd { background: rgba(255,166,87,0.15); color: var(--hw-orange); }
 .disk-nvme { background: rgba(188,140,255,0.15); color: var(--hw-purple); }
 .hw-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; border: 1px solid var(--hw-border); background: var(--hw-card); color: var(--hw-text); transition: all 0.15s; }
-.hw-btn:hover { background: #21262d; border-color: var(--hw-blue); color: var(--hw-blue); }
+.hw-btn:hover { background: var(--bg-elevated); border-color: var(--hw-blue); color: var(--hw-blue); }
 .spin { animation: spin 1s linear infinite; display: inline-block; }
 @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 
 <div class="hw-page">
-  <a href="/hw_overview" class="hw-back">← Back to Overview</a>
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
-    <div>
-      <div class="hw-title" id="page-hostname">{{ server_name }}</div>
-      <div class="hw-subtitle" id="page-os">Loading hardware information...</div>
-    </div>
-    <button class="hw-btn" onclick="refresh()" id="refresh-btn">
-      <span id="refresh-icon">⟳</span> Refresh
-    </button>
-  </div>
-
   <div id="hw-content">
     <div style="text-align:center;padding:60px;color:var(--hw-muted);">
-      <div class="spin" style="font-size:32px;">⟳</div>
+      <span class="spinner-border" aria-hidden="true"></span>
       <div style="margin-top:12px;">Loading hardware info...</div>
     </div>
   </div>
@@ -128,14 +125,15 @@ function row(key, val, valClass='') {
   return `<div class="hw-row"><span class="hw-key">${key}</span><span class="hw-sep">│</span><span class="hw-val ${valClass}">${val}</span></div>`;
 }
 
-function render(hw) {
+function render(rawHw) {
+  const hw = fpEscDeep(rawHw);  // values come from the remote host
   if (hw.error) {
-    document.getElementById('hw-content').innerHTML = `<div style="color:var(--hw-red);padding:40px;text-align:center;">⚠ ${hw.error}</div>`;
+    document.getElementById('hw-content').innerHTML = `<div style="color:var(--hw-red);padding:40px;text-align:center;">${hw.error}</div>`;
     return;
   }
 
-  document.getElementById('page-hostname').textContent = hw.hostname || serverName;
-  document.getElementById('page-os').textContent = `${hw.os || ''} · ${hw.kernel || ''} · ${hw.arch || ''} · Uptime: ${hw.uptime || '?'}`;
+  document.getElementById('page-hostname').textContent = rawHw.hostname || serverName;
+  document.getElementById('page-os').textContent = `${rawHw.os || ''} · ${rawHw.kernel || ''} · ${rawHw.arch || ''} · Uptime: ${rawHw.uptime || '?'}`;
 
   const cpu = hw.cpu || {};
   const mem = hw.memory || {};
@@ -244,7 +242,7 @@ function render(hw) {
   // ── Storage Section ──────────────────────────────────────────────────────
   let storHtml = '';
   disks.forEach(disk => {
-    const icon = disk.type === 'NVMe' ? '⚡' : disk.type === 'SSD' ? '💾' : '🖴';
+    const icon = '{{ icon("hard-drive", 20) }}';
     const typeClass = disk.type === 'NVMe' ? 'nvme' : disk.type === 'SSD' ? 'ssd' : 'hdd';
     storHtml += `<div class="disk-row">
       <div class="disk-icon">${icon}</div>
@@ -268,35 +266,35 @@ function render(hw) {
   document.getElementById('hw-content').innerHTML = `
     <div class="hw-grid">
       <div class="hw-section">
-        <div class="hw-section-header"><span class="hw-section-icon">🖥️</span><span class="hw-section-title">System</span></div>
+        <div class="hw-section-header"><span class="hw-section-title">System</span></div>
         <div class="hw-section-body">${sysHtml}</div>
       </div>
       <div class="hw-section">
-        <div class="hw-section-header"><span class="hw-section-icon">⚙️</span><span class="hw-section-title">CPU</span></div>
+        <div class="hw-section-header"><span class="hw-section-title">CPU</span></div>
         <div class="hw-section-body">${cpuHtml}</div>
       </div>
       <div class="hw-section">
-        <div class="hw-section-header"><span class="hw-section-icon">🧠</span><span class="hw-section-title">Memory</span></div>
+        <div class="hw-section-header"><span class="hw-section-title">Memory</span></div>
         <div class="hw-section-body">${memHtml}</div>
       </div>
       <div class="hw-section">
-        <div class="hw-section-header"><span class="hw-section-icon">🔌</span><span class="hw-section-title">Motherboard</span></div>
+        <div class="hw-section-header"><span class="hw-section-title">Motherboard</span></div>
         <div class="hw-section-body">${mbHtml}</div>
       </div>
       <div class="hw-section">
-        <div class="hw-section-header"><span class="hw-section-icon">🎮</span><span class="hw-section-title">GPU</span></div>
+        <div class="hw-section-header"><span class="hw-section-title">GPU</span></div>
         <div class="hw-section-body">${gpuHtml}</div>
       </div>
       <div class="hw-section">
-        <div class="hw-section-header"><span class="hw-section-icon">🌐</span><span class="hw-section-title">Network</span></div>
+        <div class="hw-section-header"><span class="hw-section-title">Network</span></div>
         <div class="hw-section-body">${netHtml}</div>
       </div>
       <div class="hw-section" style="grid-column: 1 / -1;">
-        <div class="hw-section-header"><span class="hw-section-icon">💿</span><span class="hw-section-title">Storage</span></div>
+        <div class="hw-section-header"><span class="hw-section-title">Storage</span></div>
         <div class="hw-section-body">${storHtml}</div>
       </div>
       ${pcieHtml ? `<div class="hw-section" style="grid-column: 1 / -1;">
-        <div class="hw-section-header"><span class="hw-section-icon">🔗</span><span class="hw-section-title">PCIe Devices</span></div>
+        <div class="hw-section-header"><span class="hw-section-title">PCIe Devices</span></div>
         <div class="hw-section-body" style="font-size:11.5px;">${pcieHtml}</div>
       </div>` : ''}
     </div>
@@ -312,17 +310,16 @@ async function refresh() {
   const icon = document.getElementById('refresh-icon');
   btn.disabled = true;
   icon.className = 'spin';
-  document.getElementById('hw-content').innerHTML = `<div style="text-align:center;padding:60px;color:var(--hw-muted);"><div class="spin" style="font-size:32px;">⟳</div><div style="margin-top:12px;">Collecting hardware info...</div></div>`;
+  document.getElementById('hw-content').innerHTML = `<div style="text-align:center;padding:60px;color:var(--hw-muted);"><span class="spinner-border" aria-hidden="true"></span><div style="margin-top:12px;">Collecting hardware info...</div></div>`;
   try {
     const r = await fetch(`/hw_overview/${encodeURIComponent(serverName)}/refresh`);
     const data = await r.json();
     render(data);
   } catch(e) {
-    document.getElementById('hw-content').innerHTML = `<div style="color:var(--hw-red);padding:40px;text-align:center;">⚠ Connection failed: ${e}</div>`;
+    document.getElementById('hw-content').innerHTML = `<div style="color:var(--hw-red);padding:40px;text-align:center;">Connection failed: ${fpEsc(e)}</div>`;
   }
   btn.disabled = false;
   icon.className = '';
-  icon.textContent = '⟳';
 }
 
 // Load on page load

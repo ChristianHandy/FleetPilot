@@ -1,94 +1,70 @@
-{% extends "base.html" %}
-{% block title %}Two-Factor Authentication — FleetPilot{% endblock %}
-{% block content %}
-<div class="container" style="max-width:480px;margin:80px auto;">
-  <div class="card shadow-lg border-0" style="border-radius:16px;overflow:hidden;">
-    <div class="card-header text-center py-4" style="background:linear-gradient(135deg,#1a1a2e,#16213e);">
-      <div style="font-size:2.5rem;">🔐</div>
-      <h4 class="text-white mb-0 mt-2">Two-Factor Authentication</h4>
-      <small class="text-muted">Logged in as <strong class="text-info">{{ username }}</strong></small>
-    </div>
-    <div class="card-body p-4">
+<!doctype html>
+<html lang="{{ current_lang|default('en') }}" data-theme="{{ current_theme|default('dark') }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Two-factor sign-in · FleetPilot</title>
+  {% if csrf_token is defined %}<meta name="csrf-token" content="{{ csrf_token() }}">{% endif %}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css?v={{ asset_version('style.css') if asset_version is defined else 0 }}">
+  <script>
+    try { var t = localStorage.getItem('fp_theme'); if (t) document.documentElement.setAttribute('data-theme', t);
+      var p = JSON.parse(localStorage.getItem('fp_a11y') || '{}'), h = document.documentElement;
+      ['text','contrast','motion','links','spacing','font'].forEach(function (k) { if (p[k]) h.setAttribute('data-' + k, p[k]); });
+    } catch (e) {}
+  </script>
+</head>
+<body>
+  <main class="login-wrapper" id="main">
+    <div class="login-card">
+      <div class="login-logo">
+        <div class="login-logo-icon">{{ icon('lock', 16) }}</div>
+        <span class="sidebar-brand-title">FleetPilot</span>
+      </div>
+      <h1 class="login-title">Two-factor sign-in</h1>
+      <p class="login-subtitle">Signed in as <strong>{{ username }}</strong>. Use your second factor to continue.</p>
+
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% for cat, msg in messages %}
-          <div class="alert alert-{{ 'danger' if cat == 'error' else cat }} alert-dismissible fade show" role="alert">
-            {{ msg }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-          </div>
+          <div class="alert alert-{{ 'danger' if cat == 'error' else 'warning' if cat == 'warning' else 'success' }}" role="alert">{{ msg }}</div>
         {% endfor %}
       {% endwith %}
 
-      <p class="text-muted text-center mb-4">
-        Use your preferred second factor to continue.
-      </p>
       {% if methods.webauthn > 0 %}
-      <div class="d-grid mb-3">
-        <button type="button" id="webauthn-authenticate" class="btn btn-outline-primary">
-          <i class="bi bi-usb-symbol"></i> Use registered security key
-        </button>
-        <div id="webauthn-authentication-status" class="form-text text-center mt-2"></div>
-      </div>
-      <div class="text-center text-muted small mb-3">or use a code below</div>
+      <button type="button" id="webauthn-authenticate" class="btn btn-lg w-100 mb-2">{{ icon('key') }} Use my security key</button>
+      <p id="webauthn-authentication-status" class="form-hint text-center" role="status" aria-live="polite"></p>
+      <p class="text-center text-muted small">or enter a code</p>
       {% endif %}
 
       <form method="POST" action="/2fa/verify" id="tfa-form">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is callable else '' }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
         <input type="hidden" name="next" value="{{ next }}">
-
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Authentication Code</label>
-          <input type="text" name="code" id="tfa-code" class="form-control form-control-lg text-center"
-                 placeholder="000000 or YubiKey OTP or backup code"
-                 autocomplete="one-time-code" autofocus
-                 style="letter-spacing:4px;font-size:1.3rem;font-family:monospace;">
-          <div class="form-text text-muted mt-2">
-            Enter a 6-digit TOTP code, press your YubiKey, or enter a backup code (XXXX-XXXX).
+        <div class="form-group">
+          <label class="form-label" for="tfa-code">Authentication code</label>
+          <input type="text" name="code" id="tfa-code" class="form-control" inputmode="numeric"
+                 autocomplete="one-time-code" autofocus aria-describedby="tfa-hint" required
+                 style="letter-spacing:0.25em;font-size:1.2rem;font-family:var(--font-mono);text-align:center;">
+          <div class="form-hint" id="tfa-hint">
+            The 6-digit code from your authenticator app, a YubiKey touch, or a backup code (XXXX-XXXX).
+            {% set bits = [] %}
+            {% if methods.totp %}{% set _unused = bits.append('authenticator app') %}{% endif %}
+            {% if methods.yubikeys > 0 %}{% set _unused = bits.append('YubiKey') %}{% endif %}
+            {% if methods.backup_codes > 0 %}{% set _unused = bits.append(methods.backup_codes ~ ' backup codes left') %}{% endif %}
+            {% if bits %}Set up for you: {{ bits|join(', ') }}.{% endif %}
           </div>
         </div>
-
-        <div class="d-grid gap-2">
-          <button type="submit" class="btn btn-primary btn-lg">
-            <i class="bi bi-shield-check"></i> Verify
-          </button>
-        </div>
+        <button type="submit" class="btn btn-primary btn-lg" style="width:100%">Verify</button>
       </form>
 
-      <hr class="my-4">
-
-      <div class="text-center">
-        <small class="text-muted">
-          Lost access?
-          <a href="/2fa/backup" class="text-decoration-none">Use a backup code</a>
-          &nbsp;|&nbsp;
-          <form method="POST" action="/logout" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is callable else '' }}"><button type="submit" class="btn btn-link p-0 text-decoration-none text-danger">Cancel</button></form>
-        </small>
-      </div>
-
-      <!-- Method indicators -->
-      <div class="d-flex justify-content-center gap-3 mt-3">
-        {% if methods.totp %}
-        <span class="badge bg-success-subtle text-success border border-success">
-          <i class="bi bi-phone"></i> TOTP
-        </span>
-        {% endif %}
-        {% if methods.yubikeys > 0 %}
-        <span class="badge bg-warning-subtle text-warning border border-warning">
-          <i class="bi bi-usb-symbol"></i> YubiKey
-        </span>
-        {% endif %}
-        {% if methods.webauthn > 0 %}
-        <span class="badge bg-primary-subtle text-primary border border-primary"><i class="bi bi-shield-key"></i> Security Key</span>
-        {% endif %}
-        {% if methods.backup_codes > 0 %}
-        <span class="badge bg-secondary-subtle text-secondary border border-secondary">
-          <i class="bi bi-key"></i> Backup ({{ methods.backup_codes }} left)
-        </span>
-        {% endif %}
-      </div>
+      <div class="divider"></div>
+      <form method="POST" action="/logout" class="m-0">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+        <button type="submit" class="btn btn-link p-0">Cancel and sign out</button>
+      </form>
     </div>
-  </div>
-</div>
-
+  </main>
 <script>
 // Auto-submit when YubiKey OTP is entered (44 chars modhex)
 document.getElementById('tfa-code').addEventListener('input', function() {
@@ -122,4 +98,5 @@ document.getElementById('tfa-code').addEventListener('input', function() {
     });
   }
 </script>
-{% endblock %}
+</body>
+</html>

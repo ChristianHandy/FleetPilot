@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en" data-theme="{{ current_theme|default('dark') }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ code }} · FleetPilot</title>
+  <link rel="stylesheet" href="/static/style.css?v={{ asset_version('style.css') if asset_version is defined else 0 }}">
+  <script>try{var t=localStorage.getItem('fp_theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
+  <script>
+    // Accessibility settings saved by this browser on a previous visit
+    try { var p = JSON.parse(localStorage.getItem('fp_a11y') || '{}'), h = document.documentElement;
+      ['text','contrast','motion','links','spacing','font'].forEach(function (k) { if (p[k]) h.setAttribute('data-' + k, p[k]); });
+    } catch (e) {}
+  </script>
+</head>
+<body>
+  <main class="login-wrapper">
+    <div class="login-card">
+      <div class="login-logo">
+        <div class="login-logo-icon">{{ icon('plane', 16) if icon is defined else '' }}</div>
+        <span class="sidebar-brand-title">FleetPilot</span>
+      </div>
+      <h1 class="login-title">{{ title }}</h1>
+      <p class="login-subtitle">{{ message }}</p>
+      <p style="font-size:0.84rem;color:var(--text-muted);margin-bottom:1rem;">Error {{ code }}</p>
+      <a class="btn btn-primary" href="/index">Back to FleetPilot</a>
+    </div>
+  </main>
+</body>
+</html>

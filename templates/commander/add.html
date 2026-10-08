@@ -1,10 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Add Commander Pro — FleetPilot{% endblock %}
+{% block title %}Add Commander Pro{% endblock %}
+{% block page_heading %}Add Commander Pro Device{% endblock %}
+{% block page_subtitle %}Connect a remote PC that has a Corsair Commander Pro attached via USB{% endblock %}
 {% block content %}
-<div class="page-header">
-  <h1 class="page-title">&#x1F4A8; Add Commander Pro Device</h1>
-  <p class="page-subtitle">Connect a remote PC that has a Corsair Commander Pro attached via USB</p>
-</div>
+
 
 <div class="card" style="max-width:680px;">
   <div class="card-header"><span class="card-title">Device Configuration</span></div>
@@ -12,43 +11,43 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token_value or csrf_token() }}">
 
     <div class="form-group">
-      <label class="form-label">Device Name <span style="color:var(--danger)">*</span></label>
-      <input type="text" name="name" class="form-control" placeholder="e.g. gaming-rig, workstation-01" required>
+      <label class="form-label" for="add-name">Device Name <span style="color:var(--danger)">*</span></label>
+      <input id="add-name" type="text" name="name" class="form-control" placeholder="e.g. gaming-rig, workstation-01" required>
       <small class="form-hint">A unique friendly name for this device in FleetPilot.</small>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr auto;gap:1rem;">
       <div class="form-group">
-        <label class="form-label">Remote Host (IP or hostname) <span style="color:var(--danger)">*</span></label>
-        <input type="text" name="host" class="form-control" placeholder="192.168.1.50" required>
+        <label class="form-label" for="add-host">Remote Host (IP or hostname) <span style="color:var(--danger)">*</span></label>
+        <input id="add-host" type="text" name="host" class="form-control" placeholder="192.168.1.50" required>
       </div>
       <div class="form-group">
-        <label class="form-label">SSH Port</label>
-        <input type="number" name="port" class="form-control" value="22" min="1" max="65535" style="width:90px;">
+        <label class="form-label" for="add-port">SSH Port</label>
+        <input id="add-port" type="number" name="port" class="form-control" value="22" min="1" max="65535" style="width:90px;">
       </div>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
       <div class="form-group">
-        <label class="form-label">SSH Username</label>
-        <input type="text" name="username" class="form-control" value="root" placeholder="root">
+        <label class="form-label" for="add-username">SSH Username</label>
+        <input id="add-username" type="text" name="username" class="form-control" value="root" placeholder="root">
         <small class="form-hint">Use <code>root</code> for direct USB access, or a user with udev rules.</small>
       </div>
       <div class="form-group">
-        <label class="form-label">SSH Password</label>
-        <input type="password" name="password" class="form-control" placeholder="Leave blank if using SSH key">
+        <label class="form-label" for="add-password">SSH Password</label>
+        <input id="add-password" type="password" name="password" class="form-control" placeholder="Leave blank if using SSH key">
       </div>
     </div>
 
     <div class="form-group">
-      <label class="form-label">SSH Key Path (on FleetPilot server)</label>
-      <input type="text" name="ssh_key" class="form-control" placeholder="/opt/fleetpilot/.ssh/id_rsa (optional)">
+      <label class="form-label" for="add-ssh-key">SSH Key Path (on FleetPilot server)</label>
+      <input id="add-ssh-key" type="text" name="ssh_key" class="form-control" placeholder="/opt/fleetpilot/.ssh/id_rsa (optional)">
       <small class="form-hint">Absolute path to a private key file on the FleetPilot server. Leave blank to use password auth.</small>
     </div>
 
     <div class="form-group">
-      <label class="form-label">liquidctl Match String</label>
-      <input type="text" name="match_str" class="form-control" value="Commander Pro"
+      <label class="form-label" for="add-match-str">liquidctl Match String</label>
+      <input id="add-match-str" type="text" name="match_str" class="form-control" value="Commander Pro"
              placeholder="Commander Pro">
       <small class="form-hint">
         Passed to <code>liquidctl --match '...'</code>. Use <code>Commander Pro</code> for the standard device,
@@ -79,8 +78,8 @@
     </div>
 
     <div class="form-group">
-      <label class="form-label">Notes</label>
-      <textarea name="notes" class="form-control" rows="2" placeholder="Optional notes about this device..."></textarea>
+      <label class="form-label" for="add-notes">Notes</label>
+      <textarea id="add-notes" name="notes" class="form-control" rows="2" placeholder="Optional notes about this device..."></textarea>
     </div>
 
     <div style="display:flex;gap:.75rem;margin-top:1.5rem;">

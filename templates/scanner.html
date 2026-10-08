@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}Network Scanner — FleetPilot{% endblock %}
-{% block page_icon %}&#x1F50D;{% endblock %}
+{% block title %}Network Scanner{% endblock %}
+{% block page_icon %}{% endblock %}
 {% block page_title %}Network Scanner{% endblock %}
 
 {% block topbar_actions %}
-<a class="btn btn-secondary btn-sm" href="/hosts">&#x1F5A7; Hosts</a>
+<a class="btn btn-secondary btn-sm" href="/hosts">Hosts</a>
 {% endblock %}
 
 {% block content %}
@@ -13,7 +13,7 @@
 <!-- Intro Card -->
 <div class="card" style="margin-bottom:1.25rem;">
   <div class="card-header">
-    <h3>&#x1F50D; Discover Devices on Your Network</h3>
+    <h2>Discover Devices on Your Network</h2>
     <span class="badge badge-blue">{{ _('Auto-Discovery') }}</span>
   </div>
   <p>{{ _('Scan a subnet to find reachable devices. FleetPilot pings each IP, checks for open SSH ports, and lets you add discovered devices as managed hosts in one click.') }}</p>
@@ -23,26 +23,26 @@
 <div class="scanner-card">
   <div class="scanner-input-row">
     <div class="form-group">
-      <label class="form-label">&#x1F4E1; Network Prefix</label>
+      <label class="form-label" for="networkPrefix">Network Prefix</label>
       <input type="text" id="networkPrefix" value="{{ default_prefix }}"
-             placeholder="{{ _('e.g. 192.168.1') }}" style="font-family:monospace;">
+             placeholder="{{ _('e.g. 192.168.1') }}" style="font-family:var(--font-mono);">
       <div class="form-hint">Enter the first three octets of your subnet (e.g. 192.168.1)</div>
     </div>
     <div class="form-group" style="max-width:120px;">
-      <label class="form-label">{{ _('Start IP') }}</label>
+      <label class="form-label" for="rangeStart">{{ _('Start IP') }}</label>
       <input type="number" id="rangeStart" value="1" min="1" max="254">
     </div>
     <div class="form-group" style="max-width:120px;">
-      <label class="form-label">{{ _('End IP') }}</label>
+      <label class="form-label" for="rangeEnd">{{ _('End IP') }}</label>
       <input type="number" id="rangeEnd" value="254" min="1" max="254">
     </div>
     <div class="form-group" style="max-width:120px;">
-      <label class="form-label">{{ _('SSH Port') }}</label>
+      <label class="form-label" for="sshPort">{{ _('SSH Port') }}</label>
       <input type="number" id="sshPort" value="22" min="1" max="65535">
     </div>
     <div style="padding-bottom:0.1rem;">
       <button class="btn btn-primary" id="scanBtn" type="button" onclick="startScan()">
-        &#x25B6; Start Scan
+        Start Scan
       </button>
     </div>
   </div>
@@ -63,7 +63,7 @@
 <!-- Results -->
 <div id="scanResultsSection" style="display:none;">
   <div class="card-header" style="padding:0;margin-bottom:0.75rem;">
-    <h3>&#x1F4CB; Scan Results</h3>
+    <h2>Scan Results</h2>
     <div style="display:flex;gap:0.5rem;align-items:center;">
       <span class="badge badge-green" id="foundCount">0 found</span>
       <span class="badge badge-blue" id="sshCount">0 SSH</span>
@@ -87,69 +87,69 @@ const MANAGED_HOSTS = {{ managed_host_ips | tojson }};
 </script>
 
 <!-- Quick-Add Modal -->
-<div class="modal-backdrop" id="quickAddModal">
-  <div class="modal">
-    <div class="modal-header">
-      <h3>&#x2795; Quick Add Host</h3>
-      <button class="modal-close" onclick="closeModal()" type="button">&#x2715;</button>
+<div class="fp-modal-backdrop" id="quickAddModal">
+  <div class="fp-modal">
+    <div class="fp-modal-header">
+      <h2>Quick Add Host</h2>
+      <button class="fp-modal-close" onclick="closeModal()" type="button" aria-label="Close">&#x2715;</button>
     </div>
     <form id="quickAddForm" method="POST" action="/hosts/quick_add">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="form-group">
-        <label class="form-label">{{ _('Display Name *') }}</label>
+        <label class="form-label" for="qaName">{{ _('Display Name *') }}</label>
         <input type="text" name="name" id="qaName" placeholder="{{ _('e.g. Web Server') }}" required>
       </div>
       <div class="form-grid-2">
         <div class="form-group">
-          <label class="form-label">{{ _('IP Address *') }}</label>
-          <input type="text" name="host" id="qaHost" readonly style="background:var(--bg-base);font-family:monospace;">
+          <label class="form-label" for="qaHost">{{ _('IP Address *') }}</label>
+          <input type="text" name="host" id="qaHost" readonly style="background:var(--bg-base);font-family:var(--font-mono);">
         </div>
         <div class="form-group">
-          <label class="form-label">{{ _('SSH Port') }}</label>
+          <label class="form-label" for="qaPort">{{ _('SSH Port') }}</label>
           <input type="number" name="port" id="qaPort" value="22" min="1" max="65535">
         </div>
       </div>
       <div class="form-grid-2">
         <div class="form-group">
-          <label class="form-label">{{ _('SSH User *') }}</label>
+          <label class="form-label" for="qaUser">{{ _('SSH User *') }}</label>
           <input type="text" name="user" id="qaUser" placeholder="{{ _('e.g. admin') }}" required>
         </div>
         <div class="form-group">
-          <label class="form-label">{{ _('MAC Address') }}</label>
+          <label class="form-label" for="qaMac">{{ _('MAC Address') }}</label>
           <input type="text" name="mac" id="qaMac" placeholder="{{ _('AA:BB:CC:DD:EE:FF') }}">
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">{{ _('Description') }}</label>
+        <label class="form-label" for="qaDesc">{{ _('Description') }}</label>
         <input type="text" name="description" id="qaDesc" placeholder="{{ _('Short description') }}">
       </div>
       <div class="form-grid-2">
         <div class="form-group">
-          <label class="form-label">{{ _('Environment') }}</label>
-          <select name="environment">
+          <label class="form-label" for="scanner-environment">{{ _('Environment') }}</label>
+          <select id="scanner-environment" name="environment">
             <option>Production</option><option>Staging</option>
             <option>Development</option><option>Testing</option><option>Lab</option>
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">{{ _('Criticality') }}</label>
-          <select name="criticality">
+          <label class="form-label" for="scanner-criticality">{{ _('Criticality') }}</label>
+          <select id="scanner-criticality" name="criticality">
             <option>Critical</option><option>High</option>
             <option selected>Medium</option><option>Low</option>
           </select>
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">{{ _('Tags') }}</label>
-        <div class="tag-presets" style="margin-bottom:0.5rem;" id="qaTagPresets">
+        <span class="form-label" id="qa-tags-label">{{ _('Tags') }}</span>
+        <div role="group" aria-labelledby="qa-tags-label" class="tag-presets" style="margin-bottom:0.5rem;" id="qaTagPresets">
           {% for tag in tag_presets %}
-          <button type="button" class="tag-preset-btn" onclick="qaToggleTag('{{ tag }}')">{{ tag }}</button>
+          <button type="button" class="tag-preset-btn" onclick="qaToggleTag({{ (tag)|tojson|forceescape }})">{{ tag }}</button>
           {% endfor %}
         </div>
         <input type="hidden" name="tags" id="qaTagsHidden">
       </div>
       <div class="btn-group" style="margin-top:1.25rem;">
-        <button class="btn btn-primary" type="submit">&#x1F4BE; Add Host</button>
+        <button class="btn btn-primary" type="submit">Add Host</button>
         <button class="btn btn-ghost" type="button" onclick="closeModal()">{{ _('Cancel') }}</button>
       </div>
     </form>
@@ -223,7 +223,7 @@ function startScan() {
 
   progress.classList.add('active');
   scanBtn.disabled = true;
-  scanBtn.textContent = '⏳ Scanning…';
+  scanBtn.textContent = 'Scanning…';
 
   const total = end - start + 1;
   let done = 0;
@@ -267,7 +267,7 @@ function startScan() {
     /* Done */
     progress.classList.remove('active');
     scanBtn.disabled = false;
-    scanBtn.textContent = '▶ Start Scan';
+    scanBtn.textContent = 'Start Scan';
     statusTxt.textContent = `Scan complete — ${found} device(s) found`;
     bar.style.width = '100%';
     pct.textContent = '100%';
@@ -288,17 +288,17 @@ function addResultCard(r, sshPort) {
 
   div.innerHTML = `
     <div class="scan-device-ip">
-      <span class="scan-status-dot ${dotClass}"></span>${r.ip}
+      <span class="scan-status-dot ${dotClass}"></span>${fpEsc(r.ip)}
     </div>
     <div class="scan-device-meta">
-      <span>&#x1F4E1; ${statusLabel}</span>
-      ${r.mac ? `<span>&#x1F4DF; MAC: <code>${r.mac}</code></span>` : ''}
-      ${r.hostname ? `<span>&#x1F4BB; ${r.hostname}</span>` : ''}
-      ${r.ssh ? `<span>&#x1F511; SSH port ${sshPort} open</span>` : ''}
+      <span>${statusLabel}</span>
+      ${r.mac ? `<span>MAC: <code>${fpEsc(r.mac)}</code></span>` : ''}
+      ${r.hostname ? `<span>${fpEsc(r.hostname)}</span>` : ''}
+      ${r.ssh ? `<span>SSH port ${fpEsc(sshPort)} open</span>` : ''}
     </div>
     <div class="scan-device-actions">
-      ${!isManaged && r.ssh ? `<button class="btn btn-primary btn-sm" onclick="openModal('${r.ip}','${r.mac||''}',${sshPort})">&#x2795; Add Host</button>` : ''}
-      ${isManaged ? '<span class="badge badge-green">&#x2714; Already managed</span>' : ''}
+      ${!isManaged && r.ssh ? `<button class="btn btn-primary btn-sm" onclick="openModal(${fpEsc(JSON.stringify(r.ip))},${fpEsc(JSON.stringify(r.mac||''))},${Number(sshPort)})">Add Host</button>` : ''}
+      ${isManaged ? '<span class="badge badge-green">Already managed</span>' : ''}
       ${!r.ssh && !isManaged ? '<span style="font-size:0.75rem;color:var(--text-muted);">{{ _('No SSH — ping only') }}</span>' : ''}
     </div>`;
   grid.appendChild(div);

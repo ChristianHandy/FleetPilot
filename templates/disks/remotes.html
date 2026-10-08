@@ -1,9 +1,9 @@
 {% extends 'disks/base.html' %}
+{% from "_macros.html" import post_button %}
 {% block title %}Remote Management{% endblock %}
+{% block page_heading %}{{ _('Remote Disk Systems') }}{% endblock %}
+{% block page_subtitle %}{{ _('Manage disk operations on remote PCs and servers via SSH') }}{% endblock %}
 {% block content %}
-<div class="container mt-4">
-  <h2>{{ _('Remote Disk Systems') }}</h2>
-  <p class="text-muted">{{ _('Manage disk operations on remote PCs and servers via SSH') }}</p>
   
   <div class="mb-3">
     <a href="{{ url_for('disks_index') }}" class="btn btn-secondary">← Back to Local Disks</a>
@@ -12,20 +12,20 @@
   <form method="post" action="{{ url_for('remotes') }}" class="row g-3 mb-4">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="col-md-4">
-      <label class="form-label">{{ _('Name') }}</label>
-      <input name="name" class="form-control" required />
+      <label class="form-label" for="remotes-name">{{ _('Name') }}</label>
+      <input id="remotes-name" name="name" class="form-control" required />
     </div>
     <div class="col-md-4">
-      <label class="form-label">{{ _('Host') }}</label>
-      <input name="host" class="form-control" required />
+      <label class="form-label" for="remotes-host">{{ _('Host') }}</label>
+      <input id="remotes-host" name="host" class="form-control" required />
     </div>
     <div class="col-md-2">
-      <label class="form-label">{{ _('Port') }}</label>
-      <input name="port" class="form-control" value="22" type="number" min="1" max="65535" />
+      <label class="form-label" for="remotes-port">{{ _('Port') }}</label>
+      <input id="remotes-port" name="port" class="form-control" value="22" type="number" min="1" max="65535" />
     </div>
     <div class="col-md-2">
-      <label class="form-label">{{ _('SSH User') }}</label>
-      <input name="ssh_user" class="form-control" value="root" required pattern="[A-Za-z_][A-Za-z0-9_-]{0,31}" />
+      <label class="form-label" for="remotes-ssh-user">{{ _('SSH User') }}</label>
+      <input id="remotes-ssh-user" name="ssh_user" class="form-control" value="root" required pattern="[A-Za-z_][A-Za-z0-9_-]{0,31}" />
     </div>
     <div class="col-md-2 align-self-end">
       <button type="submit" class="btn btn-primary w-100">{{ _('Add Remote') }}</button>
@@ -54,7 +54,7 @@
         <td>
           <a href="{{ url_for('remote_disk_list', remote_id=r['id']) }}" class="btn btn-sm btn-primary">{{ _('View Disks') }}</a>
           <a href="{{ url_for('remotes_edit', rid=r['id']) }}" class="btn btn-sm btn-outline-secondary">{{ _('Edit') }}</a>
-          <a href="{{ url_for('remotes_delete', rid=r['id']) }}" class="btn btn-sm btn-danger">{{ _('Delete') }}</a>
+          {{ post_button(url_for('remotes_delete', rid=r['id']), _('Delete'), 'btn btn-sm btn-danger', confirm='Delete this remote host?') }}
         </td>
       </tr>
     {% endfor %}
@@ -63,10 +63,10 @@
   
   <div class="card mt-4">
     <div class="card-header bg-info text-white">
-      <h5>📋 Setup Instructions</h5>
+      <h2>Setup Instructions</h2>
     </div>
     <div class="card-body">
-      <h6>{{ _('To manage disks on remote systems, you need to:') }}</h6>
+      <h3>{{ _('To manage disks on remote systems, you need to:') }}</h3>
       <ol>
         <li><strong>{{ _('Add a remote system') }}</strong> using the form above with hostname/IP, SSH port, and the SSH account used on that host.</li>
         <li><strong>{{ _('Configure SSH key authentication') }}</strong> - Use the configured remote SSH account. For Proxmox, this is normally <code>root</code>.</li>
@@ -80,5 +80,5 @@ username ALL=(ALL) NOPASSWD: /usr/bin/lsblk, /usr/sbin/smartctl, /usr/sbin/wipef
       </ol>
     </div>
   </div>
-</div>
+
 {% endblock %}

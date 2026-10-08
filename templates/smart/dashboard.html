@@ -1,13 +1,13 @@
 {% extends "base.html" %}
-{% block title %}SMART Dashboard — FleetPilot{% endblock %}
-{% block page_icon %}&#x1F4CA;{% endblock %}
+{% block title %}SMART Dashboard{% endblock %}
+{% block page_icon %}{% endblock %}
 {% block page_title %}SMART Disk Health{% endblock %}
 
 {% block nav_extra %}
   {% if is_admin %}
   <form method="POST" action="/smart/poll" style="display:inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button class="btn btn-success btn-sm">&#x1F504; Poll Now</button>
+    <button class="btn btn-success btn-sm">Poll Now</button>
   </form>
   {% endif %}
 {% endblock %}
@@ -46,7 +46,7 @@
 {% if alerts %}
 <div class="card card-red" style="margin-bottom:1.5rem">
   <div class="card-header">
-    <h3>&#x1F6A8; Active Disk Alerts ({{ alerts|length }})</h3>
+    <h2>Active Disk Alerts ({{ alerts|length }})</h2>
   </div>
   <div style="overflow-x:auto">
   <table class="table">
@@ -60,9 +60,9 @@
       <td>{{ a.model or "—" }}</td>
       <td><span class="badge">{{ a.source }}</span></td>
       <td>
-        {% if a.level == "FAILED" %}<span class="badge badge-red">&#x274C; FAILED</span>
-        {% elif a.level == "CRITICAL" %}<span class="badge badge-red">&#x1F534; CRITICAL</span>
-        {% else %}<span class="badge badge-yellow">&#x26A0; WARNING</span>{% endif %}
+        {% if a.level == "FAILED" %}<span class="badge badge-red">FAILED</span>
+        {% elif a.level == "CRITICAL" %}<span class="badge badge-red">CRITICAL</span>
+        {% else %}<span class="badge badge-yellow">WARNING</span>{% endif %}
       </td>
       <td>{{ a.message }}</td>
       <td><small>{{ a.ts }}</small></td>
@@ -73,7 +73,7 @@
           <button class="btn btn-sm btn-ghost">&#x2713; Ack</button>
         </form>
         {% endif %}
-        <a href="/smart/disk/{{ a.disk_id }}" class="btn btn-sm btn-secondary">&#x1F4CA; Detail</a>
+        <a href="/smart/disk/{{ a.disk_id }}" class="btn btn-sm btn-secondary">Detail</a>
       </td>
     </tr>
     {% endfor %}
@@ -86,7 +86,7 @@
 <!-- ── Disk Registry ──────────────────────────────────────────── -->
 <div class="card" style="margin-bottom:1.5rem">
   <div class="card-header">
-    <h3>&#x1F4BE; All Registered Disks</h3>
+    <h2>All Registered Disks</h2>
     <small class="text-muted">
       Sources: local Linux disks + Proxmox nodes + TrueNAS + Unraid
     </small>
@@ -109,23 +109,23 @@
       <td><small>{{ d.serial or "—" }}</small></td>
       <td>{{ "%.1f"|format(d.size_gb) if d.size_gb else "—" }} GB</td>
       <td>
-        {% if d.source == "local" %}<span class="badge">&#x1F4BB; local</span>
+        {% if d.source == "local" %}<span class="badge">local</span>
         {% elif d.source == "proxmox" %}<span class="badge badge-blue">Proxmox</span>
         {% elif d.source == "truenas" %}<span class="badge badge-blue">TrueNAS</span>
-        {% elif d.source == "unraid" %}<span class="badge" style="background:rgba(251,146,60,0.15);color:#fb923c">Unraid</span>
+        {% elif d.source == "unraid" %}<span class="badge" style="background:color-mix(in srgb, var(--accent-orange) 12%, transparent);color:var(--accent-orange)">Unraid</span>
         {% else %}<span class="badge">{{ d.source }}</span>{% endif %}
       </td>
       <td>
         {% set h = d.health %}
-        {% if h == "GOOD" %}<span class="badge badge-green">&#x2705; GOOD</span>
-        {% elif h == "WARNING" %}<span class="badge badge-yellow">&#x26A0; WARNING</span>
-        {% elif h == "CRITICAL" %}<span class="badge badge-red">&#x1F534; CRITICAL</span>
-        {% elif h == "FAILED" %}<span class="badge badge-red">&#x274C; FAILED</span>
+        {% if h == "GOOD" %}<span class="badge badge-green">GOOD</span>
+        {% elif h == "WARNING" %}<span class="badge badge-yellow">WARNING</span>
+        {% elif h == "CRITICAL" %}<span class="badge badge-red">CRITICAL</span>
+        {% elif h == "FAILED" %}<span class="badge badge-red">FAILED</span>
         {% else %}<span class="badge">{{ h or "?" }}</span>{% endif %}
       </td>
       <td>
         {% if d.temp %}
-          {% if d.temp >= 55 %}<span style="color:var(--danger)">&#x1F525; {{ d.temp }}°C</span>
+          {% if d.temp >= 55 %}<span style="color:var(--danger)">{{ d.temp }}°C</span>
           {% elif d.temp >= 45 %}<span style="color:var(--warning)">{{ d.temp }}°C</span>
           {% else %}{{ d.temp }}°C{% endif %}
         {% else %}—{% endif %}
@@ -138,7 +138,7 @@
       </td>
       <td><small>{{ d.last_smart or "Never" }}</small></td>
       <td>
-        <a href="/smart/disk/{{ d.id }}" class="btn btn-sm btn-secondary">&#x1F4CA; History</a>
+        <a href="/smart/disk/{{ d.id }}" class="btn btn-sm btn-secondary">History</a>
       </td>
     </tr>
     {% endfor %}
@@ -147,18 +147,18 @@
   </div>
   {% else %}
   <div style="padding:2rem;text-align:center;color:var(--text-muted)">
-    <div style="font-size:3rem;margin-bottom:1rem">&#x1F4BE;</div>
+    <div style="font-size:3rem;margin-bottom:1rem">{{ icon('hard-drive') }}</div>
     <p>{{ _('No disks registered yet.') }}</p>
     <p>Click <strong>{{ _('Poll Now') }}</strong> to scan local disks, or add a Proxmox/TrueNAS/Unraid endpoint.</p>
     <div class="btn-group" style="justify-content:center">
       {% if is_admin %}
       <form method="POST" action="/smart/poll">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="btn btn-success">&#x1F504; Poll Local Disks</button>
+        <button class="btn btn-success">Poll Local Disks</button>
       </form>
       {% endif %}
-      <a href="/vm" class="btn btn-secondary">&#x1F5A5; VM Controller</a>
-      <a href="/storage" class="btn btn-secondary">&#x1F5C4; Storage Controller</a>
+      <a href="/vm" class="btn btn-secondary">VM Controller</a>
+      <a href="/storage" class="btn btn-secondary">Storage Controller</a>
     </div>
   </div>
   {% endif %}
@@ -168,26 +168,26 @@
 {% if is_admin %}
 <div class="card" style="margin-bottom:1.5rem">
   <div class="card-header">
-    <h3>&#x1F4E5; Import Disks from Sources</h3>
+    <h2>Import Disks from Sources</h2>
     <small class="text-muted">{{ _('Import SMART data from configured SSH hosts, Proxmox nodes and NAS endpoints') }}</small>
   </div>
   <div style="padding:0.75rem 0">
     {% if hosts %}
     <div style="margin-bottom:1rem">
-      <strong style="font-size:0.85rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">&#x1F4BB; SSH Hosts</strong>
+      <strong style="font-size:0.85rem;color:var(--text-muted);">SSH Hosts</strong>
       <div class="btn-group" style="flex-wrap:wrap;margin-top:0.5rem">
         {% for hname, hdata in hosts.items() %}
-        <button class="btn btn-sm btn-secondary" onclick="importHost('{{ hname }}')"
+        <button class="btn btn-sm btn-secondary" onclick="importHost({{ (hname)|tojson|forceescape }})"
                 id="btn-import-{{ hname }}">
-          &#x1F4E5; {{ hname }} <small style="opacity:0.7">({{ hdata.host }})</small>
+          {{ hname }} <small style="opacity:0.7">({{ hdata.host }})</small>
         </button>
         {% endfor %}
       </div>
     </div>
     {% endif %}
     <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
-      <a href="/vm" class="btn btn-sm btn-secondary">&#x1F5A5; Proxmox Endpoints</a>
-      <a href="/storage" class="btn btn-sm btn-secondary">&#x1F5C4; Storage Endpoints</a>
+      <a href="/vm" class="btn btn-sm btn-secondary">Proxmox Endpoints</a>
+      <a href="/storage" class="btn btn-sm btn-secondary">Storage Endpoints</a>
     </div>
   </div>
   <div id="import-result" style="display:none;padding:0.5rem 0"></div>
@@ -197,13 +197,13 @@
 <!-- ── Polling Config ─────────────────────────────────────────── -->
 {% if is_admin %}
 <div class="card">
-  <div class="card-header"><h3>&#x23F0; Polling Configuration</h3></div>
+  <div class="card-header"><h2>Polling Configuration</h2></div>
   <form method="POST" action="/smart/config">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div style="display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;padding:0 0 0.5rem">
       <div class="form-group" style="margin:0">
-        <label class="form-label">{{ _('Interval (minutes)') }}</label>
-        <input type="number" name="interval_minutes" class="form-control"
+        <label class="form-label" for="dashboard-interval-minutes">{{ _('Interval (minutes)') }}</label>
+        <input id="dashboard-interval-minutes" type="number" name="interval_minutes" class="form-control"
                value="{{ poll_cfg.interval_minutes }}" min="5" max="1440" style="width:120px">
       </div>
       <div class="form-group" style="margin:0">
@@ -212,7 +212,7 @@
                  {% if poll_cfg.enabled %}checked{% endif %}> Auto-polling enabled
         </label>
       </div>
-      <button type="submit" class="btn btn-primary">&#x1F4BE; Save</button>
+      <button type="submit" class="btn btn-primary">Save</button>
     </div>
     <small class="text-muted" style="padding:0 0 0.5rem;display:block">
       Last poll: {{ poll_cfg.last_poll or "Never" }}
@@ -240,12 +240,12 @@ function importHost(hostName) {
     if (resultDiv) {
       resultDiv.style.display = 'block';
       if (d.ok) {
-        let html = `<div class="alert alert-success">\u2705 Imported ${d.imported} disk(s) from <strong>${hostName}</strong>`;
+        let html = `<div class="alert alert-success">Imported ${d.imported} disk(s) from <strong>${fpEsc(hostName)}</strong>`;
         if (d.disks && d.disks.length) {
           html += '<ul style="margin:0.5rem 0 0">';
           d.disks.forEach(dk => {
             const hClass = dk.health === 'GOOD' ? 'badge-green' : dk.health === 'WARNING' ? 'badge-yellow' : 'badge-red';
-            html += `<li><code>${dk.device}</code> — ${dk.model || 'Unknown'} — <span class="badge ${hClass}">${dk.health}</span>${dk.temp ? ' ' + dk.temp + '\u00b0C' : ''}</li>`;
+            html += `<li><code>${fpEsc(dk.device)}</code> — ${fpEsc(dk.model || 'Unknown')} — <span class="badge ${hClass}">${fpEsc(dk.health)}</span>${dk.temp ? ' ' + fpEsc(dk.temp) + '\u00b0C' : ''}</li>`;
           });
           html += '</ul>';
         }
@@ -253,18 +253,18 @@ function importHost(hostName) {
         resultDiv.innerHTML = html;
         setTimeout(() => location.reload(), 3000);
       } else {
-        resultDiv.innerHTML = `<div class="alert alert-danger">\u274C ${d.error || 'Import failed'}</div>`;
+        resultDiv.innerHTML = `<div class="alert alert-danger">${fpEsc(d.error || 'Import failed')}</div>`;
       }
     }
   })
   .catch(e => {
     if (resultDiv) {
       resultDiv.style.display = 'block';
-      resultDiv.innerHTML = `<div class="alert alert-danger">\u274C Network error: ${e}</div>`;
+      resultDiv.innerHTML = `<div class="alert alert-danger">Network error: ${fpEsc(e)}</div>`;
     }
   })
   .finally(() => {
-    if (btn) { btn.disabled = false; btn.innerHTML = '&#x1F4E5; ' + hostName; }
+    if (btn) { btn.disabled = false; btn.textContent = hostName; }
   });
 }
 </script>

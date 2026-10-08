@@ -1,17 +1,16 @@
 {% extends "base.html" %}
-{% block title %}Commander Pro — FleetPilot{% endblock %}
+{% block title %}Commander Pro{% endblock %}
 {% block nav_extra %}
 <a href="/commander/add" class="btn btn-sm btn-primary">+ Add Device</a>
 {% endblock %}
+{% block page_heading %}Corsair Commander Pro{% endblock %}
+{% block page_subtitle %}Remote fan &amp; temperature management via SSH + liquidctl{% endblock %}
 {% block content %}
-<div class="page-header">
-  <h1 class="page-title">&#x1F4A8; Corsair Commander Pro</h1>
-  <p class="page-subtitle">Remote fan &amp; temperature management via SSH + liquidctl</p>
-</div>
+
 
 {% if not devices %}
 <div class="card" style="text-align:center;padding:3rem;">
-  <div style="font-size:3rem;margin-bottom:1rem;">&#x1F4A8;</div>
+  <div style="font-size:3rem;margin-bottom:1rem;">{{ icon('fan') }}</div>
   <h2 style="margin-bottom:.5rem;">No Commander Pro devices configured</h2>
   <p style="color:var(--text-muted);margin-bottom:1.5rem;">
     Add a remote PC that has a Corsair Commander Pro connected via USB.<br>
@@ -31,9 +30,9 @@
   {% set ok = status.get('ok', false) if latest else false %}
   <div class="stat-card {% if not latest %}stat-warn{% elif ok %}stat-ok{% else %}stat-danger{% endif %}"
        style="cursor:pointer;" onclick="location.href='/commander/{{ dev.id }}'">
-    <div class="stat-icon">&#x1F4A8;</div>
+    <div class="stat-icon">{{ icon('fan') }}</div>
     <div class="stat-body">
-      <div class="stat-value" style="font-size:1rem;font-weight:700;">{{ dev.name }}</div>
+      <div class="stat-value" style="font-size:1rem;font-weight:600;">{{ dev.name }}</div>
       <div class="stat-label">{{ dev.host }}</div>
       {% if latest and ok %}
         {% set temps = status.get('temperatures', []) %}
@@ -107,7 +106,7 @@
           </td>
           <td>
             <a href="/commander/{{ dev.id }}" class="btn btn-xs btn-secondary">View</a>
-            <a href="/commander/{{ dev.id }}/refresh" class="btn btn-xs btn-primary">&#x21BB;</a>
+            <a href="/commander/{{ dev.id }}/refresh" class="btn btn-xs btn-primary" aria-label="Poll {{ dev.name }} now" title="Poll now">{{ icon('refresh', 12) }}</a>
             <a href="/commander/{{ dev.id }}/edit" class="btn btn-xs btn-secondary">Edit</a>
           </td>
         </tr>

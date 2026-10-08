@@ -1,9 +1,8 @@
 {% extends 'disks/base.html' %}
 {% block title %}Remote Disks – {{ remote.name }}{% endblock %}
+{% block page_heading %}Remote Disks on {{ remote.name }}{% endblock %}
+{% block page_subtitle %}Host: {{ remote.host }}:{{ remote.port }} | User: {{ username }}{% endblock %}
 {% block content %}
-<div class="container mt-4">
-  <h2>Remote Disks on {{ remote.name }}</h2>
-  <p class="text-muted">Host: {{ remote.host }}:{{ remote.port }} | User: {{ username }}</p>
   
   <div class="mb-3">
     <a href="{{ url_for('remote_disk_sync', remote_id=remote.id) }}" class="btn btn-success">
@@ -62,7 +61,7 @@
   
   <div class="card mt-4">
     <div class="card-header">
-      <h5>{{ _('Connection Requirements') }}</h5>
+      <h2>{{ _('Connection Requirements') }}</h2>
     </div>
     <div class="card-body">
       <ul>
@@ -72,5 +71,5 @@
       </ul>
     </div>
   </div>
-</div>
+
 {% endblock %}

@@ -1,22 +1,22 @@
 {% extends "base.html" %}
-{% block title %}Add Storage Endpoint — FleetPilot{% endblock %}
+{% block title %}Add Storage Endpoint{% endblock %}
 {% block page_icon %}&#x2B;{% endblock %}
 {% block page_title %}Add Storage Endpoint{% endblock %}
 
 {% block content %}
 <div class="card" style="max-width:640px;margin:0 auto">
   <div class="card-header">
-    <h3>&#x1F5C4; New NAS / Storage Endpoint</h3>
+    <h2>New NAS / Storage Endpoint</h2>
   </div>
   <form method="POST" action="/storage/add">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="form-group">
-      <label class="form-label">{{ _('Display Name *') }}</label>
-      <input type="text" name="name" class="form-control" placeholder="{{ _('e.g. TrueNAS-Main') }}" required>
+      <label class="form-label" for="add-name">{{ _('Display Name *') }}</label>
+      <input id="add-name" type="text" name="name" class="form-control" placeholder="{{ _('e.g. TrueNAS-Main') }}" required>
     </div>
 
     <div class="form-group">
-      <label class="form-label">{{ _('Platform *') }}</label>
+      <label class="form-label" for="platform-select">{{ _('Platform *') }}</label>
       <select name="platform" id="platform-select" class="form-control" onchange="updatePort()">
         <option value="truenas">TrueNAS SCALE / CORE</option>
         <option value="unraid">Unraid</option>
@@ -24,19 +24,19 @@
     </div>
 
     <div class="form-group">
-      <label class="form-label">{{ _('Host / IP *') }}</label>
-      <input type="text" name="host" class="form-control" placeholder="192.168.1.20" required>
+      <label class="form-label" for="add-host">{{ _('Host / IP *') }}</label>
+      <input id="add-host" type="text" name="host" class="form-control" placeholder="192.168.1.20" required>
     </div>
 
     <div class="form-group">
-      <label class="form-label">{{ _('Port *') }}</label>
+      <label class="form-label" for="port-input">{{ _('Port *') }}</label>
       <input type="number" name="port" id="port-input" class="form-control" value="443" required>
-      <small class="text-muted">{{ _('TrueNAS default: 443 &nbsp;|&nbsp; Unraid default: 80 (HTTP)') }}</small>
+      <small class="text-muted">{{ _('TrueNAS default: 443 · Unraid default: 80 (HTTP)') }}</small>
     </div>
 
     <div class="form-group">
-      <label class="form-label" id="key-label">{{ _('API Key *') }}</label>
-      <input type="password" name="api_key" class="form-control" required>
+      <label class="form-label" id="key-label" for="add-api-key">{{ _('API Key *') }}</label>
+      <input id="add-api-key" type="password" name="api_key" class="form-control" required>
       <small class="text-muted" id="key-hint">
         TrueNAS: <em>{{ _('System → API Keys → Add') }}</em>
       </small>
@@ -49,19 +49,19 @@
     </div>
 
     <div class="form-group">
-      <label class="form-label">{{ _('Notes') }}</label>
-      <textarea name="notes" class="form-control" rows="2"></textarea>
+      <label class="form-label" for="add-notes">{{ _('Notes') }}</label>
+      <textarea id="add-notes" name="notes" class="form-control" rows="2"></textarea>
     </div>
 
     <div class="btn-group">
-      <button type="submit" class="btn btn-success">&#x1F4BE; Save Endpoint</button>
+      <button type="submit" class="btn btn-success">Save Endpoint</button>
       <a href="/storage" class="btn btn-ghost">{{ _('Cancel') }}</a>
     </div>
   </form>
 </div>
 
 <div class="card" style="max-width:640px;margin:1.5rem auto 0">
-  <div class="card-header"><h3>&#x2139; API Key Setup</h3></div>
+  <div class="card-header"><h2>&#x2139; API Key Setup</h2></div>
   <div id="help-truenas">
     <strong>{{ _('TrueNAS SCALE / CORE') }}</strong><br>
     1. Log in to the TrueNAS web UI<br>

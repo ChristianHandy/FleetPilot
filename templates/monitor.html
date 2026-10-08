@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}System Monitor — FleetPilot{% endblock %}
+{% block title %}System Monitor{% endblock %}
 
 {% block nav_extra %}
 <button class="btn btn-sm btn-primary" onclick="refreshNow()" title="Refresh now">
@@ -7,11 +7,9 @@
 </button>
 {% endblock %}
 
+{% block page_subtitle %}Live CPU, RAM, disk, network &amp; temperature — updated every 60 s{% endblock %}
 {% block content %}
-<div class="page-header">
-  <h1 class="page-title">&#x1F321; System Monitor</h1>
-  <p class="page-subtitle">Live CPU, RAM, disk, network &amp; temperature — updated every 60 s</p>
-</div>
+
 
 <!-- ── Live Stat Cards ─────────────────────────────────────────────────── -->
 <div class="stat-grid" id="stat-grid">
@@ -19,7 +17,7 @@
   {% set cpu = latest.cpu_pct %}
   {% set ram = latest.ram_pct %}
   <div class="stat-card {% if cpu > 90 %}stat-danger{% elif cpu > 70 %}stat-warn{% else %}stat-ok{% endif %}">
-    <div class="stat-icon">&#x1F4BB;</div>
+    <div class="stat-icon">{{ icon('laptop') }}</div>
     <div class="stat-body">
       <div class="stat-value">{{ cpu }}%</div>
       <div class="stat-label">CPU Usage</div>
@@ -28,7 +26,7 @@
   </div>
 
   <div class="stat-card {% if ram > 90 %}stat-danger{% elif ram > 75 %}stat-warn{% else %}stat-ok{% endif %}">
-    <div class="stat-icon">&#x1F4BE;</div>
+    <div class="stat-icon">{{ icon('hard-drive') }}</div>
     <div class="stat-body">
       <div class="stat-value">{{ ram }}%</div>
       <div class="stat-label">RAM Usage</div>
@@ -41,7 +39,7 @@
   {% for sensor, entries in latest.temp.items() %}{% for e in entries %}{% if all_temps.append(e.current) %}{% endif %}{% endfor %}{% endfor %}
   {% set max_temp = all_temps | max if all_temps else 0 %}
   <div class="stat-card {% if max_temp > 85 %}stat-danger{% elif max_temp > 70 %}stat-warn{% else %}stat-ok{% endif %}">
-    <div class="stat-icon">&#x1F321;</div>
+    <div class="stat-icon">{{ icon('thermometer') }}</div>
     <div class="stat-body">
       <div class="stat-value">{{ max_temp | round(1) }}°C</div>
       <div class="stat-label">Max Temperature</div>
@@ -53,7 +51,7 @@
   {% for disk in latest.disk %}
   {% if disk.mountpoint in ('/', 'C:\\', '/mnt/user') %}
   <div class="stat-card {% if disk.pct > 90 %}stat-danger{% elif disk.pct > 75 %}stat-warn{% else %}stat-ok{% endif %}">
-    <div class="stat-icon">&#x1F4BE;</div>
+    <div class="stat-icon">{{ icon('hard-drive') }}</div>
     <div class="stat-body">
       <div class="stat-value">{{ disk.pct }}%</div>
       <div class="stat-label">Disk {{ disk.mountpoint }}</div>
@@ -76,7 +74,7 @@
 <!-- ── CPU + RAM Chart ─────────────────────────────────────────────────── -->
 <div class="card" style="margin-top:1.5rem;">
   <div class="card-header">
-    <span class="card-title">&#x1F4C8; CPU &amp; RAM — Last 24 hours</span>
+    <span class="card-title">CPU &amp; RAM — Last 24 hours</span>
     <div style="display:flex;gap:.5rem;">
       <button class="btn btn-xs btn-ghost" onclick="setRange(1)">1h</button>
       <button class="btn btn-xs btn-ghost" onclick="setRange(6)">6h</button>
@@ -86,7 +84,7 @@
     </div>
   </div>
   <div class="card-body" style="padding:1rem;">
-    <canvas id="cpuRamChart" style="width:100%;height:260px;"></canvas>
+    <canvas id="cpuRamChart" style="width:100%;height:260px;" role="img" aria-label="CPU RAM — Last 24 hours chart. The numbers are also shown on this page."></canvas>
   </div>
 </div>
 
@@ -94,10 +92,10 @@
 {% if latest and latest.temp %}
 <div class="card" style="margin-top:1.5rem;">
   <div class="card-header">
-    <span class="card-title">&#x1F321; Temperature Sensors — Last 24 hours</span>
+    <span class="card-title">Temperature Sensors — Last 24 hours</span>
   </div>
   <div class="card-body" style="padding:1rem;">
-    <canvas id="tempChart" style="width:100%;height:220px;"></canvas>
+    <canvas id="tempChart" style="width:100%;height:220px;" role="img" aria-label="Temperature Sensors — Last 24 hours chart. The numbers are also shown on this page."></canvas>
   </div>
 </div>
 {% endif %}
@@ -105,7 +103,7 @@
 <!-- ── Disk Usage Table ────────────────────────────────────────────────── -->
 {% if latest and latest.disk %}
 <div class="card" style="margin-top:1.5rem;">
-  <div class="card-header"><span class="card-title">&#x1F4BE; Disk Usage</span></div>
+  <div class="card-header"><span class="card-title">Disk Usage</span></div>
   <div class="card-body" style="padding:0;">
     <table class="data-table">
       <thead><tr><th>Device</th><th>Mount</th><th>FS</th><th>Total</th><th>Used</th><th>Free</th><th>Usage</th></tr></thead>
@@ -137,7 +135,7 @@
 <!-- ── Temperature Sensor Details ─────────────────────────────────────── -->
 {% if latest and latest.temp %}
 <div class="card" style="margin-top:1.5rem;">
-  <div class="card-header"><span class="card-title">&#x1F321; Temperature Sensors</span></div>
+  <div class="card-header"><span class="card-title">Temperature Sensors</span></div>
   <div class="card-body" style="padding:0;">
     <table class="data-table">
       <thead><tr><th>Sensor</th><th>Label</th><th>Current</th><th>High</th><th>Critical</th><th>Status</th></tr></thead>
@@ -175,7 +173,7 @@
 <!-- ── History Log ─────────────────────────────────────────────────────── -->
 <div class="card" style="margin-top:1.5rem;">
   <div class="card-header">
-    <span class="card-title">&#x1F4CB; Sample Log</span>
+    <span class="card-title">Sample Log</span>
     <span class="badge badge-blue">{{ log.total }} entries</span>
   </div>
   <div class="card-body" style="padding:0;">
@@ -210,7 +208,7 @@
 </div>
 
 <!-- ── Chart.js ────────────────────────────────────────────────────────── -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" integrity="sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g" crossorigin="anonymous"></script>
 <script>
 let cpuRamChart = null;
 let tempChart = null;
@@ -241,8 +239,8 @@ async function loadCharts(hours) {
     data: {
       labels,
       datasets: [
-        { label: 'CPU %', data: cpuData, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', tension: 0.3, pointRadius: 0, fill: true },
-        { label: 'RAM %', data: ramData, borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', tension: 0.3, pointRadius: 0, fill: true },
+        { label: 'CPU %', data: cpuData, borderColor: '#6b98ee', backgroundColor: 'rgba(107,152,238,0.1)', tension: 0.3, pointRadius: 0, fill: true },
+        { label: 'RAM %', data: ramData, borderColor: '#4fb383', backgroundColor: 'rgba(79,179,131,0.1)', tension: 0.3, pointRadius: 0, fill: true },
       ]
     },
     options: {
@@ -273,7 +271,7 @@ async function loadCharts(hours) {
     }
   });
 
-  const colors = ['#f59e0b','#ef4444','#8b5cf6','#06b6d4','#84cc16','#f97316'];
+  const colors = ['#d8a645','#e46a63','#a093dc','#5ab6c1','#84cc16','#e08a52'];
   const tempDatasets = Object.entries(sensorMap).map(([label, vals], i) => ({
     label,
     data: vals,

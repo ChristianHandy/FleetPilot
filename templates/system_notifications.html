@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% from "_macros.html" import post_button %}
+{% block title %}Notifications{% endblock %}
+{% block page_subtitle %}Push disk alerts and security events to your phone or team chat. Email is configured separately under Email Config.{% endblock %}
+{% block head %}
+<style>
+.check-row { display: flex; align-items: center; gap: .5rem; min-height: 28px; font-weight: 400; margin: 0; }
+.check-row input { width: 18px; height: 18px; flex-shrink: 0; }
+</style>
+{% endblock %}
+{% block content %}
+
+<section class="card-v4 mb-3" aria-labelledby="channels-title">
+  <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="channels-title">Channels</h2></div>
+  {% if channels %}
+  <div class="table-responsive">
+    <table class="table">
+      <thead><tr><th>Name</th><th>Sends</th><th>From level</th><th>Last delivery</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+      <tbody>
+      {% for c in channels %}
+        <tr>
+          <td><strong>{{ c.name }}</strong>
+            <div class="text-muted small">{{ kinds.get(c.kind, c.kind) }} · <code>{{ c.url_hint }}</code></div>
+            {% if not c.enabled %}<span class="badge badge-gray">Paused</span>{% endif %}</td>
+          <td>
+            <form method="post" action="{{ url_for('system_notifications_update', channel_id=c.id) }}" id="upd-{{ c.id }}" class="m-0">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              {% for key, label in events.items() %}
+              <div><label class="check-row">
+                <input type="checkbox" name="events" value="{{ key }}" {% if key in (c.events or []) %}checked{% endif %}> {{ label.split(' (')[0] }}</label></div>
+              {% endfor %}
+              <div><label class="check-row">
+                <input type="checkbox" name="enabled" value="1" {% if c.enabled %}checked{% endif %}> Enabled</label></div>
+            </form>
+          </td>
+          <td>
+            <label class="visually-hidden" for="lvl-{{ c.id }}">Lowest level for {{ c.name }}</label>
+            <select class="form-select form-select-sm" id="lvl-{{ c.id }}" name="min_level" form="upd-{{ c.id }}">
+              {% for l in levels %}<option value="{{ l }}" {% if l == c.min_level %}selected{% endif %}>{{ l|capitalize }}</option>{% endfor %}
+            </select>
+          </td>
+          <td>{% if c.last_sent %}{{ c.last_sent|fp_ts }}
+              <div class="small {{ 'text-muted' if c.last_status.startswith('OK') else 'text-danger' }}">{{ c.last_status }}</div>{% else %}<span class="text-muted">Never</span>{% endif %}</td>
+          <td class="text-end">
+            <div class="d-flex gap-1 justify-content-end flex-wrap">
+              <button class="btn btn-sm" type="submit" form="upd-{{ c.id }}">Save<span class="visually-hidden"> {{ c.name }}</span></button>
+              {{ post_button(url_for('system_notifications_test', channel_id=c.id), 'Send test', 'btn btn-sm', title='Send a test message to ' ~ c.name) }}
+              {{ post_button(url_for('system_notifications_delete', channel_id=c.id), 'Remove', 'btn btn-sm btn-danger', confirm='Remove ' ~ c.name ~ '?', title='Remove ' ~ c.name) }}
+            </div>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">No channels yet. Add one below.</div>
+  {% endif %}
+</section>
+
+<section class="card-v4" aria-labelledby="add-title">
+  <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="add-title">Add a channel</h2></div>
+  <div class="card-v4-body">
+    <form method="post" action="{{ url_for('system_notifications_add') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="row g-3">
+        <div class="col-sm-4">
+          <label class="form-label" for="ch-kind">Service</label>
+          <select class="form-select" id="ch-kind" name="kind" aria-describedby="ch-url-hint">
+            {% for key, label in kinds.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-sm-8">
+          <label class="form-label" for="ch-name">Name</label>
+          <input class="form-control" id="ch-name" name="name" maxlength="64" placeholder="e.g. Admin phone">
+        </div>
+        <div class="col-12">
+          <label class="form-label" for="ch-url">Address</label>
+          <input class="form-control" id="ch-url" name="url" type="url" required autocomplete="off" spellcheck="false"
+                 placeholder="https://ntfy.sh/my-private-topic" aria-describedby="ch-url-hint">
+          <div class="form-hint" id="ch-url-hint">
+            <strong>ntfy:</strong> the topic URL, e.g. <code>https://ntfy.sh/your-long-random-topic</code>.
+            <strong>Gotify:</strong> <code>https://gotify.example/message?token=…</code>.
+            <strong>Discord / Slack:</strong> the incoming webhook URL.
+            <strong>Generic:</strong> any URL that accepts a JSON POST.
+            The address is stored encrypted and is not shown again.
+          </div>
+        </div>
+        <div class="col-sm-8">
+          <fieldset>
+            <legend class="form-label" style="font-size:.95rem">Send</legend>
+            {% for key, label in events.items() %}
+            <div><label class="check-row">
+              <input type="checkbox" name="events" value="{{ key }}" checked> {{ label }}</label></div>
+            {% endfor %}
+          </fieldset>
+        </div>
+        <div class="col-sm-4">
+          <label class="form-label" for="ch-level">Lowest level</label>
+          <select class="form-select" id="ch-level" name="min_level" aria-describedby="ch-level-hint">
+            {% for l in levels %}<option value="{{ l }}" {% if l == 'warning' %}selected{% endif %}>{{ l|capitalize }}</option>{% endfor %}
+          </select>
+          <div class="form-hint" id="ch-level-hint">Info adds routine events such as backup downloads and new API tokens.</div>
+        </div>
+      </div>
+      <button class="btn btn-primary mt-3" type="submit">Add channel</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

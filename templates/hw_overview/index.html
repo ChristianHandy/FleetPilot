@@ -1,29 +1,36 @@
 {% extends "base.html" %}
 {% block title %}Hardware Overview{% endblock %}
+{% block page_subtitle %}Hardware details for every server ({{ servers|length }} server{{ 's' if servers|length != 1 else '' }}){% endblock %}
+{% block page_actions %}
+  <button class="btn" onclick="refreshAll()" id="refresh-all-btn">
+    <span id="refresh-icon" aria-hidden="true">{{ icon('refresh') }}</span> Refresh all
+  </button>
+  <a href="/hosts" class="btn">{{ icon('plus') }} Add server</a>
+{% endblock %}
 {% block content %}
 <style>
 :root {
-  --hw-bg: #0d1117;
-  --hw-card: #161b22;
-  --hw-border: #30363d;
-  --hw-text: #e6edf3;
-  --hw-muted: #8b949e;
-  --hw-green: #3fb950;
-  --hw-blue: #58a6ff;
-  --hw-purple: #bc8cff;
-  --hw-orange: #ffa657;
-  --hw-red: #f85149;
-  --hw-yellow: #d29922;
-  --hw-teal: #39d353;
+  --hw-bg: var(--bg-base);
+  --hw-card: var(--bg-surface);
+  --hw-border: var(--border);
+  --hw-text: var(--text-primary);
+  --hw-muted: var(--text-muted);
+  --hw-green: var(--accent-green);
+  --hw-blue: var(--accent-blue);
+  --hw-purple: var(--accent-purple);
+  --hw-orange: var(--accent-amber);
+  --hw-red: var(--accent-red);
+  --hw-yellow: var(--accent-amber);
+  --hw-teal: var(--accent-green);
   --hw-nvidia: #76b900;
   --hw-amd: #ed1c24;
 }
-.hw-page { padding: 24px; max-width: 1400px; margin: 0 auto; }
+.hw-page { padding: 0; }
 .hw-header { display: flex; align-items: center; gap: 16px; margin-bottom: 28px; }
-.hw-header h1 { font-size: 26px; font-weight: 700; color: var(--hw-text); margin: 0; }
+.hw-header h1 { font-size: 26px; font-weight:600; color: var(--hw-text); margin: 0; }
 .hw-header .badge-count {
   background: rgba(88,166,255,0.15); color: var(--hw-blue);
-  border: 1px solid rgba(88,166,255,0.3); border-radius: 20px;
+  border: 1px solid rgba(88,166,255,0.3); border-radius:var(--radius-lg);
   padding: 3px 12px; font-size: 13px; font-weight: 600;
 }
 .hw-btn {
@@ -33,9 +40,9 @@
   border: 1px solid var(--hw-border); background: var(--hw-card);
   color: var(--hw-text); transition: all 0.15s;
 }
-.hw-btn:hover { background: #21262d; border-color: var(--hw-blue); color: var(--hw-blue); }
+.hw-btn:hover { background: var(--bg-elevated); border-color: var(--hw-blue); color: var(--hw-blue); }
 .hw-btn.primary { background: var(--hw-blue); border-color: var(--hw-blue); color: #0d1117; }
-.hw-btn.primary:hover { background: #79c0ff; }
+.hw-btn.primary:hover { background: var(--accent-blue); }
 .hw-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(520px, 1fr));
@@ -45,18 +52,18 @@
 .ff-card {
   background: var(--hw-card);
   border: 1px solid var(--hw-border);
-  border-radius: 12px;
+  border-radius:var(--radius-lg);
   overflow: hidden;
   transition: transform 0.15s, border-color 0.15s;
 }
-.ff-card:hover { transform: translateY(-2px); border-color: #58a6ff44; }
+.ff-card:hover { transform:none; border-color: var(--border-strong); }
 .ff-card-header {
   padding: 16px 20px;
-  background: linear-gradient(135deg, #161b22 0%, #0d1117 100%);
+  background: var(--bg-surface);
   border-bottom: 1px solid var(--hw-border);
   display: flex; align-items: center; justify-content: space-between;
 }
-.ff-hostname { font-size: 16px; font-weight: 700; color: var(--hw-blue); }
+.ff-hostname { font-size: 16px; font-weight:600; color: var(--hw-blue); }
 .ff-os { font-size: 12px; color: var(--hw-muted); margin-top: 2px; }
 .ff-actions { display: flex; gap: 8px; }
 .ff-icon-btn {
@@ -86,8 +93,7 @@
 .ff-val.amd { color: var(--hw-amd); }
 .ff-divider { border: none; border-top: 1px solid var(--hw-border); margin: 10px 0; }
 .ff-section-label {
-  font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
-  text-transform: uppercase; color: var(--hw-muted); margin: 10px 0 6px;
+  font-size: 10px; font-weight:600;   color: var(--hw-muted); margin: 10px 0 6px;
 }
 /* Progress bar */
 .ff-bar {
@@ -102,7 +108,7 @@
 /* Temp badge */
 .temp-badge {
   display: inline-block; padding: 1px 7px; border-radius: 4px;
-  font-size: 11px; font-weight: 700;
+  font-size: 11px; font-weight:600;
 }
 .temp-ok { background: rgba(63,185,80,0.15); color: var(--hw-green); }
 .temp-warn { background: rgba(210,153,34,0.15); color: var(--hw-yellow); }
@@ -127,32 +133,19 @@
   width: 8px; height: 8px; border-radius: 50%;
   display: inline-block; margin-right: 6px;
 }
-.status-dot.online { background: var(--hw-green); box-shadow: 0 0 6px var(--hw-green); }
+.status-dot.online { background: var(--hw-green); box-shadow:none; }
 .status-dot.offline { background: var(--hw-red); }
 </style>
 
 <div class="hw-page">
-  <div class="hw-header">
-    <div>
-      <h1>🖥️ Hardware Overview</h1>
-      <div style="color:var(--hw-muted);font-size:13px;margin-top:4px;">Fastfetch-style hardware info for all servers</div>
-    </div>
-    <span class="badge-count">{{ servers|length }} server{{ 's' if servers|length != 1 else '' }}</span>
-    <div style="margin-left:auto;display:flex;gap:10px;">
-      <button class="hw-btn" onclick="refreshAll()" id="refresh-all-btn">
-        <span id="refresh-icon">⟳</span> Refresh All
-      </button>
-      <a href="/hosts" class="hw-btn">+ Add Server</a>
-    </div>
-  </div>
 
   {% if not servers %}
   <div class="hw-empty">
-    <div class="icon">🔍</div>
+    <div class="icon">{{ icon('search') }}</div>
     <h2>No hardware data yet</h2>
     <p>Click "Refresh All" to collect hardware info from all configured servers, or add servers first.</p>
-    <button class="hw-btn primary" onclick="refreshAll()" style="margin-top:16px;">
-      ⟳ Collect Hardware Info
+    <button class="btn btn-primary" onclick="refreshAll()" style="margin-top:16px;">
+      {{ icon('refresh') }} Collect hardware info
     </button>
   </div>
   {% else %}
@@ -166,7 +159,7 @@
         </div>
         <div class="ff-actions">
           <a href="/hw_overview/{{ srv.server_name }}" class="ff-icon-btn" title="Full Details">⊞</a>
-          <button class="ff-icon-btn" onclick="refreshServer('{{ srv.server_name }}')" title="Refresh">⟳</button>
+          <button class="ff-icon-btn" onclick="refreshServer({{ (srv.server_name)|tojson|forceescape }})" title="Refresh" aria-label="Refresh {{ srv.server_name }}">{{ icon('refresh', 14) }}</button>
         </div>
       </div>
       <div class="ff-body" id="body-{{ srv.server_name | replace(' ','_') }}">
@@ -223,6 +216,7 @@ function fmtMB(mb) {
 }
 
 function renderCard(name, hw) {
+  hw = fpEscDeep(hw);  // values come from the remote host
   const id = name.replace(/ /g,'_');
   const body = document.getElementById('body-' + id);
   const dot = document.getElementById('dot-' + id);
@@ -231,7 +225,7 @@ function renderCard(name, hw) {
   if (!body) return;
 
   if (hw.error) {
-    body.innerHTML = `<div class="ff-val red">⚠ ${hw.error}</div>`;
+    body.innerHTML = `<div class="ff-val red">${hw.error}</div>`;
     dot.className = 'status-dot offline';
     status.textContent = 'Error';
     return;
@@ -372,13 +366,13 @@ async function loadCached(name) {
 async function refreshServer(name) {
   const id = name.replace(/ /g,'_');
   const body = document.getElementById('body-' + id);
-  if (body) body.innerHTML = '<div class="ff-val muted"><span class="spin">⟳</span> Collecting hardware info...</div>';
+  if (body) body.innerHTML = '<div class="ff-val muted"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Collecting hardware info…</div>';
   try {
     const r = await fetch(`/hw_overview/${encodeURIComponent(name)}/refresh`);
     const data = await r.json();
     renderCard(name, data);
   } catch(e) {
-    if (body) body.innerHTML = `<div class="ff-val red">⚠ Connection failed</div>`;
+    if (body) body.innerHTML = `<div class="ff-val red">Connection failed</div>`;
   }
 }
 
@@ -387,7 +381,6 @@ async function refreshAll() {
   const icon = document.getElementById('refresh-icon');
   btn.disabled = true;
   icon.className = 'spin';
-  icon.textContent = '⟳';
 
   // First load all cached data
   for (const srv of servers) {
@@ -400,7 +393,6 @@ async function refreshAll() {
 
   btn.disabled = false;
   icon.className = '';
-  icon.textContent = '⟳';
 }
 
 // Load cached data on page load

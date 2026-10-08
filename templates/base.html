@@ -1,190 +1,227 @@
 <!doctype html>
-<html lang="{{ current_lang|default('en') }}" data-theme="{{ current_theme|default('dark') }}">
+{% set a = a11y if a11y is defined else {} %}
+<html lang="{{ current_lang|default('en') }}" data-theme="{{ current_theme|default('dark') }}" data-bs-theme="{{ current_theme|default('dark') }}"
+      data-text="{{ a.text_size|default('normal') }}" data-contrast="{{ a.contrast|default('normal') }}" data-motion="{{ a.motion|default('system') }}"
+      data-links="{{ a.underline_links|default('off') }}" data-spacing="{{ a.spacing|default('normal') }}" data-font="{{ a.font|default('default') }}"
+      data-easy="{{ a.easy_language|default('off') }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>{% block title %}FleetPilot {{ fleetpilot_release.tag }}{% endblock %}</title>
+  <title>{% block title %}Dashboard{% endblock %} · FleetPilot</title>
   {% if csrf_token is defined %}<meta name="csrf-token" content="{{ csrf_token() }}">{% endif %}
-  <link rel="stylesheet" href="/static/style.css">
+  <script>
+    // Accessibility settings are also kept in this browser so the sign-in page can use them.
+    try { localStorage.setItem('fp_a11y', JSON.stringify({
+      text: document.documentElement.dataset.text, contrast: document.documentElement.dataset.contrast,
+      motion: document.documentElement.dataset.motion, links: document.documentElement.dataset.links,
+      spacing: document.documentElement.dataset.spacing, font: document.documentElement.dataset.font })); } catch (e) {}
+
+    // Read short messages to screen-reader users (toasts, results of actions).
+    window.fpAnnounce = function (message) {
+      var region = document.getElementById('fp-live');
+      if (!region || !message) return;
+      region.textContent = '';
+      setTimeout(function () { region.textContent = String(message).trim().slice(0, 300); }, 60);
+    };
+    // Give every form field an accessible name, including fields that scripts add later.
+    window.fpLabelFields = function (root) {
+      var n = 0;
+      (root || document).querySelectorAll('label:not([for])').forEach(function (label) {
+        if (label.querySelector('input,select,textarea')) return;
+        var scope = label.parentElement, field = null, el = label.nextElementSibling;
+        while (el && !field) {
+          if (el.matches('label')) break;
+          field = el.matches('input,select,textarea') ? el : el.querySelector('input,select,textarea');
+          el = el.nextElementSibling;
+        }
+        if (!field || field.type === 'hidden' || field.labels && field.labels.length) return;
+        if (!field.id) field.id = 'fp-field-' + (++n) + '-' + Math.random().toString(36).slice(2, 7);
+        label.htmlFor = field.id;
+      });
+      (root || document).querySelectorAll('input:not([type=hidden]),select,textarea').forEach(function (field) {
+        if ((field.labels && field.labels.length) || field.getAttribute('aria-label') || field.getAttribute('aria-labelledby') || field.title) return;
+        var name = field.getAttribute('placeholder') || (field.name || '').replace(/[_-]+/g, ' ');
+        if (name) field.setAttribute('aria-label', name);
+      });
+    };
+
+    // Theme colors for canvas charts (canvas cannot read CSS variables itself).
+    window.fpColor = function (name) {
+      return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888';
+    };
+
+    // Messages that pages add on their own (toasts, alerts) are announced too.
+    document.addEventListener('DOMContentLoaded', function () {
+      if (window.Chart && Chart.defaults) {
+        Chart.defaults.color = window.fpColor('--text-muted');
+        Chart.defaults.borderColor = window.fpColor('--border');
+        Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+        if (document.documentElement.dataset.motion === 'reduce' || matchMedia('(prefers-reduced-motion: reduce)').matches) Chart.defaults.animation = false;
+      }
+      window.fpLabelFields(document);
+      var seen = new WeakSet();
+      new MutationObserver(function (records) {
+        records.forEach(function (r) {
+          r.addedNodes.forEach(function (n) {
+            if (n.nodeType !== 1 || seen.has(n) || n.id === 'fp-live') return;
+            var el = n.matches('.alert, .toast, [role="alert"], [id$="toast"], [id$="Toast"]') ? n
+                   : n.querySelector && n.querySelector('.alert, .toast, [role="alert"]');
+            if (el && el.textContent.trim()) { seen.add(n); window.fpAnnounce(el.textContent); }
+            if (n.querySelector && n.querySelector('input,select,textarea,label')) window.fpLabelFields(n);
+          });
+        });
+      }).observe(document.body, { childList: true, subtree: true });
+    });
+
+    // Escape text before inserting it into HTML built in JavaScript.
+    window.fpEsc = function (value) {
+      return String(value == null ? '' : value).replace(/[&<>"'`]/g, function (c) {
+        return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;'}[c];
+      });
+    };
+    // Return a copy of JSON data with every string escaped, for HTML-building renderers.
+    window.fpEscDeep = function (value) {
+      if (typeof value === 'string') return window.fpEsc(value);
+      if (Array.isArray(value)) return value.map(window.fpEscDeep);
+      if (value && typeof value === 'object') {
+        var out = {};
+        Object.keys(value).forEach(function (k) { out[k] = window.fpEscDeep(value[k]); });
+        return out;
+      }
+      return value;
+    };
+    // Attach the CSRF token to every same-origin state-changing fetch().
+    (function () {
+      var meta = document.querySelector('meta[name="csrf-token"]');
+      var token = meta && meta.content;
+      if (!token || !window.fetch) return;
+      var origFetch = window.fetch;
+      window.fetch = function (input, init) {
+        init = init || {};
+        var method = (init.method || (input && input.method) || 'GET').toUpperCase();
+        var url = new URL(typeof input === 'string' ? input : input.url, window.location.href);
+        if (url.origin === window.location.origin && !/^(GET|HEAD|OPTIONS)$/.test(method)) {
+          var headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
+          if (!headers.has('X-CSRFToken')) headers.set('X-CSRFToken', token);
+          init.headers = headers;
+        }
+        return origFetch.call(this, input, init);
+      };
+    })();
+  </script>
+  <script>
+    (function() {
+      var saved = null;
+      try { saved = localStorage.getItem('fp_theme'); } catch (e) {}
+      saved = saved || '{{ current_theme|default("dark") }}';
+      document.documentElement.setAttribute('data-theme', saved);
+      document.documentElement.setAttribute('data-bs-theme', saved);
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" integrity="sha384-XGjxtQfXaH2tnPFa9x+ruJTuLE3Aa6LhHSWRr1XeTyhezb4abCG4ccI5AkVDxqC+" crossorigin="anonymous">
+  <link rel="stylesheet" href="/static/style.css?v={{ asset_version('style.css') }}">
+  {% if a.font == 'readable' %}<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">{% endif %}
   {% block head %}{% endblock %}
 </head>
 <body>
+<a class="skip-link" href="#main">{{ _('Skip to content') }}</a>
+<div id="fp-live" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></div>
 
-<!-- Sidebar Overlay (mobile tap-to-close) -->
+{% set path = request.path %}
+{% set admin = is_admin is defined and is_admin %}
+{% macro label_for(label) -%}{{ nav_text(label) if (easy_on is defined and easy_on) else _(label) }}{%- endmacro %}
+{% macro nav(href, label, ico, active) -%}
+  <a class="sidebar-link {% if active %}active{% endif %}" href="{{ href }}"{% if active %} aria-current="page"{% endif %}>
+    <span class="sidebar-icon" aria-hidden="true">{{ icon(ico) }}</span>{{ label_for(label) }}
+  </a>
+{%- endmacro %}
+{% macro group(id, label) -%}
+  <button type="button" class="sidebar-section-label" onclick="toggleGroup({{ (id)|tojson|forceescape }},this)"
+          data-group="{{ id }}" aria-expanded="true" aria-controls="{{ id }}">
+    {{ label_for(label) }}<span class="nav-chevron" aria-hidden="true">{{ icon('arrow-down', 12) }}</span>
+  </button>
+{%- endmacro %}
+
 <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
 <div class="layout">
 
-  <!-- ── Sidebar ───────────────────────────────────────── -->
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-brand">
-      <div class="sidebar-brand-icon" style="background:linear-gradient(135deg,#3b82f6,#8b5cf6);box-shadow:0 0 16px rgba(59,130,246,.5);border-radius:10px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;">&#x1F6E9;</div>
-      <div class="sidebar-brand-text">
-        <span class="sidebar-brand-title" style="font-size:0.95rem;font-weight:800;letter-spacing:-0.01em;">FleetPilot</span>
-        <span class="sidebar-brand-sub" style="font-size:0.62rem;color:var(--text-muted);letter-spacing:0.05em;">{{ fleetpilot_release.tag }} · Linux &amp; Windows</span>
-      </div>
-    </div>
-
-    <nav class="sidebar-nav">
-
-      {# ── DASHBOARD ──────────────────────────────────────────────────── #}
-      <span class="sidebar-section-label" onclick="toggleGroup('grp-dash',this)" data-group="grp-dash">
-        &#x1F4CA; Dashboard <span class="nav-chevron">&#x25BC;</span>
+    <a class="sidebar-brand" href="/index">
+      <span class="sidebar-brand-mark">{{ icon('plane', 14) }}</span>
+      <span class="sidebar-brand-text">
+        <span class="sidebar-brand-title">FleetPilot</span>
+        <span class="sidebar-brand-sub">{{ fleetpilot_release.tag }}</span>
       </span>
-      <div class="sidebar-nav-group" id="grp-dash">
-        <a class="sidebar-link {% if request.path == '/index' or request.path == '/' %}active{% endif %}" href="/index">
-          <span class="sidebar-icon">&#x1F3E0;</span> {{ _('Home') }}
-        </a>
-      </div>
+    </a>
 
-      {# ── SERVER ─────────────────────────────────────────────────────── #}
-      <span class="sidebar-section-label" onclick="toggleGroup('grp-srv',this)" data-group="grp-srv">
-        &#x1F5A7; Server <span class="nav-chevron">&#x25BC;</span>
-      </span>
+    <nav class="sidebar-nav" aria-label="Main">
+      {{ nav('/index', 'Home', 'home', path == '/index' or path == '/') }}
+
+      {{ group('grp-srv', 'Servers') }}
       <div class="sidebar-nav-group" id="grp-srv">
-        <a class="sidebar-link {% if request.path.startswith('/hosts') %}active{% endif %}" href="/hosts">
-          <span class="sidebar-icon">&#x1F4DD;</span> {{ _('Manage Hosts') }}
-        </a>
-        <a class="sidebar-link {% if request.path == '/scanner' %}active{% endif %}" href="/scanner">
-          <span class="sidebar-icon">&#x1F50D;</span> {{ _('Network Scanner') }}
-        </a>
-        <a class="sidebar-link {% if request.path.startswith('/dashboard') %}active{% endif %}" href="/dashboard">
-          <span class="sidebar-icon">&#x1F504;</span> {{ _('Update Dashboard') }}
-        </a>
-        {% if is_admin is defined and is_admin %}
-        <a class="sidebar-link {% if request.path.startswith('/server_update') %}active{% endif %}" href="/server_update">
-          <span class="sidebar-icon">&#x2B06;</span> Server Update
-          <span class="badge badge-amber" style="margin-left:auto;font-size:0.6rem;padding:0.1rem 0.35rem;">Admin</span>
-        </a>
-        {% endif %}
+        {{ nav('/hosts', 'Manage Hosts', 'server', path.startswith('/hosts')) }}
+        {{ nav('/scanner', 'Network Scanner', 'search', path == '/scanner') }}
+        {{ nav('/dashboard', 'Update Dashboard', 'refresh', path.startswith('/dashboard')) }}
+        {% if admin %}{{ nav('/server_update', 'Server update', 'arrow-up', path.startswith('/server_update')) }}{% endif %}
       </div>
 
-      {# ── HARDWARE ───────────────────────────────────────────────────── #}
-      <span class="sidebar-section-label" onclick="toggleGroup('grp-hw',this)" data-group="grp-hw">
-        &#x1F9F0; Hardware <span class="nav-chevron">&#x25BC;</span>
-      </span>
+      {{ group('grp-hw', 'Hardware') }}
       <div class="sidebar-nav-group" id="grp-hw">
-        <a class="sidebar-link {% if request.path.startswith('/hw_overview') %}active{% endif %}" href="/hw_overview">
-          <span class="sidebar-icon">&#x1F5A5;</span> Hardware Overview
-        </a>
-        <a class="sidebar-link {% if request.path.startswith('/smart') %}active{% endif %}" href="/smart">
-          <span class="sidebar-icon">&#x1F4CA;</span> SMART Dashboard
-        </a>
-        <a class="sidebar-link {% if request.path.startswith('/storage/workspace') or request.path.startswith('/disks') %}active{% endif %}" href="/storage/workspace">
-          <span class="sidebar-icon">&#x1F4BE;</span> Storage &amp; Disks
-        </a>
-        <a class="sidebar-link {% if request.path.startswith('/fans') or request.path.startswith('/commander') %}active{% endif %}" href="/fans">
-          <span class="sidebar-icon">&#x1F32C;</span> Fan &amp; Cooling
-        </a>
+        {{ nav('/hw_overview', 'Hardware overview', 'cpu', path.startswith('/hw_overview')) }}
+        {{ nav('/smart', 'SMART health', 'activity', path.startswith('/smart')) }}
+        {{ nav('/storage/workspace', 'Storage & disks', 'hard-drive', path.startswith('/storage/workspace') or path.startswith('/disks')) }}
+        {{ nav('/fans', 'Fans & cooling', 'fan', path.startswith('/fans') or path.startswith('/commander')) }}
       </div>
 
-      {# ── VIRTUALISIERUNG ────────────────────────────────────────────── #}
-      <span class="sidebar-section-label" onclick="toggleGroup('grp-virt',this)" data-group="grp-virt">
-        &#x2601; Virtualisierung <span class="nav-chevron">&#x25BC;</span>
-      </span>
+      {{ group('grp-virt', 'Virtualization') }}
       <div class="sidebar-nav-group" id="grp-virt">
-        <a class="sidebar-link {% if request.path.startswith('/vm') %}active{% endif %}" href="/vm">
-          <span class="sidebar-icon">&#x1F5A5;</span> VM Controller
-        </a>
-        <a class="sidebar-link {% if request.path.startswith('/storage') %}active{% endif %}" href="/storage">
-          <span class="sidebar-icon">&#x1F5C4;</span> Storage Controller
-        </a>
+        {{ nav('/vm', 'VM controllers', 'monitor', path.startswith('/vm')) }}
+        {{ nav('/storage', 'Storage controllers', 'database', path.startswith('/storage') and not path.startswith('/storage/workspace')) }}
       </div>
 
-      {# ── DATENSICHERUNG + MONITORING (zusammengefasst) ───────────────── #}
-      <span class="sidebar-section-label" onclick="toggleGroup('grp-ops',this)" data-group="grp-ops">
-        &#x1F4F6; Betrieb <span class="nav-chevron">&#x25BC;</span>
-      </span>
+      {{ group('grp-ops', 'Operations') }}
       <div class="sidebar-nav-group" id="grp-ops">
-        <a class="sidebar-link {% if request.path.startswith('/backup') %}active{% endif %}" href="/backup">
-          <span class="sidebar-icon">&#x1F6E1;</span> Backup Servers
-        </a>
-        <a class="sidebar-link {% if request.path.startswith('/shutdown_schedule') %}active{% endif %}" href="/shutdown_schedule">
-          <span class="sidebar-icon">&#x1F319;</span> Scheduled Shutdown
-        </a>
-        <a class="sidebar-link {% if request.path.startswith('/checkmk') %}active{% endif %}" href="/checkmk">
-          <span class="sidebar-icon">&#x2705;</span> CheckMK
-        </a>
-        {% if is_admin is defined and is_admin %}
-        <a class="sidebar-link {% if request.path.startswith('/monitor') %}active{% endif %}" href="/monitor">
-          <span class="sidebar-icon">&#x1F321;</span> System Monitor
-          <span class="badge badge-blue" style="margin-left:auto;font-size:0.6rem;padding:0.1rem 0.35rem;">Admin</span>
-        </a>
-        {% endif %}
+        {{ nav('/backup', 'Backup servers', 'shield', path.startswith('/backup')) }}
+        {{ nav('/shutdown_schedule', 'Scheduled shutdown', 'clock', path.startswith('/shutdown_schedule')) }}
+        {{ nav('/checkmk', 'CheckMK', 'check-circle', path.startswith('/checkmk')) }}
+        {% if admin %}{{ nav('/monitor', 'System monitor', 'chart', path.startswith('/monitor')) }}{% endif %}
       </div>
 
-      {# ── SYSTEM ─────────────────────────────────────────────────────── #}
-      <span class="sidebar-section-label" onclick="toggleGroup('grp-sys',this)" data-group="grp-sys">
-        &#x2699; System <span class="nav-chevron">&#x25BC;</span>
-      </span>
+      {{ group('grp-sys', 'System') }}
       <div class="sidebar-nav-group" id="grp-sys">
-        {% if is_admin is defined and is_admin %}
-        <a class="sidebar-link {% if request.path.startswith('/fleetpilot_update') %}active{% endif %}" href="/fleetpilot_update">
-          <span class="sidebar-icon">&#x1F680;</span> FleetPilot Update
-          <span class="badge badge-blue" style="margin-left:auto;font-size:0.6rem;padding:0.1rem 0.35rem;">Admin</span>
-        </a>
+        {% if admin %}{{ nav('/fleetpilot_update', 'FleetPilot update', 'download', path.startswith('/fleetpilot_update')) }}{% endif %}
+        {{ nav('/update_settings', 'Update Settings', 'settings', path.startswith('/update_settings')) }}
+        {{ nav('/email_settings', 'Email Config', 'mail', path.startswith('/email_settings')) }}
+        {% if admin %}
+          {{ nav('/system/proxy', 'Proxy services', 'globe', path.startswith('/system/proxy')) }}
+          {{ nav('/system/production', 'Production status', 'layers', path.startswith('/system/production')) }}
+          {{ nav('/system/security', 'Security center', 'shield', path.startswith('/system/security')) }}
+          {{ nav('/system/notifications', 'Notifications', 'zap', path.startswith('/system/notifications')) }}
+          {{ nav('/system/audit', 'Audit trail', 'scroll', path.startswith('/system/audit')) }}
+          {{ nav('/system/backups', 'Backups', 'database', path.startswith('/system/backups')) }}
+          {{ nav('/plugins', 'Plugins', 'puzzle', path.startswith('/plugins')) }}
         {% endif %}
-        <a class="sidebar-link {% if request.path.startswith('/update_settings') %}active{% endif %}" href="/update_settings">
-          <span class="sidebar-icon">&#x2699;&#xFE0F;</span> {{ _('Update Settings') }}
-        </a>
-        <a class="sidebar-link {% if request.path.startswith('/email_settings') %}active{% endif %}" href="/email_settings">
-          <span class="sidebar-icon">&#x2709;&#xFE0F;</span> {{ _('Email Config') }}
-        </a>
-        {% if is_admin is defined and is_admin %}
-        <a class="sidebar-link {% if request.path.startswith('/system/proxy') %}active{% endif %}" href="/system/proxy">
-          <span class="sidebar-icon">&#x21C4;</span> Proxy Services
-          <span class="badge badge-blue" style="margin-left:auto;font-size:0.6rem;padding:0.1rem 0.35rem;">Admin</span>
-        </a>
-        <a class="sidebar-link {% if request.path.startswith('/system/production') %}active{% endif %}" href="/system/production">
-          <span class="sidebar-icon">&#x1F6E1;</span> Production Status
-          <span class="badge badge-blue" style="margin-left:auto;font-size:0.6rem;padding:0.1rem 0.35rem;">Admin</span>
-        </a>
-        <a class="sidebar-link {% if request.path.startswith('/system/audit') %}active{% endif %}" href="/system/audit">
-          <span class="sidebar-icon">&#x1F4CB;</span> Audit Trail
-          <span class="badge badge-blue" style="margin-left:auto;font-size:0.6rem;padding:0.1rem 0.35rem;">Admin</span>
-        </a>
-        <a class="sidebar-link {% if request.path.startswith('/plugins') %}active{% endif %}" href="/plugins">
-          <span class="sidebar-icon">&#x1F9E9;</span> Plugin Manager
-          <span class="badge badge-blue" style="margin-left:auto;font-size:0.6rem;padding:0.1rem 0.35rem;">Admin</span>
-        </a>
-        {% endif %}
-        {# Dynamic sidebar links from plugins #}
         {% if addon_mgr is defined %}
           {% for sl in addon_mgr.get_sidebar_links() %}
-          <a class="sidebar-link {% if request.path.startswith(sl.url) %}active{% endif %}" href="{{ sl.url }}">
-            <span class="sidebar-icon">{{ sl.icon|default('&#x1F527;') }}</span> {{ sl.label }}
-          </a>
+            {{ nav(sl.url, sl.label, 'puzzle', path.startswith(sl.url)) }}
           {% endfor %}
         {% endif %}
       </div>
 
-      {# ── ACCOUNT ────────────────────────────────────────────────────── #}
-      <span class="sidebar-section-label" onclick="toggleGroup('grp-acc',this)" data-group="grp-acc">
-        &#x1F464; Account <span class="nav-chevron">&#x25BC;</span>
-      </span>
+      {{ group('grp-acc', 'Account') }}
       <div class="sidebar-nav-group" id="grp-acc">
-        <a class="sidebar-link {% if request.path.startswith('/users/profile') %}active{% endif %}" href="/users/profile">
-          <span class="sidebar-icon">&#x1F464;</span> {{ _('My Profile') }}
-        </a>
-        {% if is_admin is defined and is_admin %}
-        <a class="sidebar-link {% if request.path.startswith('/users') and not request.path.startswith('/users/profile') %}active{% endif %}" href="/users">
-          <span class="sidebar-icon">&#x1F465;</span> {{ _('User Management') }}
-        </a>
-        {% endif %}
-        <form method="post" action="/logout" style="margin:0;">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is callable else '' }}">
-          <button type="submit" class="sidebar-link" style="width:100%;border:0;background:transparent;text-align:left;color:#fca5a5;cursor:pointer;">
-            <span class="sidebar-icon">&#x21AA;</span> Log out
-          </button>
-        </form>
+        {{ nav('/users/profile', 'My Profile', 'user', path.startswith('/users/profile')) }}
+        {{ nav('/users/security', 'Sign-in & security', 'lock', path.startswith('/users/security')) }}
+        {{ nav('/users/accessibility', 'Accessibility', 'accessibility', path.startswith('/users/accessibility')) }}
+        {% if admin %}{{ nav('/users', 'User Management', 'users', path.startswith('/users') and not path.startswith('/users/profile') and not path.startswith('/users/accessibility') and not path.startswith('/users/security')) }}{% endif %}
       </div>
-
     </nav>
 
     <script>
@@ -201,11 +238,11 @@
           if (!animate) el.style.maxHeight = '0';
           else el.style.maxHeight = el.scrollHeight + 'px', requestAnimationFrame(function(){ el.style.maxHeight = '0'; });
           el.classList.add('collapsed');
-          if (label) label.classList.add('collapsed');
+          if (label) { label.classList.add('collapsed'); label.setAttribute('aria-expanded', 'false'); }
         } else {
           el.style.maxHeight = el.scrollHeight + 'px';
           el.classList.remove('collapsed');
-          if (label) label.classList.remove('collapsed');
+          if (label) { label.classList.remove('collapsed'); label.setAttribute('aria-expanded', 'true'); }
           setTimeout(function(){ if (!collapsed[grpId]) el.style.maxHeight = 'none'; }, 300);
         }
       }
@@ -216,145 +253,128 @@
         applyCollapsed(grpId, label, true);
       };
 
-      // Apply on load (no animation)
       document.querySelectorAll('[data-group]').forEach(function(label) {
         applyCollapsed(label.dataset.group, label, false);
       });
     })();
     </script>
 
-    <!-- Update Notification in Sidebar -->
     {% if update_notification %}
-    <div style="margin:0 0.75rem 0.75rem;padding:0.75rem;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:var(--radius-md);">
-      <div style="font-size:0.75rem;font-weight:700;color:var(--accent-amber);margin-bottom:0.3rem;">&#x1F680; Update Available</div>
-      <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:0.5rem;line-height:1.4;">{{ update_notification.description[:60] }}{% if update_notification.description|length > 60 %}…{% endif %}</div>
-      <a class="btn btn-sm" href="/dashboard_version/update" style="background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);color:var(--accent-amber);font-size:0.72rem;padding:0.25rem 0.6rem;min-height:auto;">&#x2B06; Update Now</a>
+    <div class="sidebar-update">
+      <strong>Update available</strong>
+      {{ update_notification.description[:60] }}{% if update_notification.description|length > 60 %}…{% endif %}
+      <div style="margin-top:0.5rem;"><a class="btn btn-sm" href="/dashboard_version/update">Update now</a></div>
     </div>
     {% endif %}
 
     <div class="sidebar-footer">
-      <div style="padding:0.35rem 0.75rem 0.55rem;font-size:0.68rem;color:var(--text-muted);letter-spacing:0.04em;">{{ fleetpilot_release.display_name }}</div>
+      <div class="sidebar-version">{{ fleetpilot_release.display_name }}</div>
       <form method="post" action="/logout" style="margin:0;">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is callable else '' }}">
-        <button type="submit" class="sidebar-link" style="width:100%;border:0;background:transparent;text-align:left;cursor:pointer;">
-          <span class="sidebar-icon">&#x1F6AA;</span> {{ _('Logout') }}
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() if csrf_token is defined else '' }}">
+        <button type="submit" class="sidebar-link">
+          <span class="sidebar-icon">{{ icon('power') }}</span>{{ _('Logout') }}
         </button>
       </form>
     </div>
   </aside>
 
-  <!-- ── Main Content ──────────────────────────────────── -->
   <div class="main-content">
 
-    <!-- Topbar -->
     <header class="topbar">
       <div class="topbar-left">
-        <!-- Hamburger (mobile only) -->
-        <button class="hamburger" id="hamburger" aria-label="{{ _('Toggle menu') }}" type="button">
-          <span></span><span></span><span></span>
-        </button>
-        <!-- Breadcrumb Navigation -->
-        <nav class="topbar-breadcrumb" style="display:flex;align-items:center;gap:0.4rem;font-size:0.82rem;">
-          <a href="/" style="color:var(--accent-blue);text-decoration:none;font-weight:600;">Dashboard</a>
-          <span style="color:var(--text-muted);opacity:0.5;">&#x276F;</span>
-          <span style="color:var(--text-primary);font-weight:600;">{% block page_title %}Home{% endblock %}</span>
+        <button class="hamburger" id="hamburger" aria-label="{{ _('Open menu') }}" aria-controls="sidebar" aria-expanded="false" type="button">{{ icon('list') }}</button>
+        <nav class="topbar-breadcrumb" aria-label="Breadcrumb">
+          <a href="/index">FleetPilot</a>
+          <span class="bc-sep">/</span>
+          <span class="bc-current">{% block page_title %}{{ self.title() }}{% endblock %}</span>
         </nav>
       </div>
 
       <div class="topbar-actions">
         {% block nav_extra %}{% endblock %}
 
-        <!-- Language Selector -->
-        <select class="lang-select" title="{{ _('Language') }}"
-                onchange="window.location='/set_language?lang='+this.value+'&next='+encodeURIComponent(window.location.pathname+window.location.search)"
-                style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius-md);
-                       padding:0.35rem 0.65rem;font-size:0.8rem;color:var(--text-secondary);cursor:pointer;appearance:none;">
-          <option value="en" {% if current_lang == 'en' %}selected{% endif %}>&#x1F310; EN</option>
-          <option value="de" {% if current_lang == 'de' %}selected{% endif %}>&#x1F1E9;&#x1F1EA; DE</option>
-          <option value="es" {% if current_lang == 'es' %}selected{% endif %}>&#x1F1EA;&#x1F1F8; ES</option>
-          <option value="fr" {% if current_lang == 'fr' %}selected{% endif %}>&#x1F1EB;&#x1F1F7; FR</option>
-          <option value="nl" {% if current_lang == 'nl' %}selected{% endif %}>&#x1F1F3;&#x1F1F1; NL</option>
+        <select class="lang-select" title="{{ _('Language') }}" aria-label="{{ _('Language') }}"
+                onchange="window.location='/set_language?lang='+this.value+'&next='+encodeURIComponent(window.location.pathname+window.location.search)">
+          {% for code in ['en', 'de', 'es', 'fr', 'nl'] %}
+          <option value="{{ code }}" {% if current_lang == code %}selected{% endif %}>{{ code|upper }}</option>
+          {% endfor %}
         </select>
 
-        <!-- Theme Toggle -->
-        <button class="theme-toggle" id="theme-toggle" title="{{ _('Toggle theme') }}" type="button">
-          <span class="theme-icon-light">&#x2600;&#xFE0F;</span>
-          <span class="theme-icon-dark">&#x1F319;</span>
+        <a class="theme-toggle" href="/users/accessibility" title="{{ _('Accessibility') }}" aria-label="{{ _('Accessibility settings') }}">{{ icon('accessibility') }}</a>
+
+        <button class="theme-toggle" id="theme-toggle" title="{{ _('Switch between light and dark') }}" aria-label="{{ _('Use light theme') if current_theme|default('dark') == 'dark' else _('Use dark theme') }}" type="button">
+          <span class="theme-icon-light">{{ icon('sun') }}</span>
+          <span class="theme-icon-dark">{{ icon('moon') }}</span>
         </button>
 
-        <!-- Avatar Profile Button -->
-        <a class="topbar-profile" href="/users/profile">
-          <div class="topbar-profile-avatar online-indicator">{{ (current_user.username[:2]|upper) if current_user is defined and current_user.is_authenticated else 'AD' }}</div>
-          <span style="font-size:0.82rem;font-weight:600;">{{ current_user.username|title if current_user is defined and current_user.is_authenticated else 'Admin' }}</span>
-          <span style="color:var(--text-muted);font-size:0.75rem;">&#x25BE;</span>
+        {% set uname = current_user.username if current_user is defined and current_user.is_authenticated else 'admin' %}
+        <a class="topbar-profile" href="/users/profile" title="{{ _('My Profile') }}" aria-label="{{ _('My Profile') }}: {{ uname }}">
+          <span class="topbar-profile-avatar" aria-hidden="true">{{ uname[:2]|upper }}</span>
+          <span class="topbar-profile-name">{{ uname }}</span>
         </a>
       </div>
     </header>
 
-    <!-- Page Content -->
-    <main class="page-content">
+    <main class="page-content" id="main" tabindex="-1">
       {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          {% for category, message in messages %}
-            {% if category == 'error' %}
-              <div class="alert alert-danger">&#x26A0; {{ message }}</div>
-            {% elif category == 'warning' %}
-              <div class="alert alert-warning">&#x26A0; {{ message }}</div>
-            {% elif category == 'success' %}
-              <div class="alert alert-success">&#x2714; {{ message }}</div>
-            {% else %}
-              <div class="alert">&#x2714; {{ message }}</div>
-            {% endif %}
-          {% endfor %}
-        {% endif %}
+        {% for category, message in messages %}
+          {% if category == 'error' %}
+            <div class="alert alert-danger" role="alert">{{ icon('alert') }}<div>{{ message }}</div></div>
+          {% elif category == 'warning' %}
+            <div class="alert alert-warning" role="alert">{{ icon('alert') }}<div>{{ message }}</div></div>
+          {% else %}
+            <div class="alert alert-success" role="status">{{ icon('check') }}<div>{{ message }}</div></div>
+          {% endif %}
+        {% endfor %}
       {% endwith %}
 
+      {% block page_header %}
+      <header class="page-header-v4">
+        <div class="page-header-text">
+          {% if self.page_back()|trim %}<div class="page-back">{% block page_back %}{% endblock %}</div>{% endif %}
+          <h1 class="page-title" id="page-title">{% block page_heading %}{{ self.title() }}{% endblock %}</h1>
+          {% if self.page_subtitle()|trim %}<p class="page-subtitle">{% block page_subtitle %}{% endblock %}</p>{% endif %}
+        </div>
+        {% if self.page_actions()|trim %}<div class="page-actions">{% block page_actions %}{% endblock %}</div>{% endif %}
+      </header>
+      {% endblock %}
+      {% if easy_help is defined and easy_help %}
+      <aside class="easy-help" aria-labelledby="easy-help-title">
+        <h2 class="easy-help-title" id="easy-help-title">{{ icon('accessibility', 18) }} {{ easy_heading }}</h2>
+        <p>{{ easy_help }}</p>
+      </aside>
+      {% endif %}
+      {% block subnav %}{% endblock %}
       {% block content %}{% endblock %}
     </main>
-  </div><!-- /.main-content -->
-</div><!-- /.layout -->
-
-<!-- ── Mobile Bottom Nav ─────────────────────────────────── -->
-<nav class="mobile-nav-bar" id="mobileNav">
-  <a class="mobile-nav-item {% if request.path == '/index' or request.path == '/' %}active{% endif %}" href="/index">
-    <span class="icon">&#x1F3E0;</span>Home
-  </a>
-  <a class="mobile-nav-item {% if request.path.startswith('/dashboard') %}active{% endif %}" href="/dashboard">
-    <span class="icon">&#x1F504;</span>Updates
-  </a>
-  <a class="mobile-nav-item {% if request.path.startswith('/hosts') %}active{% endif %}" href="/hosts">
-    <span class="icon">&#x1F5A7;</span>Hosts
-  </a>
-  <a class="mobile-nav-item {% if request.path == '/scanner' %}active{% endif %}" href="/scanner">
-    <span class="icon">&#x1F50D;</span>Scan
-  </a>
-  <a class="mobile-nav-item" href="#" id="mobileMenuBtn">
-    <span class="icon">&#x2630;</span>More
-  </a>
-</nav>
-
-<!-- ── Update Toast Notification ─────────────────────────── -->
-<div class="update-toast" id="updateToast" role="alert" aria-live="polite">
-  <div class="update-toast-icon">&#x1F680;</div>
-  <div class="update-toast-body">
-    <div class="update-toast-title" id="toastTitle">FleetPilot Update Available</div>
-    <div class="update-toast-msg" id="toastMsg">A new version is ready.</div>
-    <div class="update-toast-actions">
-      <a class="btn btn-primary btn-sm" id="toastUpdateBtn" href="/dashboard_version/update">&#x2B06; Update Now</a>
-      <a class="btn btn-secondary btn-sm" id="toastDetailsBtn" href="#" target="_blank">&#x1F517; Details</a>
-      <button class="btn btn-ghost btn-sm" id="toastDismissBtn" type="button">&#x2715; Dismiss</button>
-    </div>
   </div>
-  <button class="update-toast-close" id="toastClose" type="button" aria-label="{{ _('Close') }}">&#x2715;</button>
 </div>
 
+<nav class="mobile-nav-bar" id="mobileNav" aria-label="Quick">
+  <a class="mobile-nav-item {% if path == '/index' or path == '/' %}active{% endif %}" href="/index">{{ icon('home', 18) }}Home</a>
+  <a class="mobile-nav-item {% if path.startswith('/dashboard') %}active{% endif %}" href="/dashboard">{{ icon('refresh', 18) }}Updates</a>
+  <a class="mobile-nav-item {% if path.startswith('/hosts') %}active{% endif %}" href="/hosts">{{ icon('server', 18) }}Hosts</a>
+  <a class="mobile-nav-item {% if path == '/scanner' %}active{% endif %}" href="/scanner">{{ icon('search', 18) }}Scan</a>
+  <button type="button" class="mobile-nav-item" id="mobileMenuBtn" aria-controls="sidebar" aria-expanded="false">{{ icon('list', 18) }}{{ _('More') }}</button>
+</nav>
+
+<div class="update-toast" id="updateToast" role="alert" aria-live="polite">
+  <div class="update-toast-icon">{{ icon('download', 18) }}</div>
+  <div class="update-toast-body">
+    <div class="update-toast-title" id="toastTitle">FleetPilot update available</div>
+    <div class="update-toast-msg" id="toastMsg">A new version is ready.</div>
+    <div class="update-toast-actions">
+      <a class="btn btn-primary btn-sm" id="toastUpdateBtn" href="/dashboard_version/update">Update now</a>
+      <a class="btn btn-sm" id="toastDetailsBtn" href="#" target="_blank" rel="noopener">Release notes</a>
+      <button class="btn btn-ghost btn-sm" id="toastDismissBtn" type="button">Dismiss</button>
+    </div>
+  </div>
+  <button class="update-toast-close" id="toastClose" type="button" aria-label="{{ _('Close') }}">{{ icon('x-circle') }}</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
 <!-- ── Scripts ────────────────────────────────────────────── -->
 <script>
-/* ── Apply saved theme immediately (no flash) ── */
-(function() {
-  const saved = localStorage.getItem('fp_theme') || '{{ current_theme|default("dark") }}';
-  document.documentElement.setAttribute('data-theme', saved);
-})();
 
 document.addEventListener('DOMContentLoaded', function() {
 
@@ -365,6 +385,9 @@ document.addEventListener('DOMContentLoaded', function() {
       const html = document.documentElement;
       const next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
       html.setAttribute('data-theme', next);
+      html.setAttribute('data-bs-theme', next);
+      themeBtn.setAttribute('aria-label', next === 'dark' ? 'Use light theme' : 'Use dark theme');
+      window.fpAnnounce && window.fpAnnounce(next === 'dark' ? 'Dark theme on' : 'Light theme on');
       localStorage.setItem('fp_theme', next);
       fetch('/set_theme?theme=' + next, {method:'POST'}).catch(()=>{});
     });
@@ -380,12 +403,16 @@ document.addEventListener('DOMContentLoaded', function() {
     sidebar.classList.add('open');
     overlay.classList.add('visible');
     hamburger && hamburger.classList.add('open');
+    [hamburger, mobileMenuBtn].forEach(function (b) { b && b.setAttribute('aria-expanded', 'true'); });
+    var firstLink = sidebar.querySelector('.sidebar-link');
+    firstLink && firstLink.focus();
     document.body.style.overflow = 'hidden';
   }
   function closeSidebar() {
     sidebar.classList.remove('open');
     overlay.classList.remove('visible');
     hamburger && hamburger.classList.remove('open');
+    [hamburger, mobileMenuBtn].forEach(function (b) { b && b.setAttribute('aria-expanded', 'false'); });
     document.body.style.overflow = '';
   }
 
@@ -393,6 +420,9 @@ document.addEventListener('DOMContentLoaded', function() {
     sidebar.classList.contains('open') ? closeSidebar() : openSidebar();
   });
   if (overlay)   overlay.addEventListener('click', closeSidebar);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && sidebar && sidebar.classList.contains('open')) { closeSidebar(); hamburger && hamburger.focus(); }
+  });
   if (mobileMenuBtn) mobileMenuBtn.addEventListener('click', function(e) {
     e.preventDefault();
     openSidebar();

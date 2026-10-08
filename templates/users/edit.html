@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
-{% block title %}Edit User — FleetPilot{% endblock %}
-{% block page_icon %}&#x270F;{% endblock %}
+{% block title %}Edit User{% endblock %}
+{% block page_icon %}{% endblock %}
 {% block page_title %}Edit User: {{ user.username }}{% endblock %}
 
 {% block content %}
@@ -9,21 +9,21 @@
 <div style="max-width:560px;">
   <div class="card">
     <div class="card-header">
-      <h3>&#x270F; Edit User</h3>
+      <h2>Edit User</h2>
     </div>
     <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="form-group">
-        <label class="form-label">Username <span class="text-red">*</span></label>
-        <input class="form-control" name="username" value="{{ user.username }}" required>
+        <label class="form-label" for="edit-username">Username <span class="text-red">*</span></label>
+        <input id="edit-username" class="form-control" name="username" value="{{ user.username }}" required>
       </div>
       <div class="form-group">
-        <label class="form-label">Email <span class="text-muted">{{ _('(optional)') }}</span></label>
-        <input class="form-control" type="email" name="email" value="{{ user.email or '' }}" placeholder="{{ _('user@example.com') }}">
+        <label class="form-label" for="edit-email">Email <span class="text-muted">{{ _('(optional)') }}</span></label>
+        <input id="edit-email" class="form-control" type="email" name="email" value="{{ user.email or '' }}" placeholder="{{ _('user@example.com') }}">
       </div>
       <div class="form-group">
-        <label class="form-label">New Password <span class="text-muted">{{ _('(leave blank to keep current)') }}</span></label>
-        <input class="form-control" type="password" name="password" placeholder="{{ _('new password') }}">
+        <label class="form-label" for="edit-password">New Password <span class="text-muted">{{ _('(leave blank to keep current)') }}</span></label>
+        <input id="edit-password" class="form-control" type="password" name="password" minlength="12" autocomplete="new-password" placeholder="{{ _('new password') }}">
       </div>
       <div class="form-group">
         <label style="display:flex; align-items:center; gap:0.65rem; padding:0.6rem 0.85rem; background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-md); cursor:pointer;">
@@ -33,8 +33,8 @@
         </label>
       </div>
       <div class="form-group">
-        <label class="form-label">Roles <span class="text-red">*</span></label>
-        <div style="display:flex; flex-direction:column; gap:0.5rem; margin-top:0.5rem;">
+        <span class="form-label" id="roles-label">Roles <span class="text-red">*</span></span>
+        <div role="group" aria-labelledby="roles-label" style="display:flex; flex-direction:column; gap:0.5rem; margin-top:0.5rem;">
           {% for role in all_roles %}
           <label style="display:flex; align-items:center; gap:0.65rem; padding:0.6rem 0.85rem; background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-md); cursor:pointer; transition:all 0.2s;">
             <input type="checkbox" name="roles" value="{{ role.name }}" id="role_{{ role.id }}"
@@ -49,7 +49,7 @@
         </div>
       </div>
       <div class="btn-group">
-        <button class="btn btn-primary" type="submit">&#x1F4BE; Update User</button>
+        <button class="btn btn-primary" type="submit">Update User</button>
         <a class="btn btn-ghost" href="/users">&#x2190; Cancel</a>
       </div>
     </form>

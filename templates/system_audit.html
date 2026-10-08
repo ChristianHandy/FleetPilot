@@ -1,11 +1,87 @@
 {% extends 'base.html' %}
-{% block title %}Audit Trail — FleetPilot{% endblock %}
-{% block page_title %}Audit Trail{% endblock %}
-{% block content %}
+{% from "_macros.html" import stat_tile %}
+{% block title %}Audit Trail{% endblock %}
+{% block page_subtitle %}Append-only record of sign-ins and state-changing actions. Request bodies, passwords, tokens, SSH keys and command output are never recorded.{% endblock %}
+{% block page_actions %}<a class="btn btn-sm" href="{{ url_for('system_audit_export', **request.args) }}">{{ icon('download') }} Export CSV</a>{% endblock %}
+{% block head %}
 <style>
-.audit-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.9rem;margin-bottom:1.15rem}.audit-summary .card{padding:1rem}.audit-value{font-size:1.45rem;font-weight:800;margin-top:.3rem}.audit-label{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:700}.audit-table{width:100%;border-collapse:collapse;font-size:.83rem}.audit-table th,.audit-table td{padding:.65rem .5rem;text-align:left;border-bottom:1px solid var(--border);vertical-align:top}.audit-table th{font-size:.67rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}.audit-table tr:last-child td{border-bottom:0}.audit-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.76rem;word-break:break-word}@media(max-width:760px){.audit-table thead{display:none}.audit-table tr{display:block;border-bottom:1px solid var(--border);padding:.5rem 0}.audit-table td{display:flex;justify-content:space-between;gap:1rem;border:0;padding:.3rem .1rem}.audit-table td:before{content:attr(data-label);font-size:.67rem;color:var(--text-muted);text-transform:uppercase;font-weight:700;flex-shrink:0}}
+.audit-code { font-family: var(--font-mono, ui-monospace, monospace); font-size: .78rem; word-break: break-word; }
+.audit-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: .75rem; align-items: end; }
 </style>
-<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1.15rem;"><div><h1 style="margin:0;font-size:1.55rem;">Audit Trail</h1><p class="text-muted" style="margin:.35rem 0 0;max-width:720px;">Append-only record of FleetPilot state-changing requests. Request bodies, passwords, tokens, SSH keys, and command output are never recorded.</p></div><a class="btn btn-secondary btn-sm" href="/storage/workspace">Storage Workspace</a></div>
-<div class="audit-summary"><div class="card"><div class="audit-label">Recorded events</div><div class="audit-value">{{ audit_health.events }}</div></div><div class="card"><div class="audit-label">Most recent event</div><div class="audit-value" style="font-size:.95rem;word-break:break-word;">{{ audit_health.latest|default('No events') }}</div></div></div>
-<div class="card" style="padding:1rem 1.1rem;"><div style="overflow-x:auto;">{% if events %}<table class="audit-table"><thead><tr><th>When (UTC)</th><th>Actor</th><th>Event</th><th>Target</th><th>Outcome</th><th>Source</th></tr></thead><tbody>{% for event in events %}<tr><td data-label="When">{{ event.occurred_at }}</td><td data-label="Actor">{{ event.actor }}</td><td data-label="Event"><span class="audit-code">{{ event.event_type }}</span></td><td data-label="Target"><span class="audit-code">{{ event.target }}</span></td><td data-label="Outcome"><span class="badge {% if event.outcome == 'success' %}badge-green{% else %}badge-red{% endif %}">{{ event.outcome }}</span></td><td data-label="Source">{{ event.remote_addr|default('') }}</td></tr>{% endfor %}</tbody></table>{% else %}<p class="text-muted">No audited state changes have been recorded yet.</p>{% endif %}</div></div>
+{% endblock %}
+{% block content %}
+<div class="stat-grid-v4 mb-3">
+  {{ stat_tile(audit_health.events, 'Recorded events', 'scroll') }}
+  {{ stat_tile(matching, 'Matching filters', 'search') }}
+  {{ stat_tile(retention ~ ' days', 'Kept for', 'clock', note='Change in Security center') }}
+</div>
+
+<section class="card-v4 mb-3" aria-labelledby="filter-title">
+  <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="filter-title">Filter</h2></div>
+  <div class="card-v4-body">
+    <form method="get" action="{{ url_for('system_audit') }}" class="audit-filters" role="search">
+      <div>
+        <label class="form-label" for="f-type">Event</label>
+        <select class="form-select" id="f-type" name="type">
+          <option value="">All events</option>
+          <option value="login_" {% if filters.type == 'login_' %}selected{% endif %}>All sign-in events</option>
+          {% for t in event_types %}<option value="{{ t }}" {% if filters.type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label" for="f-actor">User</label>
+        <input class="form-control" id="f-actor" name="actor" value="{{ filters.actor }}" placeholder="exact username">
+      </div>
+      <div>
+        <label class="form-label" for="f-outcome">Outcome</label>
+        <select class="form-select" id="f-outcome" name="outcome">
+          <option value="">Any</option>
+          {% for o in ['success', 'failure', 'failed'] %}<option value="{{ o }}" {% if filters.outcome == o %}selected{% endif %}>{{ o }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label" for="f-period">Period</label>
+        <select class="form-select" id="f-period" name="period">
+          <option value="">All time</option>
+          {% for key, label in [('24h', 'Last 24 hours'), ('7d', 'Last 7 days'), ('30d', 'Last 30 days')] %}
+            <option value="{{ key }}" {% if filters.period == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label" for="f-q">Search</label>
+        <input class="form-control" id="f-q" name="q" value="{{ filters.q }}" placeholder="target, address…">
+      </div>
+      <div class="d-flex gap-2">
+        <button class="btn btn-primary" type="submit">Apply</button>
+        <a class="btn" href="{{ url_for('system_audit') }}">Reset</a>
+      </div>
+    </form>
+  </div>
+</section>
+
+<section class="card-v4" aria-labelledby="events-title">
+  <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="events-title">Events</h2>
+    {% if matching > events|length %}<span class="text-muted small">Showing the newest {{ events|length }} of {{ matching }}. Export CSV for all.</span>{% endif %}</div>
+  {% if events %}
+  <div class="table-responsive">
+    <table class="table">
+      <thead><tr><th>When (UTC)</th><th>Actor</th><th>Event</th><th>Target</th><th>Outcome</th><th>Source</th></tr></thead>
+      <tbody>
+      {% for event in events %}
+        <tr>
+          <td class="text-nowrap">{{ event.occurred_at.replace('T', ' ')[:19] }}</td>
+          <td><a href="{{ url_for('system_audit', actor=event.actor) }}">{{ event.actor }}</a></td>
+          <td><span class="audit-code">{{ event.event_type }}</span></td>
+          <td><span class="audit-code">{{ event.target }}</span></td>
+          <td><span class="badge {% if event.outcome == 'success' %}badge-green{% else %}badge-red{% endif %}">{{ event.outcome }}</span></td>
+          <td><code>{{ event.remote_addr|default('') }}</code></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">No events match these filters.</div>
+  {% endif %}
+</section>
 {% endblock %}

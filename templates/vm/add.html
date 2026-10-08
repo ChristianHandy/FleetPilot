@@ -1,22 +1,22 @@
 {% extends "base.html" %}
-{% block title %}Add VM Endpoint — FleetPilot{% endblock %}
+{% block title %}Add VM Endpoint{% endblock %}
 {% block page_icon %}&#x2B;{% endblock %}
 {% block page_title %}Add VM Endpoint{% endblock %}
 
 {% block content %}
 <div class="card" style="max-width:640px;margin:0 auto">
   <div class="card-header">
-    <h3>&#x1F5A5; New VM / Backup Endpoint</h3>
+    <h2>New VM / Backup Endpoint</h2>
   </div>
   <form method="POST" action="/vm/add">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="form-group">
-      <label class="form-label">{{ _('Display Name *') }}</label>
-      <input type="text" name="name" class="form-control" placeholder="{{ _('e.g. Proxmox-Home') }}" required>
+      <label class="form-label" for="add-name">{{ _('Display Name *') }}</label>
+      <input id="add-name" type="text" name="name" class="form-control" placeholder="{{ _('e.g. Proxmox-Home') }}" required>
     </div>
 
     <div class="form-group">
-      <label class="form-label">{{ _('Platform *') }}</label>
+      <label class="form-label" for="platform-select">{{ _('Platform *') }}</label>
       <select name="platform" id="platform-select" class="form-control" onchange="updatePort()">
         <option value="proxmox">Proxmox VE</option>
         <option value="veeam">Veeam Backup &amp; Replication</option>
@@ -24,24 +24,24 @@
     </div>
 
     <div class="form-group">
-      <label class="form-label">{{ _('Host / IP *') }}</label>
-      <input type="text" name="host" class="form-control" placeholder="192.168.1.10" required>
+      <label class="form-label" for="add-host">{{ _('Host / IP *') }}</label>
+      <input id="add-host" type="text" name="host" class="form-control" placeholder="192.168.1.10" required>
     </div>
 
     <div class="form-group">
-      <label class="form-label">{{ _('Port *') }}</label>
+      <label class="form-label" for="port-input">{{ _('Port *') }}</label>
       <input type="number" name="port" id="port-input" class="form-control" value="8006" required>
-      <small class="text-muted">{{ _('Proxmox default: 8006 &nbsp;|&nbsp; Veeam default: 9419') }}</small>
+      <small class="text-muted">{{ _('Proxmox default: 8006 · Veeam default: 9419') }}</small>
     </div>
 
     <div class="form-group">
-      <label class="form-label">{{ _('Username *') }}</label>
-      <input type="text" name="username" class="form-control" placeholder="{{ _('root@pam  or  Administrator') }}" required>
+      <label class="form-label" for="add-username">{{ _('Username *') }}</label>
+      <input id="add-username" type="text" name="username" class="form-control" placeholder="{{ _('root@pam  or  Administrator') }}" required>
     </div>
 
     <div class="form-group">
-      <label class="form-label">{{ _('Password *') }}</label>
-      <input type="password" name="password" class="form-control" required>
+      <label class="form-label" for="add-password">{{ _('Password *') }}</label>
+      <input id="add-password" type="password" name="password" class="form-control" required>
     </div>
 
     <div class="form-group">
@@ -52,12 +52,12 @@
     </div>
 
     <div class="form-group">
-      <label class="form-label">{{ _('Notes') }}</label>
-      <textarea name="notes" class="form-control" rows="2" placeholder="{{ _('Optional description') }}"></textarea>
+      <label class="form-label" for="add-notes">{{ _('Notes') }}</label>
+      <textarea id="add-notes" name="notes" class="form-control" rows="2" placeholder="{{ _('Optional description') }}"></textarea>
     </div>
 
     <div class="btn-group">
-      <button type="submit" class="btn btn-success">&#x1F4BE; Save Endpoint</button>
+      <button type="submit" class="btn btn-success">Save Endpoint</button>
       <a href="/vm" class="btn btn-ghost">{{ _('Cancel') }}</a>
     </div>
   </form>
@@ -65,7 +65,7 @@
 
 <!-- Platform-specific help -->
 <div class="card" style="max-width:640px;margin:1.5rem auto 0">
-  <div class="card-header"><h3>&#x2139; Connection Help</h3></div>
+  <div class="card-header"><h2>&#x2139; Connection Help</h2></div>
   <div id="help-proxmox">
     <strong>{{ _('Proxmox VE') }}</strong><br>
     Use <code>root@pam</code> or a dedicated API user with <code>PVEAdmin</code> role.<br>
@@ -73,7 +73,7 @@
     URL pattern: <code>https://&lt;host&gt;:8006/api2/json</code>
   </div>
   <div id="help-veeam" style="display:none">
-    <strong>{{ _('Veeam Backup &amp; Replication 12') }}</strong><br>
+    <strong>{{ _('Veeam Backup & Replication 12') }}</strong><br>
     Use the <code>Administrator</code> account or a dedicated service account.<br>
     REST API must be enabled: <em>{{ _('Main Menu → REST API') }}</em><br>
     URL pattern: <code>https://&lt;host&gt;:9419/api/v1</code>

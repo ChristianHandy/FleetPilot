@@ -1,10 +1,11 @@
-{% extends 'disks/base.html' %}{% block title %}History{% endblock %}
-{% block nav_extra %}<a class="btn btn-sm btn-danger ms-3" href="{{ url_for('clear_disk_history') }}">Clear History</a>{% endblock %}
+{% extends 'disks/base.html' %}
+{% from "_macros.html" import post_button %}{% block title %}History{% endblock %}
+{% block nav_extra %}{{ post_button(url_for('clear_disk_history'), 'Clear history', 'btn btn-sm btn-outline-danger', confirm='Delete all disk task history?') }}{% endblock %}
+{% block page_heading %}{{ _('History') }}{% endblock %}
 {% block content %}
-<h1>{{ _('History') }}</h1>
 <h2>{{ _('Operations') }}</h2>
 <div class="alert alert-info">Tasks run on the FleetPilot server. You can close the browser and reopen any task later from this list.</div>
-<table class="table table-striped"><thead><tr><th>{{ _('ID') }}</th><th>{{ _('Device') }}</th><th>{{ _('Action') }}</th><th>{{ _('Status') }}</th><th>{{ _('Progress') }}</th><th>{{ _('Started') }}</th><th></th></tr></thead><tbody>
+<table class="table table-striped"><thead><tr><th>{{ _('ID') }}</th><th>{{ _('Device') }}</th><th>{{ _('Action') }}</th><th>{{ _('Status') }}</th><th>{{ _('Progress') }}</th><th>{{ _('Started') }}</th><th><span class="visually-hidden">Actions</span></th></tr></thead><tbody>
 {% for o in ops %}<tr>
   <td>{{ o.id }}</td><td>{{ o.device }}</td><td>{{ o.action }}</td>
   <td><span class="badge {{ 'bg-success' if o.status == 'OK' else ('bg-danger' if o.status in ['FAIL','INTERRUPTED'] else 'bg-secondary') }}">{{ o.status }}</span></td>

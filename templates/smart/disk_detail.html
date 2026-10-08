@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% block title %}{{ disk.device }} SMART History — FleetPilot{% endblock %}
-{% block page_icon %}&#x1F4CA;{% endblock %}
+{% block title %}{{ disk.device }} SMART History{% endblock %}
+{% block page_icon %}{% endblock %}
 {% block page_title %}{{ disk.device }} — SMART History{% endblock %}
 
 {% block nav_extra %}
@@ -12,7 +12,7 @@
 <!-- ── Disk Info ──────────────────────────────────────────────── -->
 <div class="card" style="margin-bottom:1.5rem">
   <div class="card-header">
-    <h3>&#x1F4BE; {{ disk.model or disk.device }}</h3>
+    <h2>{{ disk.model or disk.device }}</h2>
   </div>
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:1rem;padding:0.5rem 0">
     <div><span class="text-muted">{{ _('Device:') }}</span> <code>{{ disk.device }}</code></div>
@@ -28,7 +28,7 @@
 {% if snapshots %}
 <div class="card" style="margin-bottom:1.5rem">
   <div class="card-header">
-    <h3>&#x1F4C5; Health Snapshot History (last {{ snapshots|length }})</h3>
+    <h2>Health Snapshot History (last {{ snapshots|length }})</h2>
   </div>
   <div style="overflow-x:auto">
   <table class="table">
@@ -40,10 +40,10 @@
     <tr>
       <td><small>{{ s.ts }}</small></td>
       <td>
-        {% if s.health == "GOOD" %}<span class="badge badge-green">&#x2705; GOOD</span>
-        {% elif s.health == "WARNING" %}<span class="badge badge-yellow">&#x26A0; WARNING</span>
-        {% elif s.health == "CRITICAL" %}<span class="badge badge-red">&#x1F534; CRITICAL</span>
-        {% elif s.health == "FAILED" %}<span class="badge badge-red">&#x274C; FAILED</span>
+        {% if s.health == "GOOD" %}<span class="badge badge-green">GOOD</span>
+        {% elif s.health == "WARNING" %}<span class="badge badge-yellow">WARNING</span>
+        {% elif s.health == "CRITICAL" %}<span class="badge badge-red">CRITICAL</span>
+        {% elif s.health == "FAILED" %}<span class="badge badge-red">FAILED</span>
         {% else %}<span class="badge">{{ s.health or "?" }}</span>{% endif %}
       </td>
       <td>
@@ -83,7 +83,7 @@
 {% if attr_trends %}
 <div class="card" style="margin-bottom:1.5rem">
   <div class="card-header">
-    <h3>&#x1F4C8; SMART Attribute Trends</h3>
+    <h2>SMART Attribute Trends</h2>
     <small class="text-muted">{{ _('Raw values over time — higher is not always better (depends on attribute)') }}</small>
   </div>
 
@@ -91,14 +91,14 @@
   {% if 194 in attr_trends or 190 in attr_trends %}
   {% set temp_attr = attr_trends.get(194) or attr_trends.get(190) %}
   <div style="padding:1rem">
-    <h4 style="margin:0 0 0.5rem">{{ _('Temperature (°C)') }}</h4>
-    <canvas id="chart-temp" height="80"></canvas>
+    <h3 style="margin:0 0 0.5rem">{{ _('Temperature (°C)') }}</h3>
+    <canvas id="chart-temp" height="80" role="img" aria-label="SMART history chart. The numbers are also shown on this page."></canvas>
   </div>
   {% endif %}
 
   <!-- Critical attributes table -->
   <div style="padding:1rem">
-    <h4 style="margin:0 0 0.5rem">{{ _('Critical Attributes') }}</h4>
+    <h3 style="margin:0 0 0.5rem">{{ _('Critical Attributes') }}</h3>
     <div style="overflow-x:auto">
     <table class="table">
       <thead>
@@ -160,7 +160,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" integrity="sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g" crossorigin="anonymous"></script>
 <script>
 {% if attr_trends %}
 {% set temp_attr = attr_trends.get(194) or attr_trends.get(190) %}
@@ -177,8 +177,8 @@ if (ctx) {
       datasets: [{
         label: "Temperature (°C)",
         data: values,
-        borderColor: "#6366f1",
-        backgroundColor: "rgba(99,102,241,0.1)",
+        borderColor: "#6b98ee",
+        backgroundColor: "rgba(107,152,238,0.1)",
         tension: 0.3,
         fill: true,
       }]
@@ -189,12 +189,12 @@ if (ctx) {
       scales: {
         y: {
           min: 20, max: 70,
-          grid: { color: "rgba(255,255,255,0.05)" },
-          ticks: { color: "var(--text-muted)" }
+          grid: { color: fpColor('--border') },
+          ticks: { color: fpColor('--text-muted') }
         },
         x: {
-          ticks: { color: "var(--text-muted)", maxTicksLimit: 10 },
-          grid: { color: "rgba(255,255,255,0.05)" }
+          ticks: { color: fpColor('--text-muted'), maxTicksLimit: 10 },
+          grid: { color: fpColor('--border') }
         }
       }
     }

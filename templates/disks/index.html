@@ -1,7 +1,8 @@
-{% extends 'disks/base.html' %}{% block title %}Disk Overview{% endblock %}
-{% block nav_extra %}<a class="btn btn-sm btn-secondary ms-3" href="{{ url_for('toggle_auto') }}">Auto: {{ 'ON' if auto else 'OFF' }}</a>{% endblock %}
+{% extends 'disks/base.html' %}
+{% from "_macros.html" import post_button %}{% block title %}Disk Overview{% endblock %}
+{% block nav_extra %}{{ post_button(url_for('toggle_auto'), 'Auto mode: ' ~ ('on' if auto else 'off'), 'btn btn-sm', confirm=(None if auto else 'Turn on auto mode? Every disk attached from now on will be wiped, formatted as ext4 and SMART-tested automatically. Disks attached right now are not touched.')) }}{% endblock %}
+{% block page_heading %}{{ _('Disk Overview') }}{% endblock %}
 {% block content %}
-<h1>{{ _('Disk Overview') }}</h1>
 <form method="get" class="row mb-4">
   <div class="col-md-4"><input name="q" class="form-control" placeholder="{{ _('Search device/model') }}" value="{{ request.args.get('q','') }}"></div>
   <div class="col-auto"><button class="btn btn-primary">{{ _('Search') }}</button> <a href="{{ url_for('disks_index') }}" class="btn btn-secondary">{{ _('Reset') }}</a></div>
@@ -9,11 +10,11 @@
 <table class="table table-hover table-striped"><thead class="table-dark"><tr><th>{{ _('Device') }}</th><th>{{ _('Model') }}</th><th>{{ _('Size') }}</th><th>{{ _('Actions') }}</th></tr></thead><tbody>
 {% for d in disks %}
 <tr><td>{{ d.device }}</td><td>{{ d.model }}</td><td>{{ d.size }}</td><td>
-  <a class="btn btn-sm btn-outline-primary" href="{{ url_for('smart_start_route', device=d.device, mode='short') }}">{{ _('SMART') }}</a>
+  {{ post_button(url_for('smart_start_route', device=d.device, mode='short'), _('SMART'), 'btn btn-sm btn-outline-primary', title='Start a short SMART self-test') }}
   <a class="btn btn-sm btn-info" href="{{ url_for('smart_view_route', device=d.device) }}">{{ _('View') }}</a>
   <a class="btn btn-sm btn-warning" href="{{ url_for('validate_route', device=d.device) }}">{{ _('Validate') }}</a>
   <a class="btn btn-sm btn-danger" href="{{ url_for('format_route', device=d.device) }}">{{ _('Format') }}</a>
   {{ hook("device_buttons", d.device)|safe }}{# safe: hook output is generated server-side only #}
 </td></tr>{% endfor %}</tbody></table>
-<div><a href="{{ url_for('disk_history') }}" class="btn btn-secondary">{{ _('History') }}</a> <a href="{{ url_for('disk_dashboard') }}" class="btn btn-secondary">{{ _('Dashboard') }}</a> <a href="{{ url_for('export_smart') }}" class="btn btn-secondary">{{ _('Export SMART') }}</a> <a href="{{ url_for('import_smart') }}" class="btn btn-secondary">{{ _('Import SMART') }}</a> <a href="{{ url_for('remotes') }}" class="btn btn-info">🌐 Remote Disks</a> <a href="{{ url_for('plugin_manager.plugin_manager_index') }}" class="btn btn-success">🔌 Plugin Manager</a></div>
+<div><a href="{{ url_for('disk_history') }}" class="btn btn-secondary">{{ _('History') }}</a> <a href="{{ url_for('disk_dashboard') }}" class="btn btn-secondary">{{ _('Dashboard') }}</a> <a href="{{ url_for('export_smart') }}" class="btn btn-secondary">{{ _('Export SMART') }}</a> <a href="{{ url_for('import_smart') }}" class="btn btn-secondary">{{ _('Import SMART') }}</a> <a href="{{ url_for('remotes') }}" class="btn btn-info">Remote Disks</a> <a href="{{ url_for('plugin_manager.plugin_manager_index') }}" class="btn btn-success">Plugin Manager</a></div>
 {% endblock %}

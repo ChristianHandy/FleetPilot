@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
-{% block title %}ARP Table — FleetPilot{% endblock %}
-{% block page_icon %}&#x1F4CB;{% endblock %}
+{% block title %}ARP Table{% endblock %}
+{% block page_icon %}{% endblock %}
 {% block page_title %}ARP Table{% endblock %}
 
 {% block content %}
@@ -14,7 +14,7 @@
 {% if arp_mappings %}
 <div class="card">
   <div class="card-header">
-    <h3>&#x1F4CB; Current ARP Entries</h3>
+    <h2>Current ARP Entries</h2>
     <span class="badge badge-blue">{{ arp_mappings|length }} entries</span>
   </div>
   <div class="table-wrapper">
@@ -38,8 +38,8 @@
 </div>
 {% else %}
 <div class="empty-state">
-  <div class="empty-state-icon">&#x1F4CB;</div>
-  <h3>{{ _('No ARP entries found') }}</h3>
+  <div class="empty-state-icon">{{ icon('clipboard') }}</div>
+  <h2>{{ _('No ARP entries found') }}</h2>
   <p>{{ _('The ARP table is empty or could not be read.') }}</p>
   <ul style="text-align:left; display:inline-block; margin-top:1rem;">
     <li>{{ _('No devices have recently communicated with this server.') }}</li>

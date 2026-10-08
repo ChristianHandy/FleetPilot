@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% block title %}Scheduled Shutdown — FleetPilot{% endblock %}
-{% block page_icon %}🌙{% endblock %}
+{% block title %}Scheduled Shutdown{% endblock %}
+{% block page_icon %}{% endblock %}
 {% block page_title %}Scheduled Shutdown{% endblock %}
 
 {% block topbar_actions %}
@@ -12,21 +12,21 @@
 <!-- Stat Cards -->
 <div class="stat-grid-v4" style="margin-bottom:1.5rem;">
   <div class="stat-card-v4 blue">
-    <div class="stat-icon-box blue"><span>📋</span></div>
+    <div class="stat-icon-box blue"><span>{{ icon('clipboard') }}</span></div>
     <div class="stat-content">
       <div class="stat-value">{{ schedules|length }}</div>
       <div class="stat-label">Total Schedules</div>
     </div>
   </div>
   <div class="stat-card-v4 green">
-    <div class="stat-icon-box green"><span>✅</span></div>
+    <div class="stat-icon-box green"><span>{{ icon('check-circle') }}</span></div>
     <div class="stat-content">
       <div class="stat-value">{{ schedules|selectattr('enabled','equalto',1)|list|length }}</div>
       <div class="stat-label">Active</div>
     </div>
   </div>
   <div class="stat-card-v4 amber">
-    <div class="stat-icon-box amber"><span>🌙</span></div>
+    <div class="stat-icon-box amber"><span>{{ icon('moon') }}</span></div>
     <div class="stat-content">
       <div class="stat-value">{{ log|length }}</div>
       <div class="stat-label">Recent Runs</div>
@@ -37,7 +37,7 @@
 <!-- Schedules Table -->
 <div class="card" style="margin-bottom:1.5rem;">
   <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
-    <h3>🌙 Power Schedules</h3>
+    <h2>Power Schedules</h2>
   </div>
   {% if schedules %}
   <div style="overflow-x:auto;">
@@ -59,7 +59,7 @@
         <tr>
           <td><strong>{{ s.name }}</strong></td>
           <td><code>{{ s.host }}</code></td>
-          <td><span class="badge badge-blue">🕐 {{ s.shutdown_time }}</span></td>
+          <td><span class="badge badge-blue">{{ s.shutdown_time }}</span></td>
           <td>
             {% set days = s.days | tojson | fromjson if s.days is string else s.days %}
             <div style="display:flex;gap:3px;flex-wrap:wrap;">
@@ -69,9 +69,9 @@
             </div>
           </td>
           <td>
-            {% if s.action == 'shutdown' %}<span class="badge badge-red">⏻ Shutdown</span>
-            {% elif s.action == 'reboot' %}<span class="badge badge-amber">🔄 Reboot</span>
-            {% elif s.action == 'suspend' %}<span class="badge badge-gray">💤 Suspend</span>
+            {% if s.action == 'shutdown' %}<span class="badge badge-red">Shutdown</span>
+            {% elif s.action == 'reboot' %}<span class="badge badge-amber">Reboot</span>
+            {% elif s.action == 'suspend' %}<span class="badge badge-gray">Suspend</span>
             {% else %}<span class="badge badge-gray">{{ s.action }}</span>{% endif %}
           </td>
           <td>
@@ -92,17 +92,17 @@
           </td>
           <td>
             <div style="display:flex;gap:4px;">
-              <button class="btn btn-secondary btn-sm" onclick="editSchedule({{ s.id }})">✏️</button>
+              <button class="btn btn-secondary btn-sm" onclick="editSchedule({{ s.id }})" aria-label="Edit {{ s.name }}" title="Edit">{{ icon('pencil') }}</button>
               <button class="btn btn-sm {% if s.enabled %}btn-ghost{% else %}btn-primary{% endif %}"
                       onclick="toggleSchedule({{ s.id }}, {{ s.enabled }})">
-                {% if s.enabled %}⏸{% else %}▶{% endif %}
+                {% if s.enabled %}{% else %}{% endif %}
               </button>
               <button class="btn btn-sm" style="background:#1a3a5c;color:#fff;border:none;"
-                      onclick="runNow({{ s.id }}, '{{ s.name }}')">⚡ Now</button>
+                      onclick="runNow({{ s.id }}, {{ (s.name)|tojson|forceescape }})">Now</button>
               <form method="post" action="/shutdown_schedule/{{ s.id }}/delete" style="margin:0;"
-                    onsubmit="return confirm('Delete schedule {{ s.name }}?')">
+                    onsubmit="return confirm({{ ('Delete schedule ' ~ (s.name) ~ '?')|tojson|forceescape }})">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button type="submit" class="btn btn-danger btn-sm">🗑</button>
+                <button type="submit" class="btn btn-danger btn-sm" aria-label="Delete {{ s.name }}" title="Delete">{{ icon('trash') }}</button>
               </form>
             </div>
           </td>
@@ -113,8 +113,8 @@
   </div>
   {% else %}
   <div class="empty-state" style="padding:2rem;">
-    <div class="empty-state-icon">🌙</div>
-    <h3>No schedules configured</h3>
+    <div class="empty-state-icon">{{ icon('moon') }}</div>
+    <h2>No schedules configured</h2>
     <p>Add a schedule to automatically shut down servers at night.</p>
     <button class="btn btn-primary" onclick="openAddModal()">+ Add Schedule</button>
   </div>
@@ -124,7 +124,7 @@
 <!-- Recent Log -->
 {% if log %}
 <div class="card">
-  <div class="card-header"><h3>📋 Recent Activity</h3></div>
+  <div class="card-header"><h2>Recent Activity</h2></div>
   <div style="overflow-x:auto;">
     <table class="data-table">
       <thead><tr><th>Time</th><th>Host</th><th>Action</th><th>Status</th><th>Message</th></tr></thead>
@@ -150,34 +150,34 @@
 <!-- Add/Edit Modal -->
 <div id="scheduleModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;align-items:center;justify-content:center;">
   <div class="card" style="width:min(600px,95vw);max-height:90vh;overflow-y:auto;padding:1.5rem;">
-    <h3 id="modalTitle">➕ Add Schedule</h3>
+    <h2 id="modalTitle">Add Schedule</h2>
     <form id="scheduleForm" method="post" action="/shutdown_schedule/add">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" id="editId" name="edit_id" value="">
 
       <div class="form-grid-2">
         <div class="form-group">
-          <label class="form-label">Schedule Name *</label>
+          <label class="form-label" for="f_name">Schedule Name *</label>
           <input type="text" name="name" id="f_name" placeholder="e.g. Night Shutdown pve01" required>
         </div>
         <div class="form-group">
-          <label class="form-label">Action</label>
+          <label class="form-label" for="f_action">Action</label>
           <select name="action" id="f_action">
-            <option value="shutdown">⏻ Shutdown</option>
-            <option value="reboot">🔄 Reboot</option>
-            <option value="suspend">💤 Suspend</option>
+            <option value="shutdown">Shutdown</option>
+            <option value="reboot">Reboot</option>
+            <option value="suspend">Suspend</option>
           </select>
         </div>
       </div>
 
       <!-- Quick select from known hosts -->
       <div class="form-group">
-        <label class="form-label">Quick Select Host</label>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:0.5rem;">
+        <span class="form-label" id="ss-quick-label">Quick Select Host</span>
+        <div role="group" aria-labelledby="ss-quick-label" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:0.5rem;">
           {% for name, h in known_hosts.items() %}
           <button type="button" class="btn btn-ghost btn-sm"
-                  onclick="fillHost('{{ h.host }}', {{ h.port|default(22) }}, '{{ h.user }}')">
-            🖥 {{ name }} ({{ h.host }})
+                  onclick="fillHost({{ (h.host)|tojson|forceescape }}, {{ h.port|default(22) }}, {{ (h.user)|tojson|forceescape }})">
+            {{ name }} ({{ h.host }})
           </button>
           {% endfor %}
         </div>
@@ -185,37 +185,37 @@
 
       <div class="form-grid-3">
         <div class="form-group">
-          <label class="form-label">Host / IP *</label>
+          <label class="form-label" for="f_host">Host / IP *</label>
           <input type="text" name="host" id="f_host" placeholder="192.168.1.90" required>
         </div>
         <div class="form-group">
-          <label class="form-label">SSH Port</label>
+          <label class="form-label" for="f_port">SSH Port</label>
           <input type="number" name="port" id="f_port" value="22" min="1" max="65535">
         </div>
         <div class="form-group">
-          <label class="form-label">SSH User</label>
+          <label class="form-label" for="f_user">SSH User</label>
           <input type="text" name="username" id="f_user" value="root">
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">SSH Password</label>
+        <label class="form-label" for="f_pass">SSH Password</label>
         <input type="password" name="password" id="f_pass" placeholder="Leave empty to use SSH key">
       </div>
 
       <div class="form-grid-2">
         <div class="form-group">
-          <label class="form-label">Shutdown Time *</label>
+          <label class="form-label" for="f_time">Shutdown Time *</label>
           <input type="time" name="shutdown_time" id="f_time" value="23:00" required>
         </div>
         <div class="form-group">
-          <label class="form-label">Warn before (minutes)</label>
+          <label class="form-label" for="f_warn">Warn before (minutes)</label>
           <input type="number" name="warn_minutes" id="f_warn" value="5" min="0" max="60">
         </div>
       </div>
 
       <div class="form-group">
-        <label class="form-label">Days of Week</label>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <span class="form-label" id="ss-days-label">Days of Week</span>
+        <div role="group" aria-labelledby="ss-days-label" style="display:flex;gap:6px;flex-wrap:wrap;">
           {% for d in ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}
           <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
             <input type="checkbox" name="days" value="{{ d }}" id="day_{{ d }}" checked
@@ -236,7 +236,7 @@
 
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:1rem;">
         <button type="button" class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-        <button type="submit" class="btn btn-primary">💾 Save Schedule</button>
+        <button type="submit" class="btn btn-primary">Save Schedule</button>
       </div>
     </form>
   </div>
@@ -246,7 +246,7 @@
 const schedules = {{ schedules | tojson }};
 
 function openAddModal() {
-  document.getElementById('modalTitle').textContent = '➕ Add Schedule';
+  document.getElementById('modalTitle').textContent = 'Add Schedule';
   document.getElementById('scheduleForm').action = '/shutdown_schedule/add';
   document.getElementById('editId').value = '';
   document.getElementById('f_name').value = '';
@@ -267,7 +267,7 @@ function openAddModal() {
 function editSchedule(id) {
   const s = schedules.find(x => x.id === id);
   if (!s) return;
-  document.getElementById('modalTitle').textContent = '✏️ Edit Schedule';
+  document.getElementById('modalTitle').textContent = 'Edit Schedule';
   document.getElementById('scheduleForm').action = '/shutdown_schedule/' + id + '/edit';
   document.getElementById('editId').value = id;
   document.getElementById('f_name').value = s.name;
@@ -308,7 +308,7 @@ async function runNow(id, name) {
   const r = await fetch(`/shutdown_schedule/${id}/run_now`, {method:'POST',
     headers:{'Content-Type':'application/json'}});
   const data = await r.json();
-  alert(data.ok ? `✅ ${data.message}` : `❌ ${data.error}`);
+  alert(data.ok ? `${data.message}` : `${data.error}`);
   if (data.ok) location.reload();
 }
 

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
-{% block title %}Add User — FleetPilot{% endblock %}
-{% block page_icon %}&#x2795;{% endblock %}
+{% block title %}Add User{% endblock %}
+{% block page_icon %}{% endblock %}
 {% block page_title %}Add New User{% endblock %}
 
 {% block content %}
@@ -9,25 +9,25 @@
 <div style="max-width:560px;">
   <div class="card">
     <div class="card-header">
-      <h3>&#x2795; Create New User</h3>
+      <h2>Create New User</h2>
     </div>
     <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="form-group">
-        <label class="form-label">Username <span class="text-red">*</span></label>
-        <input class="form-control" name="username" placeholder="username" required>
+        <label class="form-label" for="add-username">Username <span class="text-red">*</span></label>
+        <input id="add-username" class="form-control" name="username" placeholder="username" required>
       </div>
       <div class="form-group">
-        <label class="form-label">Password <span class="text-red">*</span></label>
-        <input class="form-control" type="password" name="password" placeholder="password" required>
+        <label class="form-label" for="add-password">Password <span class="text-red">*</span></label>
+        <input id="add-password" class="form-control" type="password" name="password" minlength="12" autocomplete="new-password" placeholder="password" required>
       </div>
       <div class="form-group">
-        <label class="form-label">Email <span class="text-muted">{{ _('(optional)') }}</span></label>
-        <input class="form-control" type="email" name="email" placeholder="{{ _('user@example.com') }}">
+        <label class="form-label" for="add-email">Email <span class="text-muted">{{ _('(optional)') }}</span></label>
+        <input id="add-email" class="form-control" type="email" name="email" placeholder="{{ _('user@example.com') }}">
       </div>
       <div class="form-group">
-        <label class="form-label">Roles <span class="text-red">*</span></label>
-        <div style="display:flex; flex-direction:column; gap:0.5rem; margin-top:0.5rem;">
+        <span class="form-label" id="roles-label">Roles <span class="text-red">*</span></span>
+        <div role="group" aria-labelledby="roles-label" style="display:flex; flex-direction:column; gap:0.5rem; margin-top:0.5rem;">
           {% for role in all_roles %}
           <label style="display:flex; align-items:center; gap:0.65rem; padding:0.6rem 0.85rem; background:var(--bg-elevated); border:1px solid var(--border); border-radius:var(--radius-md); cursor:pointer; transition:all 0.2s;">
             <input type="checkbox" name="roles" value="{{ role.name }}" id="role_{{ role.id }}"
@@ -42,7 +42,7 @@
         </div>
       </div>
       <div class="btn-group">
-        <button class="btn btn-primary" type="submit">&#x1F4BE; Create User</button>
+        <button class="btn btn-primary" type="submit">Create User</button>
         <a class="btn btn-ghost" href="/users">&#x2190; Cancel</a>
       </div>
     </form>

@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% block title %}{{ ep.name }} — VM Controller{% endblock %}
-{% block page_icon %}&#x1F5A5;{% endblock %}
+{% block page_icon %}{% endblock %}
 {% block page_title %}{{ ep.name }}{% endblock %}
 
 {% block nav_extra %}
   <a href="/vm" class="btn btn-ghost btn-sm">&#x2190; Back</a>
   {% if ep.platform == "proxmox" %}
-  <a href="/vm/{{ ep.id }}/disks" class="btn btn-secondary btn-sm">&#x1F4BE; Disks</a>
+  <a href="/vm/{{ ep.id }}/disks" class="btn btn-secondary btn-sm">Disks</a>
   {% endif %}
 {% endblock %}
 
@@ -14,7 +14,7 @@
 
 {% if error %}
 <div class="card card-red" style="margin-bottom:1.5rem">
-  <div class="card-header"><h3>&#x26A0; Connection Error</h3></div>
+  <div class="card-header"><h2>Connection Error</h2></div>
   <pre style="white-space:pre-wrap;color:var(--danger)">{{ error }}</pre>
   <p class="text-muted">{{ _('Check host, port, credentials and network connectivity.') }}</p>
 </div>
@@ -44,9 +44,9 @@
 
 <div class="card">
   <div class="card-header">
-    <h3>&#x1F4BB; Virtual Machines &amp; Containers
+    <h2>Virtual Machines &amp; Containers
       <span class="badge badge-blue" style="margin-left:0.5rem">{{ vms|length }}</span>
-    </h3>
+    </h2>
   </div>
   {% if vms %}
   <div style="overflow-x:auto">
@@ -71,7 +71,7 @@
       <td id="status-{{ vm.vmid }}">
         {% if vm.status == "running" %}<span class="badge badge-green">&#x25CF; running</span>
         {% elif vm.status == "stopped" %}<span class="badge">&#x25A0; stopped</span>
-        {% elif vm.status == "paused" %}<span class="badge badge-yellow">&#x23F8; paused</span>
+        {% elif vm.status == "paused" %}<span class="badge badge-yellow">paused</span>
         {% else %}<span class="badge">{{ vm.status }}</span>{% endif %}
       </td>
       <td>{{ "%.1f"|format(vm.cpu * 100) if vm.cpu else "—" }}%</td>
@@ -81,16 +81,16 @@
       <td>
         <div class="btn-group">
           {% if vm.status != "running" %}
-          <button class="btn btn-sm btn-success" onclick="vmAction({{ ep.id }},'{{ vm.node }}',{{ vm.vmid }},'start','{{ vm.type }}')">&#x25B6;</button>
+          <button class="btn btn-sm btn-success" onclick="vmAction({{ ep.id }},{{ (vm.node)|tojson|forceescape }},{{ vm.vmid }},'start',{{ (vm.type)|tojson|forceescape }})" aria-label="Start {{ vm.name or vm.vmid }}" title="Start">{{ icon('play') }}</button>
           {% endif %}
           {% if vm.status == "running" %}
-          <button class="btn btn-sm btn-warning" title="{{ _('Graceful Shutdown') }}" onclick="vmAction({{ ep.id }},'{{ vm.node }}',{{ vm.vmid }},'shutdown','{{ vm.type }}')">&#x23F9; Stop</button>
-          <button class="btn btn-sm btn-danger"  title="{{ _('Force Stop') }}" onclick="vmAction({{ ep.id }},'{{ vm.node }}',{{ vm.vmid }},'stop','{{ vm.type }}')">&#x26A1; Kill</button>
-          <button class="btn btn-sm btn-secondary" title="{{ _('Reboot') }}" onclick="vmAction({{ ep.id }},'{{ vm.node }}',{{ vm.vmid }},'reboot','{{ vm.type }}')">&#x1F504; Reboot</button>
-          <button class="btn btn-sm btn-secondary" title="{{ _('Suspend') }}" onclick="vmAction({{ ep.id }},'{{ vm.node }}',{{ vm.vmid }},'suspend','{{ vm.type }}')">&#x23F8; Suspend</button>
+          <button class="btn btn-sm btn-warning" title="{{ _('Graceful Shutdown') }}" onclick="vmAction({{ ep.id }},{{ (vm.node)|tojson|forceescape }},{{ vm.vmid }},'shutdown',{{ (vm.type)|tojson|forceescape }})">Stop</button>
+          <button class="btn btn-sm btn-danger"  title="{{ _('Force Stop') }}" onclick="vmAction({{ ep.id }},{{ (vm.node)|tojson|forceescape }},{{ vm.vmid }},'stop',{{ (vm.type)|tojson|forceescape }})">Kill</button>
+          <button class="btn btn-sm btn-secondary" title="{{ _('Reboot') }}" onclick="vmAction({{ ep.id }},{{ (vm.node)|tojson|forceescape }},{{ vm.vmid }},'reboot',{{ (vm.type)|tojson|forceescape }})">Reboot</button>
+          <button class="btn btn-sm btn-secondary" title="{{ _('Suspend') }}" onclick="vmAction({{ ep.id }},{{ (vm.node)|tojson|forceescape }},{{ vm.vmid }},'suspend',{{ (vm.type)|tojson|forceescape }})">Suspend</button>
           {% endif %}
           {% if vm.status == "paused" %}
-          <button class="btn btn-sm btn-success" title="{{ _('Resume') }}" onclick="vmAction({{ ep.id }},'{{ vm.node }}',{{ vm.vmid }},'resume','{{ vm.type }}')">&#x25B6; Resume</button>
+          <button class="btn btn-sm btn-success" title="{{ _('Resume') }}" onclick="vmAction({{ ep.id }},{{ (vm.node)|tojson|forceescape }},{{ vm.vmid }},'resume',{{ (vm.type)|tojson|forceescape }})">Resume</button>
           {% endif %}
         </div>
       </td>
@@ -110,9 +110,9 @@
 <!-- ── Veeam: Backup Jobs ─────────────────────────────────────── -->
 <div class="card">
   <div class="card-header">
-    <h3>&#x1F4BE; Backup Jobs
+    <h2>Backup Jobs
       <span class="badge badge-purple" style="margin-left:0.5rem">{{ jobs|length }}</span>
-    </h3>
+    </h2>
   </div>
   {% if jobs %}
   <div style="overflow-x:auto">
@@ -128,10 +128,10 @@
       <td>{{ job.type or "—" }}</td>
       <td>
         {% set s = state.get("status", job.get("lastResult","")) %}
-        {% if s in ("Success","success") %}<span class="badge badge-green">&#x2705; Success</span>
-        {% elif s in ("Running","running") %}<span class="badge badge-blue">&#x1F504; Running</span>
-        {% elif s in ("Warning","warning") %}<span class="badge badge-yellow">&#x26A0; Warning</span>
-        {% elif s in ("Failed","failed","Error","error") %}<span class="badge badge-red">&#x274C; Failed</span>
+        {% if s in ("Success","success") %}<span class="badge badge-green">Success</span>
+        {% elif s in ("Running","running") %}<span class="badge badge-blue">Running</span>
+        {% elif s in ("Warning","warning") %}<span class="badge badge-yellow">Warning</span>
+        {% elif s in ("Failed","failed","Error","error") %}<span class="badge badge-red">Failed</span>
         {% else %}<span class="badge">{{ s or "Unknown" }}</span>{% endif %}
       </td>
       <td><small>{{ state.get("lastRun", job.get("lastRun","—")) }}</small></td>
@@ -139,7 +139,7 @@
       {% if is_admin %}
       <td>
         <div class="btn-group">
-          <button class="btn btn-sm btn-success" onclick="veeamStartJob({{ ep.id }},'{{ job.id }}',this)">&#x25B6; Start</button>
+          <button class="btn btn-sm btn-success" onclick="veeamStartJob({{ ep.id }},{{ (job.id)|tojson|forceescape }},this)">Start</button>
         </div>
       </td>
       {% endif %}
@@ -160,12 +160,12 @@
 {% block scripts %}
 <script>
 const ACTION_LABELS = {
-  start: '&#x25B6; Starting…',
-  stop: '&#x26A1; Stopping…',
-  shutdown: '&#x23F9; Shutting down…',
-  reboot: '&#x1F504; Rebooting…',
-  suspend: '&#x23F8; Suspending…',
-  resume: '&#x25B6; Resuming…',
+  start: 'Starting…',
+  stop: 'Stopping…',
+  shutdown: 'Shutting down…',
+  reboot: 'Rebooting…',
+  suspend: 'Suspending…',
+  resume: 'Resuming…',
 };
 
 function vmAction(epId, node, vmid, action, rtype) {
@@ -176,7 +176,7 @@ function vmAction(epId, node, vmid, action, rtype) {
   // Optimistic UI: show pending state
   const statusCell = document.getElementById(`status-${vmid}`);
   const row = document.getElementById(`vm-row-${vmid}`);
-  if (statusCell) statusCell.innerHTML = `<span class="badge badge-yellow">${ACTION_LABELS[action] || action}</span>`;
+  if (statusCell) statusCell.innerHTML = `<span class="badge badge-yellow">${fpEsc(ACTION_LABELS[action] || action)}</span>`;
   if (row) row.querySelectorAll('button').forEach(b => b.disabled = true);
 
   const fd = new FormData();
@@ -190,17 +190,17 @@ function vmAction(epId, node, vmid, action, rtype) {
     .then(d => {
       if (d.ok) {
         // Show toast notification
-        showToast(`\u2705 ${labels[action] || action} sent to VM ${vmid}`, 'success');
+        showToast(`${labels[action] || action} sent to VM ${vmid}`, 'success');
         // Reload after 3s to get updated status
         setTimeout(() => location.reload(), 3000);
       } else {
-        showToast(`\u274C ${d.error || 'Action failed'}`, 'error');
+        showToast(`${d.error || 'Action failed'}`, 'error');
         if (row) row.querySelectorAll('button').forEach(b => b.disabled = false);
         if (statusCell) statusCell.innerHTML = '<span class="badge badge-red">error</span>';
       }
     })
     .catch(e => {
-      showToast('\u274C Network error: ' + e, 'error');
+      showToast('Network error: ' + e, 'error');
       if (row) row.querySelectorAll('button').forEach(b => b.disabled = false);
     });
 }
@@ -213,8 +213,8 @@ function showToast(msg, type) {
     t.style.cssText = 'position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;padding:0.75rem 1.25rem;border-radius:8px;font-weight:600;max-width:380px;box-shadow:0 4px 16px rgba(0,0,0,0.2);transition:opacity 0.3s';
     document.body.appendChild(t);
   }
-  t.innerHTML = msg;
-  t.style.background = type === 'success' ? 'var(--success,#22c55e)' : 'var(--danger,#ef4444)';
+  t.textContent = msg;
+  t.style.background = type === 'success' ? 'var(--success,#4fb383)' : 'var(--danger,#e46a63)';
   t.style.color = '#fff';
   t.style.opacity = '1';
   clearTimeout(t._timer);
@@ -231,11 +231,11 @@ function veeamStartJob(epId, jobId, btn) {
   fetch(`/vm/${epId}/veeam/job/${jobId}/start`, { method: 'POST', body: veeamFd })
     .then(r => r.json())
     .then(d => {
-      showToast(d.ok ? '\u2705 Backup job started' : '\u274C ' + (d.error || 'Error'),
+      showToast(d.ok ? 'Backup job started' : '' + (d.error || 'Error'),
                 d.ok ? 'success' : 'error');
     })
-    .catch(e => showToast('\u274C ' + e, 'error'))
-    .finally(() => { btn.disabled = false; btn.innerHTML = '&#x25B6; Start'; });
+    .catch(e => showToast('' + e, 'error'))
+    .finally(() => { btn.disabled = false; btn.innerHTML = 'Start'; });
 }
 </script>
 {% endblock %}

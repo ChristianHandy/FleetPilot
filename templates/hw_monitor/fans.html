@@ -7,8 +7,8 @@ const sid = params.get('sid');
 location.replace('/fans' + (sid ? '?hw_sid=' + sid : ''));
 </script>
 <div class="text-center p-5">
-  <div style="font-size:2rem;margin-bottom:12px">&#x1F300;</div>
-  <p class="text-muted">Weiterleitung zur Fan Control...</p>
-  <a href="/fans" class="btn btn-primary mt-3">Fan Control öffnen</a>
+  <div style="font-size:2rem;margin-bottom:12px">{{ icon('fan') }}</div>
+  <p class="text-muted">Opening fan control…</p>
+  <a href="/fans" class="btn btn-primary mt-3">Open fan control</a>
 </div>
 {% endblock %}

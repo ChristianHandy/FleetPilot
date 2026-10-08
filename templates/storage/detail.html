@@ -1,15 +1,15 @@
 {% extends "base.html" %}
-{% block title %}{{ overview.endpoint_name or "Storage" }} — FleetPilot{% endblock %}
-{% block page_icon %}&#x1F5C4;{% endblock %}
+{% block title %}{{ overview.endpoint_name or "Storage" }}{% endblock %}
+{% block page_icon %}{% endblock %}
 {% block page_title %}{{ overview.endpoint_name or "Storage Detail" }}{% endblock %}
 
 {% block nav_extra %}
   <a href="/storage" class="btn btn-ghost btn-sm">&#x2190; Back</a>
-  <a href="/smart" class="btn btn-secondary btn-sm">&#x1F4CA; SMART Dashboard</a>
+  <a href="/smart" class="btn btn-secondary btn-sm">SMART Dashboard</a>
   {% if is_admin %}
   <form method="POST" action="/storage/{{ ep_id }}/poll" style="display:inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button class="btn btn-secondary btn-sm">&#x1F504; Poll Disks</button>
+    <button class="btn btn-secondary btn-sm">Poll Disks</button>
   </form>
   {% endif %}
 {% endblock %}
@@ -18,7 +18,7 @@
 
 {% if error %}
 <div class="card card-red" style="margin-bottom:1.5rem">
-  <div class="card-header"><h3>&#x26A0; Connection Error</h3></div>
+  <div class="card-header"><h2>Connection Error</h2></div>
   <pre style="white-space:pre-wrap;color:var(--danger)">{{ error }}</pre>
 </div>
 {% endif %}
@@ -66,9 +66,9 @@
 {% set disks = overview.disks or [] %}
 <div class="card" style="margin-bottom:1.5rem">
   <div class="card-header">
-    <h3>&#x1F4BE; Disks
+    <h2>Disks
       <span class="badge badge-blue" style="margin-left:0.5rem">{{ disks|length }}</span>
-    </h3>
+    </h2>
     <small class="text-muted">{{ _('Disks are registered in the SMART Manager for health tracking') }}</small>
   </div>
   {% if disks %}
@@ -87,16 +87,16 @@
       <td>{{ d.pool or "—" }}</td>
       <td>
         {% if d.temp %}
-          {% if d.temp >= 55 %}<span style="color:var(--danger)">&#x1F525; {{ d.temp }}°C</span>
-          {% elif d.temp >= 45 %}<span style="color:var(--warning)">&#x26A0; {{ d.temp }}°C</span>
+          {% if d.temp >= 55 %}<span style="color:var(--danger)">{{ d.temp }}°C</span>
+          {% elif d.temp >= 45 %}<span style="color:var(--warning)">{{ d.temp }}°C</span>
           {% else %}<span style="color:var(--success)">{{ d.temp }}°C</span>{% endif %}
         {% else %}—{% endif %}
       </td>
       <td>
-        {% if d.health == "GOOD" %}<span class="badge badge-green">&#x2705; GOOD</span>
-        {% elif d.health == "WARNING" %}<span class="badge badge-yellow">&#x26A0; WARNING</span>
-        {% elif d.health == "CRITICAL" %}<span class="badge badge-red">&#x1F534; CRITICAL</span>
-        {% elif d.health == "FAILED" %}<span class="badge badge-red">&#x274C; FAILED</span>
+        {% if d.health == "GOOD" %}<span class="badge badge-green">GOOD</span>
+        {% elif d.health == "WARNING" %}<span class="badge badge-yellow">WARNING</span>
+        {% elif d.health == "CRITICAL" %}<span class="badge badge-red">CRITICAL</span>
+        {% elif d.health == "FAILED" %}<span class="badge badge-red">FAILED</span>
         {% elif d.health == "NOT_PRESENT" %}<span class="badge">Not Present</span>
         {% else %}<span class="badge">{{ d.health or "?" }}</span>{% endif %}
       </td>
@@ -113,7 +113,7 @@
 <!-- ── TrueNAS: Pools ─────────────────────────────────────────── -->
 {% if platform == "truenas" and overview.pools %}
 <div class="card" style="margin-bottom:1.5rem">
-  <div class="card-header"><h3>&#x1F4E6; ZFS Pools</h3></div>
+  <div class="card-header"><h2>ZFS Pools</h2></div>
   <div style="overflow-x:auto">
   <table class="table">
     <thead>
@@ -145,9 +145,9 @@
 {% set nfs = overview.nfs_shares or [] %}
 {% if smb or nfs %}
 <div class="card" style="margin-bottom:1.5rem">
-  <div class="card-header"><h3>&#x1F4E1; Shares</h3></div>
+  <div class="card-header"><h2>Shares</h2></div>
   {% if smb %}
-  <h4 style="padding:0.75rem 1rem 0.25rem;margin:0">{{ _('SMB Shares') }}</h4>
+  <h3 style="padding:0.75rem 1rem 0.25rem;margin:0">{{ _('SMB Shares') }}</h3>
   <div style="overflow-x:auto">
   <table class="table">
     <thead><tr><th>{{ _('Name') }}</th><th>{{ _('Path') }}</th><th>{{ _('Enabled') }}</th></tr></thead>
@@ -164,7 +164,7 @@
   </div>
   {% endif %}
   {% if nfs %}
-  <h4 style="padding:0.75rem 1rem 0.25rem;margin:0">{{ _('NFS Shares') }}</h4>
+  <h3 style="padding:0.75rem 1rem 0.25rem;margin:0">{{ _('NFS Shares') }}</h3>
   <div style="overflow-x:auto">
   <table class="table">
     <thead><tr><th>{{ _('Path') }}</th><th>{{ _('Hosts') }}</th><th>{{ _('Enabled') }}</th></tr></thead>
@@ -187,7 +187,7 @@
 <!-- ── Unraid: Shares ─────────────────────────────────────────── -->
 {% if platform == "unraid" and overview.shares %}
 <div class="card" style="margin-bottom:1.5rem">
-  <div class="card-header"><h3>&#x1F4E1; Unraid Shares</h3></div>
+  <div class="card-header"><h2>Unraid Shares</h2></div>
   <div style="overflow-x:auto">
   <table class="table">
     <thead><tr><th>{{ _('Name') }}</th><th>{{ _('Path') }}</th><th>{{ _('Free') }}</th></tr></thead>
@@ -209,7 +209,7 @@
 {% set alerts = overview.alerts or [] %}
 {% if alerts %}
 <div class="card">
-  <div class="card-header"><h3>&#x1F514; Alerts ({{ alerts|length }})</h3></div>
+  <div class="card-header"><h2>Alerts ({{ alerts|length }})</h2></div>
   {% for a in alerts[:10] %}
   <div style="padding:0.5rem 1rem;border-bottom:1px solid var(--border)">
     {% if a.level == "CRITICAL" or a.severity == "CRITICAL" %}

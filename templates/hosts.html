@@ -1,14 +1,15 @@
 {% extends "base.html" %}
+{% from "_macros.html" import post_button %}
 
-{% block title %}{{ _('Manage Hosts') }} — FleetPilot{% endblock %}
-{% block page_icon %}&#x1F5A7;{% endblock %}
+{% block title %}{{ _('Manage Hosts') }}{% endblock %}
+{% block page_icon %}{% endblock %}
 {% block page_title %}{{ _('Manage Hosts') }}{% endblock %}
 
 {% block topbar_actions %}
-<a class="btn btn-secondary btn-sm" href="/dashboard">&#x1F504; {{ _('Dashboard') }}</a>
+<a class="btn btn-secondary btn-sm" href="/dashboard">{{ _('Dashboard') }}</a>
 {% if not current_user_id or 'operator' in current_user_roles or 'admin' in current_user_roles %}
-<a class="btn btn-secondary btn-sm" href="/hosts/arp_table">&#x1F4CB; ARP</a>
-<a class="btn btn-secondary btn-sm" href="/hosts/scan_ip_changes">&#x1F50D; {{ _('Scan IPs') }}</a>
+<a class="btn btn-secondary btn-sm" href="/hosts/arp_table">ARP</a>
+<a class="btn btn-secondary btn-sm" href="/hosts/scan_ip_changes">{{ _('Scan IPs') }}</a>
 <a class="btn btn-primary btn-sm" href="#add-host-form">&#x2B; {{ _('Add Host') }}</a>
 {% endif %}
 {% endblock %}
@@ -19,7 +20,7 @@
 {% if hosts %}
 <div class="search-filter-bar">
   <div class="search-input-wrapper">
-    <span class="search-icon">&#x1F50D;</span>
+    <span class="search-icon">{{ icon('search') }}</span>
     <input type="text" id="hostSearch" placeholder="{{ _('Search by name, IP, group, tag, description…') }}" oninput="filterHosts()">
   </div>
   <select class="filter-select" id="filterEnv" onchange="filterHosts()">
@@ -90,31 +91,31 @@
       {% else %}
       <div class="hc-os-icon" style="width:48px;height:48px;border-radius:8px;background:var(--bg-secondary);display:flex;align-items:center;justify-content:center;font-size:1.8rem;flex-shrink:0;margin-right:0.75rem;">
         {% set _os = h.os_profiles[0].type if h.os_profiles else 'linux' %}
-        {% if _os == 'windows' %}&#x1FA9F;
-        {% elif _os == 'proxmox' %}&#x1F5A5;
-        {% elif _os == 'unraid' %}&#x1F4BE;
+        {% if _os == 'windows' %}
+        {% elif _os == 'proxmox' %}
+        {% elif _os == 'unraid' %}
         {% elif _os == 'macos' %}&#xF8FF;
-        {% else %}&#x1F427;{% endif %}
+        {% else %}{% endif %}
       </div>
       {% endif %}
       <div style="min-width:0;flex:1;">
         <div class="hc-title-row">
           <span class="hc-name">{{ name }}</span>
           {% if h.host in localhost_identifiers or h.host|lower in localhost_identifiers %}
-            <span class="badge badge-local">&#x1F3E0; Local</span>
+            <span class="badge badge-local">Local</span>
           {% endif %}
         </div>
         <div class="hc-badges" style="margin-top:0.4rem;">
           <span class="env-badge env-{{ env_slug }}">{{ h.environment }}</span>
           <span class="crit-badge crit-{{ crit_slug }}">
-            {% if h.criticality == 'Critical' %}&#x1F534;
-            {% elif h.criticality == 'High' %}&#x1F7E0;
-            {% elif h.criticality == 'Medium' %}&#x1F7E1;
-            {% else %}&#x26AA;{% endif %}
+            {% if h.criticality == 'Critical' %}
+            {% elif h.criticality == 'High' %}
+            {% elif h.criticality == 'Medium' %}
+            {% else %}{% endif %}
             {{ h.criticality }}
           </span>
           {% if h.group %}
-          <span class="badge badge-gray">&#x1F4C1; {{ h.group }}</span>
+          <span class="badge badge-gray">{{ h.group }}</span>
           {% endif %}
         </div>
       </div>
@@ -127,16 +128,16 @@
 
     <!-- Meta info -->
     <div class="hc-meta">
-      <span class="hc-meta-item"><span class="icon">&#x1F4BB;</span> {{ h.host }}{% if h.port and h.port != 22 %}:{{ h.port }}{% endif %}</span>
-      <span class="hc-meta-item"><span class="icon">&#x1F464;</span> {{ h.user }}</span>
+      <span class="hc-meta-item"><span class="icon">{{ icon('laptop') }}</span> {{ h.host }}{% if h.port and h.port != 22 %}:{{ h.port }}{% endif %}</span>
+      <span class="hc-meta-item"><span class="icon">{{ icon('user') }}</span> {{ h.user }}</span>
       {% if h.location %}
-      <span class="hc-meta-item"><span class="icon">&#x1F4CD;</span> {{ h.location }}</span>
+      <span class="hc-meta-item"><span class="icon">{{ icon('map-pin') }}</span> {{ h.location }}</span>
       {% endif %}
       {% if h.mac %}
-      <span class="hc-meta-item"><span class="icon">&#x1F4E1;</span> {{ h.mac }}</span>
+      <span class="hc-meta-item"><span class="icon">{{ icon('radio') }}</span> {{ h.mac }}</span>
       {% endif %}
       {% if h.last_update %}
-      <span class="hc-meta-item"><span class="icon">&#x1F504;</span> {{ h.last_update }}</span>
+      <span class="hc-meta-item"><span class="icon">{{ icon('refresh') }}</span> {{ h.last_update }}</span>
       {% endif %}
     </div>
 
@@ -155,7 +156,7 @@
     <div style="padding:0 1.1rem 0.6rem; display:flex; flex-wrap:wrap; gap:0.3rem;">
       {% for p in h.os_profiles %}
       <span class="badge {% if p.default %}badge-blue{% else %}badge-gray{% endif %}">
-        {% if p.type == 'windows' %}&#x1FA9F;{% else %}&#x1F427;{% endif %}
+        {% if p.type == 'windows' %}{% else %}{% endif %}
         {{ p.name }}{% if p.default %} &#x2605;{% endif %}
       </span>
       {% endfor %}
@@ -164,35 +165,35 @@
 
     <!-- Notes -->
     {% if h.notes %}
-    <div class="hc-notes">&#x1F4DD; {{ h.notes }}</div>
+    <div class="hc-notes">{{ h.notes }}</div>
     {% endif %}
 
     <!-- Actions -->
     {% if not current_user_id or 'operator' in current_user_roles or 'admin' in current_user_roles %}
     <div class="hc-actions">
-      <a class="btn btn-secondary btn-sm" href="/hosts/edit/{{ name }}">&#x270F; {{ _('Edit') }}</a>
+      <a class="btn btn-secondary btn-sm" href="/hosts/edit/{{ name }}">{{ _('Edit') }}</a>
       {% if h.host not in localhost_identifiers and h.host|lower not in localhost_identifiers %}
-      <a class="btn btn-secondary btn-sm" href="/hosts/install_key/{{ name }}">&#x1F511; SSH</a>
-      <a class="btn btn-ghost btn-sm" href="/hosts/detect_mac/{{ name }}">&#x1F50D; MAC</a>
-      <button class="btn btn-ghost btn-sm" onclick="detectOS('{{ name }}', this)" title="Auto-detect OS via SSH">&#x1F4BB; OS</button>
+      <a class="btn btn-secondary btn-sm" href="/hosts/install_key/{{ name }}">SSH</a>
+      <a class="btn btn-ghost btn-sm" href="/hosts/detect_mac/{{ name }}">MAC</a>
+      <button class="btn btn-ghost btn-sm" onclick="detectOS({{ (name)|tojson|forceescape }}, this)" title="Auto-detect OS via SSH">OS</button>
       <label class="btn btn-ghost btn-sm" title="Upload custom server image" style="cursor:pointer;margin:0">
-        &#x1F5BC; Img
-        <input type="file" accept="image/*" style="display:none" onchange="uploadHostImage('{{ name }}', this)">
+        Img
+        <input type="file" accept="image/*" style="display:none" onchange="uploadHostImage({{ (name)|tojson|forceescape }}, this)">
       </label>
       {% endif %}
-      <a class="btn btn-primary btn-sm" href="/update/{{ name }}">&#x2B06; Update</a>
+      {{ post_button("/update/" ~ name, "Update", "btn btn-primary btn-sm") }}
       {% if h.mac %}
-      <button class="btn btn-sm" style="background:linear-gradient(135deg,#0d3b6e,#0d6efd);color:#fff;border:none;" onclick="wakeHost('{{ name }}', this)" title="Send Wake-on-LAN magic packet to {{ h.mac }}">&#x26A1; Wake</button>
+      <button class="btn btn-sm" style="background:#0d3b6e;color:#fff;border:none;" onclick="wakeHost({{ (name)|tojson|forceescape }}, this)" title="Send Wake-on-LAN magic packet to {{ h.mac }}">Wake</button>
       {% endif %}
-      <button class="btn btn-sm" style="background:linear-gradient(135deg,#6e0d0d,#fd0d0d);color:#fff;border:none;" onclick="shutdownHost('{{ name }}', '{{ h.os_type|default('linux') }}', this)" title="Shutdown {{ name }}">&#x23FB; Shutdown</button>
+      <button class="btn btn-sm" style="background:#6e0d0d;color:#fff;border:none;" onclick="shutdownHost({{ (name)|tojson|forceescape }}, {{ (h.os_type|default('linux'))|tojson|forceescape }}, this)" title="Shutdown {{ name }}">Shutdown</button>
       {# Plugin hook: host_card_actions #}
       {% if addon_mgr is defined %}
         {{ addon_mgr.render_hooks('host_card_actions', host=h) | safe }}
       {% endif %}
       <form method="post" action="/hosts/delete/{{ name }}" style="margin:0;"
-            onsubmit="return confirm('Delete {{ name }}?')">
+            onsubmit="return confirm({{ ('Delete ' ~ (name) ~ '?')|tojson|forceescape }})">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn btn-danger btn-sm">&#x1F5D1;</button>
+        <button type="submit" class="btn btn-danger btn-sm" aria-label="Delete {{ name }}" title="Delete">{{ icon('trash') }}</button>
       </form>
     </div>
     {% endif %}
@@ -215,31 +216,31 @@
        data-desc="{{ h.description|lower }}">
     <div class="hli-name">{{ name }}</div>
     <div class="hli-meta">
-      <span>&#x1F4BB; {{ h.host }}</span>
-      <span>&#x1F464; {{ h.user }}</span>
-      {% if h.group %}<span>&#x1F4C1; {{ h.group }}</span>{% endif %}
-      {% if h.location %}<span>&#x1F4CD; {{ h.location }}</span>{% endif %}
+      <span>{{ h.host }}</span>
+      <span>{{ h.user }}</span>
+      {% if h.group %}<span>{{ h.group }}</span>{% endif %}
+      {% if h.location %}<span>{{ h.location }}</span>{% endif %}
       {% if h.description %}<span style="color:var(--text-secondary);">{{ h.description[:55] }}{% if h.description|length > 55 %}…{% endif %}</span>{% endif %}
     </div>
     <div class="hli-tags">
       <span class="env-badge env-{{ env_slug }}">{{ h.environment }}</span>
       <span class="crit-badge crit-{{ crit_slug }}">{{ h.criticality }}</span>
-      {% for tag in h.tags[:3] %}
+      {% for tag in (h.tags or [])[:3] %}
       <span class="tag-chip tag-chip-default">{{ tag }}</span>
       {% endfor %}
     </div>
     {% if not current_user_id or 'operator' in current_user_roles or 'admin' in current_user_roles %}
     <div class="hli-actions">
-      <a class="btn btn-secondary btn-sm" href="/hosts/edit/{{ name }}">&#x270F;</a>
-      <a class="btn btn-primary btn-sm" href="/update/{{ name }}">&#x2B06;</a>
+      <a class="btn btn-secondary btn-sm" href="/hosts/edit/{{ name }}" aria-label="Edit {{ name }}" title="Edit">{{ icon('pencil') }}</a>
+      {{ post_button("/update/" ~ name, icon("arrow-up"), "btn btn-primary btn-sm", title="Update " ~ name) }}
       {% if h.mac %}
-      <button class="btn btn-sm" style="background:linear-gradient(135deg,#0d3b6e,#0d6efd);color:#fff;border:none;" onclick="wakeHost('{{ name }}', this)" title="Wake {{ name }}">&#x26A1;</button>
+      <button class="btn btn-sm" style="background:#0d3b6e;color:#fff;border:none;" onclick="wakeHost({{ (name)|tojson|forceescape }}, this)" title="Wake {{ name }}">{{ icon('zap') }}</button>
       {% endif %}
-      <button class="btn btn-sm" style="background:linear-gradient(135deg,#6e0d0d,#fd0d0d);color:#fff;border:none;" onclick="shutdownHost('{{ name }}', '{{ h.os_type|default('linux') }}', this)" title="Shutdown">&#x23FB;</button>
+      <button class="btn btn-sm" style="background:#6e0d0d;color:#fff;border:none;" onclick="shutdownHost({{ (name)|tojson|forceescape }}, {{ (h.os_type|default('linux'))|tojson|forceescape }}, this)" title="Shutdown">{{ icon('power') }}</button>
       <form method="post" action="/hosts/delete/{{ name }}" style="margin:0;"
-            onsubmit="return confirm('Delete {{ name }}?')">
+            onsubmit="return confirm({{ ('Delete ' ~ (name) ~ '?')|tojson|forceescape }})">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn btn-danger btn-sm">&#x1F5D1;</button>
+        <button type="submit" class="btn btn-danger btn-sm" aria-label="Delete {{ name }}" title="Delete">{{ icon('trash') }}</button>
       </form>
     </div>
     {% endif %}
@@ -248,14 +249,14 @@
 </div>
 
 <div class="no-results-msg" id="noResults">
-  <div class="icon">&#x1F50D;</div>
+  <div class="icon">{{ icon('search') }}</div>
   <p>{{ _('No hosts match your search or filter.') }}</p>
 </div>
 
 {% else %}
 <div class="empty-state">
-  <div class="empty-state-icon">&#x1F5A7;</div>
-  <h3>{{ _('No hosts configured yet.') }}</h3>
+  <div class="empty-state-icon">{{ icon('network') }}</div>
+  <h2>{{ _('No hosts configured yet.') }}</h2>
   <p>{{ _('Add your first host below to start managing remote systems.') }}</p>
 </div>
 {% endif %}
@@ -264,60 +265,60 @@
 {% if not current_user_id or 'operator' in current_user_roles or 'admin' in current_user_roles %}
 <div class="card" id="add-host-form" style="margin-top:2rem;">
   <div class="card-header">
-    <h3>&#x2795; {{ _('Add Host') }}</h3>
+    <h2>{{ _('Add Host') }}</h2>
   </div>
   <form method="post" action="/hosts">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
     <!-- Basic Info -->
-    <div class="form-section"><span class="form-section-title">&#x1F4CB; Basic Information</span></div>
+    <div class="form-section"><span class="form-section-title">Basic Information</span></div>
     <div class="form-grid-2">
       <div class="form-group">
-        <label class="form-label">{{ _('Display Name') }} <span style="color:var(--accent-red)">*</span></label>
-        <input type="text" name="name" placeholder="{{ _('e.g. Web Server') }}" required>
+        <label class="form-label" for="hosts-name">{{ _('Display Name') }} <span style="color:var(--accent-red)">*</span></label>
+        <input id="hosts-name" type="text" name="name" placeholder="{{ _('e.g. Web Server') }}" required>
       </div>
       <div class="form-group">
-        <label class="form-label">{{ _('Description') }}</label>
-        <input type="text" name="description" placeholder="{{ _('Short description of this host') }}">
+        <label class="form-label" for="hosts-description">{{ _('Description') }}</label>
+        <input id="hosts-description" type="text" name="description" placeholder="{{ _('Short description of this host') }}">
       </div>
     </div>
     <div class="form-grid-3">
       <div class="form-group">
-        <label class="form-label">{{ _('IP Address / Hostname') }} <span style="color:var(--accent-red)">*</span></label>
-        <input type="text" name="host" placeholder="192.168.1.100 / localhost" required>
+        <label class="form-label" for="hosts-host">{{ _('IP Address / Hostname') }} <span style="color:var(--accent-red)">*</span></label>
+        <input id="hosts-host" type="text" name="host" placeholder="192.168.1.100 / localhost" required>
       </div>
       <div class="form-group">
-        <label class="form-label">{{ _('SSH User') }} <span style="color:var(--accent-red)">*</span></label>
-        <input type="text" name="user" placeholder="{{ _('e.g. admin') }}" required>
+        <label class="form-label" for="hosts-user">{{ _('SSH User') }} <span style="color:var(--accent-red)">*</span></label>
+        <input id="hosts-user" type="text" name="user" placeholder="{{ _('e.g. admin') }}" required>
       </div>
       <div class="form-group">
-        <label class="form-label">{{ _('SSH Port') }}</label>
-        <input type="number" name="port" placeholder="22" value="22" min="1" max="65535">
+        <label class="form-label" for="hosts-port">{{ _('SSH Port') }}</label>
+        <input id="hosts-port" type="number" name="port" placeholder="22" value="22" min="1" max="65535">
       </div>
     </div>
     <div class="form-grid-2">
       <div class="form-group">
-        <label class="form-label">{{ _('MAC Address') }} <span class="text-muted">({{ _('optional') }})</span></label>
-        <input type="text" name="mac" placeholder="{{ _('AA:BB:CC:DD:EE:FF') }}">
+        <label class="form-label" for="hosts-mac">{{ _('MAC Address') }} <span class="text-muted">({{ _('optional') }})</span></label>
+        <input id="hosts-mac" type="text" name="mac" placeholder="{{ _('AA:BB:CC:DD:EE:FF') }}">
         <div class="form-hint">Used for automatic IP change detection on DHCP hosts.</div>
       </div>
       <div class="form-group">
-        <label class="form-label">SSH Key Path <span class="text-muted">{{ _('(optional)') }}</span></label>
-        <input type="text" name="ssh_key" placeholder="{{ _('~/.ssh/id_rsa') }}">
+        <label class="form-label" for="hosts-ssh-key">SSH Key Path <span class="text-muted">{{ _('(optional)') }}</span></label>
+        <input id="hosts-ssh-key" type="text" name="ssh_key" placeholder="{{ _('~/.ssh/id_rsa') }}">
       </div>
     </div>
 
     <!-- Unraid API (shown only when server type is Unraid) -->
     <div class="form-group" id="unraid-api-section" style="display:none;">
-      <div class="form-section"><span class="form-section-title">&#x1F4BE; Unraid API</span></div>
+      <div class="form-section"><span class="form-section-title">Unraid API</span></div>
       <div class="form-grid-2">
         <div class="form-group">
-          <label class="form-label">Unraid API Key <span class="text-muted">(optional)</span></label>
+          <label class="form-label" for="unraid_api_key">Unraid API Key <span class="text-muted">(optional)</span></label>
           <input type="text" name="unraid_api_key" id="unraid_api_key" placeholder="e.g. 34e216836c6656be..." autocomplete="off">
           <div class="form-hint">Found in Unraid WebGUI → Settings → Management Access → API Keys. Used for shutdown, reboot and status queries.</div>
         </div>
         <div class="form-group">
-          <label class="form-label">Unraid API Port</label>
+          <label class="form-label" for="unraid_api_port">Unraid API Port</label>
           <input type="number" name="unraid_api_port" id="unraid_api_port" placeholder="80" value="80" min="1" max="65535">
           <div class="form-hint">Default: 80 (HTTP). Use 443 for HTTPS.</div>
         </div>
@@ -325,38 +326,38 @@
     </div>
 
     <!-- Classification -->
-    <div class="form-section"><span class="form-section-title">&#x1F3F7; Classification</span></div>
+    <div class="form-section"><span class="form-section-title">Classification</span></div>
     <div class="form-grid-3">
       <div class="form-group">
-        <label class="form-label">{{ _('Environment') }}</label>
-        <select name="environment">
+        <label class="form-label" for="hosts-environment">{{ _('Environment') }}</label>
+        <select id="hosts-environment" name="environment">
           {% for env in environments %}
           <option value="{{ env }}">{{ env }}</option>
           {% endfor %}
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label">{{ _('Criticality') }}</label>
-        <select name="criticality">
+        <label class="form-label" for="hosts-criticality">{{ _('Criticality') }}</label>
+        <select id="hosts-criticality" name="criticality">
           {% for c in criticalities %}
           <option value="{{ c }}">{{ c }}</option>
           {% endfor %}
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label">{{ _('Group / Team') }}</label>
-        <input type="text" name="group" placeholder="{{ _('e.g. Backend, DevOps, Lab') }}">
+        <label class="form-label" for="hosts-group">{{ _('Group / Team') }}</label>
+        <input id="hosts-group" type="text" name="group" placeholder="{{ _('e.g. Backend, DevOps, Lab') }}">
       </div>
     </div>
     <div class="form-group">
-      <label class="form-label">{{ _('Location / Site') }}</label>
-      <input type="text" name="location" placeholder="{{ _('e.g. Rack A3, Home Lab, AWS eu-central-1') }}">
+      <label class="form-label" for="hosts-location">{{ _('Location / Site') }}</label>
+      <input id="hosts-location" type="text" name="location" placeholder="{{ _('e.g. Rack A3, Home Lab, AWS eu-central-1') }}">
     </div>
 
     <!-- Tags -->
-    <div class="form-section"><span class="form-section-title">&#x1F3F7; Tags</span></div>
+    <div class="form-section"><span class="form-section-title">Tags</span></div>
     <div class="form-group">
-      <label class="form-label">{{ _('Tags') }}</label>
+      <label class="form-label" for="tagInput">{{ _('Tags') }}</label>
       <div class="tag-input-wrapper" id="tagWrapper">
         <div id="tagChips" style="display:contents;"></div>
         <input type="text" class="tag-input-inner" id="tagInput"
@@ -365,24 +366,24 @@
       </div>
       <div class="tag-presets" id="tagPresets">
         {% for tag in tag_presets %}
-        <button type="button" class="tag-preset-btn" onclick="addPresetTag('{{ tag }}')">{{ tag }}</button>
+        <button type="button" class="tag-preset-btn" onclick="addPresetTag({{ (tag)|tojson|forceescape }})">{{ tag }}</button>
         {% endfor %}
       </div>
       <div class="form-hint">Click a preset or type your own. Press Enter or comma to add a tag.</div>
     </div>
 
     <!-- Notes -->
-    <div class="form-section"><span class="form-section-title">&#x1F4DD; Notes</span></div>
+    <div class="form-section"><span class="form-section-title">Notes</span></div>
     <div class="form-group">
-      <label class="form-label">Notes <span class="text-muted">{{ _('(internal)') }}</span></label>
-      <textarea name="notes" class="notes-textarea"
+      <label class="form-label" for="hosts-notes">Notes <span class="text-muted">{{ _('(internal)') }}</span></label>
+      <textarea id="hosts-notes" name="notes" class="notes-textarea"
                 placeholder="{{ _('Internal notes, maintenance info, credentials hints…') }}"></textarea>
     </div>
 
     <!-- OS Profiles (Multiboot) -->
     <div class="form-section" style="margin-top:1.25rem;">
       <button type="button" class="collapsible-toggle" id="osToggle" onclick="toggleOS()">
-        <span>&#x1F4BF; {{ _('OS Profiles (Multiboot)') }} — <span style="font-weight:400;color:var(--text-muted);">{{ _('optional') }}</span></span>
+        <span>{{ _('OS Profiles (Multiboot)') }} — <span style="font-weight:400;color:var(--text-muted);">{{ _('optional') }}</span></span>
         <span class="arrow" id="osArrow">&#x25BC;</span>
       </button>
     </div>
@@ -393,29 +394,29 @@
     </div>
 
     <div style="margin-top:1.5rem;">
-      <button type="submit" class="btn btn-primary">&#x1F4BE; {{ _('Save Host') }}</button>
+      <button type="submit" class="btn btn-primary">{{ _('Save Host') }}</button>
     </div>
   </form>
 </div>
 
 <!-- Tips -->
 <div class="card card-blue" style="margin-top:1.5rem;">
-  <div class="card-header"><h3>&#x1F4A1; Tips</h3></div>
+  <div class="card-header"><h2>Tips</h2></div>
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:0.75rem;">
     <div class="feature-item">
-      <div class="feature-item-title">&#x1F3E0; Localhost</div>
+      <div class="feature-item-title">Localhost</div>
       <div class="feature-item-desc">Use <code>localhost</code> as the host to manage this server directly — no SSH key required.</div>
     </div>
     <div class="feature-item">
-      <div class="feature-item-title">&#x1F4E1; IP Detection</div>
+      <div class="feature-item-title">IP Detection</div>
       <div class="feature-item-desc">Add a MAC address to enable automatic IP change detection for DHCP hosts.</div>
     </div>
     <div class="feature-item">
-      <div class="feature-item-title">&#x1F4BF; Multiboot</div>
+      <div class="feature-item-title">Multiboot</div>
       <div class="feature-item-desc">Add OS profiles for machines with multiple operating systems installed.</div>
     </div>
     <div class="feature-item">
-      <div class="feature-item-title">&#x1F3F7; Tags &amp; Groups</div>
+      <div class="feature-item-title">Tags &amp; Groups</div>
       <div class="feature-item-desc">Use tags (Server, VM, PC…) and groups to categorize and filter your fleet.</div>
     </div>
   </div>
@@ -423,7 +424,7 @@
 
 {% else %}
 <div class="alert alert-warning" style="margin-top:1.5rem;">
-  &#x26A0; {{ _('You need') }} <strong>operator</strong> {{ _('or') }} <strong>admin</strong> {{ _('role to manage hosts.') }}
+  {{ _('You need') }} <strong>operator</strong> {{ _('or') }} <strong>admin</strong> {{ _('role to manage hosts.') }}
 </div>
 {% endif %}
 
@@ -445,7 +446,7 @@ function renderTagChips() {
     const slug = tag.toLowerCase().replace(/\s+/g, '-');
     chip.className = 'tag-chip tag-chip-default tag-chip-' + slug;
     chip.style.cssText = 'display:inline-flex;align-items:center;gap:0.3rem;';
-    chip.innerHTML = tag + ' <button type="button" class="tag-chip-remove" onclick="removeTag(' + i + ')">&#x2715;</button>';
+    chip.innerHTML = fpEsc(tag) + ' <button type="button" class="tag-chip-remove" aria-label="Remove tag ' + fpEsc(tag) + '" onclick="removeTag(' + i + ')">&#x2715;</button>';
     wrapper.insertBefore(chip, input);
   });
   hidden.value = currentTags.join(',');
@@ -512,7 +513,7 @@ function addOsProfile(name='', type='ubuntu', isDefault=false) {
              style="width:16px;height:16px;accent-color:var(--accent-blue);">
       Default
     </label>
-    <button type="button" onclick="removeOsProfile(${idx})" class="btn btn-danger btn-sm" style="padding:0.4rem 0.6rem;">&#x2715;</button>`;
+    <button type="button" onclick="removeOsProfile(${idx})" class="btn btn-danger btn-sm" style="padding:0.4rem 0.6rem;" aria-label="Remove this operating system">&#x2715;</button>`;
   c.appendChild(div);
   document.getElementById('osBody').classList.add('open');
   document.getElementById('osToggle').classList.add('open');
@@ -574,18 +575,18 @@ if (savedView) setView(savedView);
 async function detectOS(name, btn) {
   const orig = btn.textContent;
   btn.disabled = true;
-  btn.textContent = '⏳ Detecting…';
+  btn.textContent = 'Detecting…';
   try {
     const resp = await fetch(`/hosts/detect_os/${encodeURIComponent(name)}`);
     const data = await resp.json();
     if (data.ok) {
-      showToast(`✅ ${name}: ${data.os.name} (${data.os.type})`, 'success');
+      showToast(`${name}: ${data.os.name} (${data.os.type})`, 'success');
       setTimeout(() => location.reload(), 1200);
     } else {
-      showToast(`❌ OS detection failed: ${data.error}`, 'error');
+      showToast(`OS detection failed: ${data.error}`, 'error');
     }
   } catch(e) {
-    showToast(`❌ Error: ${e.message}`, 'error');
+    showToast(`Error: ${e.message}`, 'error');
   } finally {
     btn.disabled = false;
     btn.textContent = orig;
@@ -603,13 +604,13 @@ async function uploadHostImage(name, input) {
     const resp = await fetch(`/hosts/upload_image/${encodeURIComponent(name)}`, { method: 'POST', body: fd });
     const data = await resp.json();
     if (data.ok) {
-      showToast(`✅ Image uploaded for ${name}`, 'success');
+      showToast(`Image uploaded for ${name}`, 'success');
       setTimeout(() => location.reload(), 800);
     } else {
-      showToast(`❌ Upload failed: ${data.error}`, 'error');
+      showToast(`Upload failed: ${data.error}`, 'error');
     }
   } catch(e) {
-    showToast(`❌ Error: ${e.message}`, 'error');
+    showToast(`Error: ${e.message}`, 'error');
   }
 }
 
@@ -617,20 +618,20 @@ async function uploadHostImage(name, input) {
 async function wakeHost(name, btn) {
   const orig = btn.innerHTML;
   btn.disabled = true;
-  btn.innerHTML = '&#x23F3; Sending...';
+  btn.innerHTML = 'Sending...';
   try {
     const r = await fetch(`/hosts/${encodeURIComponent(name)}/wol`, {method:'POST', headers:{'Content-Type':'application/json'}});
     const data = await r.json();
     if (data.ok) {
-      showToast(`⚡ ${data.message}`, 'success');
-      btn.innerHTML = '✅ Sent!';
+      showToast(`${data.message}`, 'success');
+      btn.innerHTML = 'Sent!';
       setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 5000);
     } else {
-      showToast(`❌ WOL failed: ${data.error}`, 'error');
+      showToast(`WOL failed: ${data.error}`, 'error');
       btn.innerHTML = orig; btn.disabled = false;
     }
   } catch(e) {
-    showToast(`❌ Error: ${e.message}`, 'error');
+    showToast(`Error: ${e.message}`, 'error');
     btn.innerHTML = orig; btn.disabled = false;
   }
 }
@@ -641,7 +642,7 @@ async function shutdownHost(name, osType, btn) {
   if (!confirm(`Are you sure you want to shutdown "${name}"?\n\nThe server will power off. Use Wake-on-LAN to turn it back on.`)) return;
   const orig = btn.innerHTML;
   btn.disabled = true;
-  btn.innerHTML = '&#x23F3; Shutting down...';
+  btn.innerHTML = 'Shutting down...';
   try {
     const r = await fetch(`/hosts/${encodeURIComponent(name)}/shutdown`, {
       method: 'POST',
@@ -649,15 +650,15 @@ async function shutdownHost(name, osType, btn) {
     });
     const data = await r.json();
     if (data.ok) {
-      showToast(`⏻ ${data.message}`, 'success');
-      btn.innerHTML = '✅ Shutdown sent';
+      showToast(`${data.message}`, 'success');
+      btn.innerHTML = 'Shutdown sent';
       setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 10000);
     } else {
-      showToast(`❌ Shutdown failed: ${data.error}`, 'error');
+      showToast(`Shutdown failed: ${data.error}`, 'error');
       btn.innerHTML = orig; btn.disabled = false;
     }
   } catch(e) {
-    showToast(`❌ Error: ${e.message}`, 'error');
+    showToast(`Error: ${e.message}`, 'error');
     btn.innerHTML = orig; btn.disabled = false;
   }
 }
@@ -679,7 +680,7 @@ if (typeof showToast === 'undefined') {
     t.className = `toast toast-${type || 'info'}`;
     t.textContent = msg;
     t.style.cssText = 'position:fixed;bottom:1.5rem;right:1.5rem;padding:0.75rem 1.25rem;border-radius:8px;font-size:0.9rem;z-index:9999;max-width:360px;box-shadow:0 4px 12px rgba(0,0,0,.25);';
-    t.style.background = type === 'success' ? '#22c55e' : type === 'error' ? '#ef4444' : '#3b82f6';
+    t.style.background = type === 'success' ? '#4fb383' : type === 'error' ? '#e46a63' : '#6b98ee';
     t.style.color = '#fff';
     document.body.appendChild(t);
     setTimeout(() => t.remove(), 3500);

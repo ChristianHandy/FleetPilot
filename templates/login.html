@@ -4,14 +4,22 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ _('Login') }} — FleetPilot</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v={{ asset_version('style.css') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
   <script>
     (function() {
       const saved = localStorage.getItem('fp_theme') || 'dark';
       document.documentElement.setAttribute('data-theme', saved);
+      document.documentElement.setAttribute('data-bs-theme', saved);
     })();
+  </script>
+  <script>
+    // Accessibility settings saved by this browser on a previous visit
+    try { var p = JSON.parse(localStorage.getItem('fp_a11y') || '{}'), h = document.documentElement;
+      ['text','contrast','motion','links','spacing','font'].forEach(function (k) { if (p[k]) h.setAttribute('data-' + k, p[k]); });
+    } catch (e) {}
   </script>
 </head>
 <body>
@@ -19,30 +27,31 @@
   <!-- Theme toggle (top-right corner) -->
   <div class="login-theme-btn">
     <button class="theme-toggle" id="theme-toggle" title="{{ _('Toggle theme') }}" type="button">
-      <span class="theme-icon-light">&#x2600;&#xFE0F;</span>
-      <span class="theme-icon-dark">&#x1F319;</span>
+      <span class="theme-icon-light">{{ icon('sun') }}</span>
+      <span class="theme-icon-dark">{{ icon('moon') }}</span>
     </button>
   </div>
 
-  <div class="login-wrapper">
+  <main class="login-wrapper" id="main">
     <div class="login-card">
 
       <div class="login-logo">
-        <div class="login-logo-icon">&#x1F6E9;</div>
+        <div class="login-logo-icon">{{ icon('plane', 16) }}</div>
+        <span class="sidebar-brand-title">FleetPilot</span>
       </div>
 
-      <h1 class="login-title">{{ _('FleetPilot') }}</h1>
+      <h1 class="login-title">{{ _('Sign In') }}</h1>
       <p class="login-subtitle">{{ _('Remote Fleet Management') }}</p>
 
       {% with messages = get_flashed_messages() %}
         {% if messages %}
           {% for message in messages %}
-            <div class="alert alert-danger" style="margin-bottom:1rem;">&#x26A0; {{ message }}</div>
+            <div class="alert alert-danger" role="alert">{{ message }}</div>
           {% endfor %}
         {% endif %}
       {% endwith %}
 
-      <form action="/" method="post">
+      <form action="{{ url_for('login', next=next) if next and next != '/index' else '/' }}" method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="form-group">
           <label class="form-label" for="username">{{ _('Username') }}</label>
@@ -70,18 +79,15 @@
           >
         </div>
 
-        <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; padding:0.7rem; font-size:0.95rem; margin-top:0.5rem;">
-          &#x1F511; {{ _('Sign In') }}
+        <button type="submit" class="btn btn-primary btn-lg" style="width:100%; margin-top:0.25rem;">
+          {{ _('Sign In') }}
         </button>
       </form>
 
       <div class="divider"></div>
-      <p style="text-align:center; font-size:0.8rem; color:var(--text-muted);margin-bottom:.45rem;">
-        FleetPilot &mdash; {{ _('Secure Fleet Access') }}
-      </p>
-      <p style="text-align:center;font-size:.78rem;margin:0;"><a href="/status" style="color:var(--accent-blue,#60a5fa);text-decoration:none;">View read-only service status</a></p>
+      <p style="font-size:0.84rem;margin:0;"><a href="/status">View service status</a></p>
     </div>
-  </div>
+  </main>
 
 <script>
   document.addEventListener('DOMContentLoaded', function() {
@@ -92,6 +98,7 @@
         const current = html.getAttribute('data-theme') || 'dark';
         const next = current === 'dark' ? 'light' : 'dark';
         html.setAttribute('data-theme', next);
+        html.setAttribute('data-bs-theme', next);
         localStorage.setItem('fp_theme', next);
         fetch('/set_theme?theme=' + next, {method:'POST'}).catch(()=>{});
       });
