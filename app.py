@@ -20,6 +20,7 @@ import config_backup
 import account_security
 import safe_errors
 import notify
+import router_manager
 from updater import run_update
 import scheduler
 import disktool_core
@@ -413,6 +414,8 @@ with app.app_context():
                                           keep=_BACKUP_KEEP, hour=_BACKUP_HOUR)
     vm_controller.init_db(DATA_DIR)
     storage_controller.init_db(DATA_DIR)
+    router_manager.init_db(DATA_DIR)
+    router_manager.start_poller()
     smart_manager.init_db(DATA_DIR)
     smart_manager.start_polling()
     system_monitor.init_db(DATA_DIR)
@@ -1559,6 +1562,34 @@ def _fmt_ts(value):
 
 
 app.jinja_env.filters['fp_ts'] = _fmt_ts
+
+
+import jinja2.exceptions
+
+
+def _fmt_duration(seconds):
+    """3d 4h, 5h 12m or 7m."""
+    try:
+        seconds = int(seconds)
+    except (TypeError, ValueError, jinja2.exceptions.UndefinedError):
+        return '—'  # missing value, e.g. a router that was never reached
+    days, hours, minutes = seconds // 86400, seconds % 86400 // 3600, seconds % 3600 // 60
+    return f'{days}d {hours}h' if days else (f'{hours}h {minutes}m' if hours else f'{minutes}m')
+
+
+def _fmt_bytes(value):
+    try:
+        value = float(value)
+    except (TypeError, ValueError, jinja2.exceptions.UndefinedError):
+        return '—'
+    for unit in ('B', 'KB', 'MB', 'GB', 'TB'):
+        if value < 1024 or unit == 'TB':
+            return f'{value:.0f} {unit}' if unit in ('B', 'KB') else f'{value:.1f} {unit}'
+        value /= 1024
+
+
+app.jinja_env.filters['fp_duration'] = _fmt_duration
+app.jinja_env.filters['fp_bytes'] = _fmt_bytes
 
 
 def _describe_agent(ua):
@@ -4825,6 +4856,173 @@ def system_backups_restore_cancel():
     return redirect(url_for('system_backups'))
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# ROUTERS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _router_or_404(router_id):
+    router = router_manager.get_router(router_id)
+    if not router:
+        abort(404)
+    return router
+
+
+@app.route('/routers')
+@login_required
+def routers_index():
+    return render_template('routers/index.html', routers=router_manager.list_routers(),
+                           summary=router_manager.summary(), platforms=router_manager.PLATFORMS,
+                           is_admin=current_user_has_role('admin'),
+                           can_operate=current_user_has_role('operator', 'admin'))
+
+
+@app.route('/routers/add', methods=['POST'])
+@admin_required
+def routers_add():
+    try:
+        router_id = router_manager.add_router(request.form.to_dict())
+    except ValueError as exc:
+        flash(str(exc), 'error')
+        return redirect(url_for('routers_index'))
+    _audit('router_added', request.form.get('name', '')[:64])
+    try:
+        status = router_manager.poll(router_id)
+        flash('Router added.' + ('' if status.get('online') else f' It could not be reached yet: {status.get("error")}'),
+              'success' if status.get('online') else 'warning')
+    except Exception as exc:
+        flash(_error_message(exc, 'First contact'), 'warning')
+    return redirect(url_for('routers_detail', router_id=router_id))
+
+
+@app.route('/routers/<int:router_id>')
+@login_required
+def routers_detail(router_id):
+    router = _router_or_404(router_id)
+    return render_template('routers/detail.html', router=router, platforms=router_manager.PLATFORMS,
+                           spec=router_manager.PLATFORMS[router['platform']],
+                           backups=router_manager.list_backups(router_id),
+                           is_admin=current_user_has_role('admin'),
+                           can_operate=current_user_has_role('operator', 'admin'))
+
+
+@app.route('/routers/<int:router_id>/edit', methods=['POST'])
+@admin_required
+@recent_auth_required
+def routers_edit(router_id):
+    _router_or_404(router_id)
+    try:
+        router_manager.update_router(router_id, request.form.to_dict())
+    except ValueError as exc:
+        flash(str(exc), 'error')
+    else:
+        _audit('router_updated', str(router_id))
+        flash('Router settings saved.')
+    return redirect(url_for('routers_detail', router_id=router_id))
+
+
+@app.route('/routers/<int:router_id>/delete', methods=['POST'])
+@admin_required
+@recent_auth_required
+def routers_delete(router_id):
+    router = _router_or_404(router_id)
+    router_manager.delete_router(router_id)
+    _audit('router_deleted', router['name'])
+    flash(f'{router["name"]} and its stored backups were removed.')
+    return redirect(url_for('routers_index'))
+
+
+@app.route('/routers/<int:router_id>/refresh', methods=['POST'])
+@operator_required
+def routers_refresh(router_id):
+    _router_or_404(router_id)
+    status = router_manager.poll(router_id)
+    if _wants_json():
+        return jsonify({'ok': bool(status.get('online')), 'status': status})
+    flash('Status updated.' if status.get('online') else status.get('error', 'The router did not answer.'),
+          'success' if status.get('online') else 'error')
+    return redirect(url_for('routers_detail', router_id=router_id))
+
+
+@app.route('/routers/<int:router_id>/updates', methods=['POST'])
+@operator_required
+def routers_check_updates(router_id):
+    _router_or_404(router_id)
+    try:
+        result = router_manager.check_updates(router_id)
+        flash(f'{result["count"]} update(s) available.' if result['count'] else 'No updates available.',
+              'warning' if result['count'] else 'success')
+    except ValueError as exc:
+        flash(str(exc), 'error')
+    except Exception as exc:
+        flash(_error_message(exc, 'Update check'), 'error')
+    return redirect(url_for('routers_detail', router_id=router_id))
+
+
+@app.route('/routers/<int:router_id>/backup', methods=['POST'])
+@operator_required
+def routers_backup(router_id):
+    _router_or_404(router_id)
+    try:
+        name = router_manager.backup(router_id)
+        _audit('router_backup_created', name)
+        flash('Configuration backup saved (encrypted).', 'success')
+    except ValueError as exc:
+        flash(str(exc), 'error')
+    except Exception as exc:
+        flash(_error_message(exc, 'Backup'), 'error')
+    return redirect(url_for('routers_detail', router_id=router_id))
+
+
+@app.route('/routers/<int:router_id>/backups/<name>')
+@admin_required
+@recent_auth_required
+def routers_backup_download(router_id, name):
+    _router_or_404(router_id)
+    found = router_manager.read_backup(router_id, name)
+    if not found:
+        abort(404)
+    download_name, data = found
+    _audit('router_backup_downloaded', name)
+    response = make_response(data)
+    response.headers['Content-Type'] = 'application/octet-stream'
+    response.headers['Content-Disposition'] = f'attachment; filename="{download_name}"'
+    return response
+
+
+@app.route('/routers/<int:router_id>/reboot', methods=['POST'])
+@admin_required
+@recent_auth_required
+def routers_reboot(router_id):
+    router = _router_or_404(router_id)
+    if request.form.get('confirm', '') != router['name']:
+        flash(f'Type the router name ({router["name"]}) to confirm the reboot.', 'error')
+        return redirect(url_for('routers_detail', router_id=router_id))
+    try:
+        router_manager.reboot(router_id)
+        _audit('router_rebooted', router['name'])
+        notify.send('router', f'FleetPilot: {router["name"]} rebooting',
+                    f'{session.get("username")} restarted {router["name"]}.', 'warning')
+        flash(f'{router["name"]} is restarting. The network may be unavailable for a few minutes.', 'warning')
+    except Exception as exc:
+        flash(_error_message(exc, 'Reboot'), 'error')
+    return redirect(url_for('routers_detail', router_id=router_id))
+
+
+@app.route('/api/routers')
+@login_required
+def api_routers():
+    """Router inventory and last known state (no credentials)."""
+    out = []
+    for r in router_manager.list_routers():
+        st = r['status']
+        out.append({'id': r['id'], 'name': r['name'], 'platform': r['platform'], 'host': r['host'],
+                    'online': bool(r['online']), 'last_poll': r['last_poll'], 'model': st.get('model'),
+                    'firmware': st.get('firmware'), 'uptime': st.get('uptime'),
+                    'clients': len(st.get('clients') or []),
+                    'updates': (st.get('updates') or {}).get('count')})
+    return jsonify({'routers': out})
+
+
 @app.route("/metrics")
 def prometheus_metrics():
     """Prometheus metrics. Authenticate with the API token shown on the CheckMK page."""
@@ -4832,7 +5030,7 @@ def prometheus_metrics():
         return "Unauthorized\n", 401, {"Content-Type": "text/plain; charset=utf-8",
                                        "WWW-Authenticate": 'Bearer realm="fleetpilot"'}
     body = metrics.render(fleetpilot_version.release_metadata(), load_hosts(),
-                          smart_manager, system_monitor, disktool_core)
+                          smart_manager, system_monitor, disktool_core, router_manager)
     return body, 200, {"Content-Type": "text/plain; version=0.0.4; charset=utf-8"}
 
 

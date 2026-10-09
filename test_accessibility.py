@@ -12,7 +12,7 @@ PAGES = ['/index', '/hosts', '/scanner', '/dashboard', '/smart', '/storage/works
          '/vm', '/storage', '/backup', '/shutdown_schedule', '/checkmk', '/hw', '/hw_overview',
          '/email_settings', '/update_settings', '/system/backups', '/users', '/users/profile',
          '/users/accessibility', '/2fa', '/plugins', '/users/security', '/system/security',
-         '/system/notifications', '/system/audit', '/reauth?next=/index']
+         '/system/notifications', '/system/audit', '/reauth?next=/index', '/routers']
 
 
 @pytest.fixture

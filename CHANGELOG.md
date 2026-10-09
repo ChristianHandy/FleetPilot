@@ -8,6 +8,7 @@ Alle bemerkenswerten Änderungen an FleetPilot werden in diesem Dokument festgeh
 
 ### Added
 
+- **Routers** (Servers → Routers): OpenWrt, OPNsense (REST API), pfSense, VyOS, DD-WRT/FreshTomato, MikroTik RouterOS and IPFire/Linux routers. Shows status, firmware, uptime, memory, interfaces and DHCP clients; update checks (OpenWrt opkg/apk, OPNsense, pfSense, RouterOS), encrypted configuration backups, restart with name confirmation, offline/online and update notifications, Prometheus metrics and `GET /api/routers`. See `docs/routers.md`.
 - **Security center** (System → Security center): checks for HTTPS, admins without 2FA, the first-run password file, secret-key permissions, CSRF, debug mode, failed sign-ins, backup age, never-expiring tokens and unused accounts; sign-in rules (require 2FA for admins, idle timeout, password-confirmation window, longest token life, audit retention, allowed networks); every active session and API token with sign-out/revoke.
 - **Sign-in & security** (Account): your active sessions by device with "sign out" and "sign out all other sessions", recent sign-ins and failures, and personal **API tokens** (read-only or read/write, expiring, shown once, stored hashed) for scripts and Home Assistant. `GET /api/me` shows who a token belongs to.
 - After signing in, FleetPilot shows when and from where you last signed in and how many failed attempts happened since.

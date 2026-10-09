@@ -166,6 +166,7 @@
       <div class="sidebar-nav-group" id="grp-srv">
         {{ nav('/hosts', 'Manage Hosts', 'server', path.startswith('/hosts')) }}
         {{ nav('/scanner', 'Network Scanner', 'search', path == '/scanner') }}
+        {{ nav('/routers', 'Routers', 'network', path.startswith('/routers')) }}
         {{ nav('/dashboard', 'Update Dashboard', 'refresh', path.startswith('/dashboard')) }}
         {% if admin %}{{ nav('/server_update', 'Server update', 'arrow-up', path.startswith('/server_update')) }}{% endif %}
       </div>

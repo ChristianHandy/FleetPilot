@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% from "_macros.html" import stat_tile %}
+{% block title %}Routers{% endblock %}
+{% block page_subtitle %}OpenWrt, OPNsense, pfSense, VyOS, DD-WRT/FreshTomato, MikroTik RouterOS and other Linux routers.{% endblock %}
+{% block page_actions %}{% if is_admin %}<a class="btn btn-primary btn-sm" href="#add-router">{{ icon('plus') }} Add router</a>{% endif %}{% endblock %}
+{% block content %}
+<div class="stat-grid-v4 mb-3">
+  {{ stat_tile(summary.total, 'Routers', 'network', 'blue') }}
+  {{ stat_tile(summary.online, 'Online', 'check-circle', 'green') }}
+  {{ stat_tile(summary.offline, 'Offline', 'x-circle', 'red' if summary.offline else '') }}
+  {{ stat_tile(summary.updates, 'With updates', 'download', 'amber' if summary.updates else '') }}
+</div>
+
+<section class="card-v4 mb-3" aria-labelledby="routers-title">
+  <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="routers-title">Routers</h2>
+    <span class="text-muted small">{{ summary.clients }} connected devices in total</span></div>
+  {% if routers %}
+  <div class="table-responsive">
+    <table class="table">
+      <thead><tr><th>Name</th><th>Status</th><th>System</th><th>Uptime</th><th class="text-end">Devices</th><th>Updates</th></tr></thead>
+      <tbody>
+      {% for r in routers %}
+        {% set st = r.status %}
+        <tr>
+          <td><a href="{{ url_for('routers_detail', router_id=r.id) }}"><strong>{{ r.name }}</strong></a>
+            <div class="text-muted small"><code>{{ r.host }}</code> · {{ r.platform_label }}</div></td>
+          <td>{% if r.online is none %}<span class="status-pill offline">Not checked</span>
+              {% elif r.online %}<span class="status-pill online">Online</span>
+              {% else %}<span class="status-pill critical">Offline</span>{% endif %}</td>
+          <td>{{ st.firmware or '—' }}{% if st.model %}<div class="text-muted small">{{ st.model }}</div>{% endif %}</td>
+          <td>{{ st.uptime|fp_duration if r.online else '—' }}</td>
+          <td class="text-end num">{{ (st.clients or [])|length if r.online else '—' }}</td>
+          <td>{% if st.updates is defined and st.updates %}
+                {% if st.updates.count %}<span class="badge badge-amber">{{ st.updates.count }} available</span>
+                {% else %}<span class="badge badge-green">Up to date</span>{% endif %}
+              {% elif platforms[r.platform].updates %}<span class="text-muted small">Not checked</span>
+              {% else %}<span class="text-muted small">Manual</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">No routers yet.{% if is_admin %} Add one below.{% endif %}</div>
+  {% endif %}
+</section>
+
+{% if is_admin %}
+<section class="card-v4" id="add-router" aria-labelledby="add-title">
+  <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="add-title">Add a router</h2></div>
+  <div class="card-v4-body">
+    <form method="post" action="{{ url_for('routers_add') }}" id="router-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="row g-3">
+        <div class="col-sm-6 col-lg-4">
+          <label class="form-label" for="r-platform">System</label>
+          <select class="form-select" id="r-platform" name="platform" required>
+            {% for key, p in platforms.items() %}
+              <option value="{{ key }}" data-port="{{ p.port }}" data-user="{{ p.user }}" data-transport="{{ p.transport }}">{{ p.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+          <label class="form-label" for="r-name">Name</label>
+          <input class="form-control" id="r-name" name="name" maxlength="64" required placeholder="e.g. Main router">
+        </div>
+        <div class="col-sm-8 col-lg-3">
+          <label class="form-label" for="r-host">Address</label>
+          <input class="form-control" id="r-host" name="host" required placeholder="192.168.1.1" spellcheck="false">
+        </div>
+        <div class="col-sm-4 col-lg-2">
+          <label class="form-label" for="r-port">Port</label>
+          <input class="form-control" id="r-port" name="port" type="number" min="1" max="65535" value="22">
+        </div>
+
+        <div class="col-sm-6 col-lg-4 r-ssh">
+          <label class="form-label" for="r-user">SSH user</label>
+          <input class="form-control" id="r-user" name="username" value="root" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="col-sm-6 col-lg-4 r-ssh">
+          <label class="form-label" for="r-pass">SSH password <span class="text-muted">(optional)</span></label>
+          <input class="form-control" id="r-pass" name="password" type="password" autocomplete="new-password" aria-describedby="r-pass-hint">
+          <div class="form-hint" id="r-pass-hint">Leave empty to sign in with FleetPilot's SSH key (recommended).</div>
+        </div>
+
+        <div class="col-sm-6 col-lg-4 r-api" hidden>
+          <label class="form-label" for="r-key">API key</label>
+          <input class="form-control" id="r-key" name="api_key" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="col-sm-6 col-lg-4 r-api" hidden>
+          <label class="form-label" for="r-secret">API secret</label>
+          <input class="form-control" id="r-secret" name="api_secret" type="password" autocomplete="new-password">
+        </div>
+        <div class="col-12 r-api" hidden>
+          <label class="d-inline-flex gap-2 align-items-center" style="font-weight:400">
+            <input type="checkbox" name="verify_tls" value="1" checked> Check the router's HTTPS certificate</label>
+          <div class="form-hint">Turn off only for the self-signed certificate OPNsense creates on first boot.</div>
+        </div>
+        <div class="col-12">
+          <label class="form-label" for="r-notes">Notes <span class="text-muted">(optional)</span></label>
+          <input class="form-control" id="r-notes" name="notes" maxlength="500">
+        </div>
+      </div>
+      <p class="form-hint mt-3 mb-2">Setup for each system is described in <code>docs/routers.md</code>. Passwords and API secrets are stored encrypted.</p>
+      <button class="btn btn-primary" type="submit">Add router</button>
+    </form>
+  </div>
+</section>
+<script>
+(function () {
+  var select = document.getElementById('r-platform');
+  function apply(initial) {
+    var opt = select.options[select.selectedIndex];
+    var api = opt.dataset.transport === 'api';
+    document.querySelectorAll('#router-form .r-api').forEach(function (el) { el.hidden = !api; });
+    document.querySelectorAll('#router-form .r-ssh').forEach(function (el) { el.hidden = api; });
+    document.getElementById('r-key').required = api;
+    document.getElementById('r-secret').required = api;
+    if (!initial) {
+      document.getElementById('r-port').value = opt.dataset.port;
+      document.getElementById('r-user').value = opt.dataset.user;
+    }
+  }
+  select.addEventListener('change', function () { apply(false); });
+  apply(false);
+})();
+</script>
+{% endif %}
+{% endblock %}
