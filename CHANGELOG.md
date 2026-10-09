@@ -25,6 +25,8 @@ Alle bemerkenswerten Änderungen an FleetPilot werden in diesem Dokument festgeh
 
 - Fixed the CodeQL findings: uploaded SMART reports were saved under the browser-supplied filename (a name like `../app.py` could overwrite files); redirects that followed the `Referer` header could leave the site; exception text with paths, hosts or credential-bearing URLs was returned to the browser; the CheckMK host lookup echoed the host name into an HTML page.
 - Disk commands only run for devices that exist on the server; plugin, add-on template and backup files are looked up safely; fan-controller SSH keys must be in the data folder or `~/.ssh`.
+- GitHub workflows: fixed a script injection in `notify-version.yml`, pinned every action to a commit SHA, read-only token permissions by default; added CI tests (Python 3.11–3.13, pip-audit, Bandit, crash lint), OpenSSF Scorecard and Dependabot.
+- Fixed "Update this server" failing with `UnboundLocalError` before it started.
 - Removed local databases, build output and old duplicate folders from the repository and ignore them from now on.
 
 - Every request now validates the session centrally. Routes using `user_management.login_required` (audit trail, production status, Storage workspace, plugin manager) accepted sessions of deactivated users and sessions that had ended through a password change.
