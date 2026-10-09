@@ -21,8 +21,16 @@ Alle bemerkenswerten Änderungen an FleetPilot werden in diesem Dokument festgeh
 - **SMART alert emails** when a disk is newly flagged; repeat polls of the same problem no longer create duplicate alerts.
 - Styled error pages; production checklist in `docs/production_profile.md`.
 
+- **High-security deployment** (see SECURITY.md): FIPS mode (`FLEETPILOT_FIPS`, PBKDF2-HMAC-SHA256 with automatic re-hashing at sign-in), strict SSH host keys (`FLEETPILOT_SSH_STRICT_HOST_KEYS`), offline mode for air-gapped networks (`FLEETPILOT_OFFLINE`), a strict systemd profile (`deploy/fleetpilot-strict.conf`, exposure 1.2) and a TLS reference configuration (`deploy/nginx-fleetpilot-tls.conf`).
+- Security center: notice that must be accepted before sign-in, absolute session lifetime (default 12 hours), configurable account lockout, audit-trail integrity check.
+- The audit trail is HMAC-chained so changed or deleted events are detected, and every event is also logged as JSON for forwarding to a SIEM.
+
 ### Security
 
+- All fonts, icons, Bootstrap and Chart.js are served by FleetPilot; pages no longer contact Google Fonts or CDNs (GDPR, air-gapped networks) and the Content-Security-Policy only allows FleetPilot itself.
+- Turning off or changing two-factor sign-in asks for the password again.
+- Passwords that are repetitive, sequential, or contain the user name or product name are rejected (NIST SP 800-63B).
+- Session cookies are signed with HMAC-SHA256; `/healthz` no longer reveals the version; host shutdown now verifies the SSH host key.
 - Fixed the CodeQL findings: uploaded SMART reports were saved under the browser-supplied filename (a name like `../app.py` could overwrite files); redirects that followed the `Referer` header could leave the site; exception text with paths, hosts or credential-bearing URLs was returned to the browser; the CheckMK host lookup echoed the host name into an HTML page.
 - Disk commands only run for devices that exist on the server; plugin, add-on template and backup files are looked up safely; fan-controller SSH keys must be in the data folder or `~/.ssh`.
 - GitHub workflows: fixed a script injection in `notify-version.yml`, pinned every action to a commit SHA, read-only token permissions by default; added CI tests (Python 3.11–3.13, pip-audit, Bandit, crash lint), OpenSSF Scorecard and Dependabot.

@@ -153,6 +153,48 @@ To harden SSH connectivity:
 
 ---
 
+## High-security deployment
+
+For government, defence, finance, healthcare and other regulated sites. These
+settings map to NIST SP 800-53 / 800-63B, BSI IT-Grundschutz and TR-02102,
+DISA STIG and FIPS 140-3. FleetPilot itself is not certified; an accredited
+assessment of the complete installation is still required.
+
+1. **Sandbox the service:** install `deploy/fleetpilot-strict.conf` as
+   `/etc/systemd/system/fleetpilot.service.d/strict.conf`. It removes sudo
+   (local disk formatting and local fan control are then unavailable),
+   enables a system-call filter and restricts network targets to private
+   ranges. `systemd-analyze security fleetpilot` drops from 5.8 to 1.2.
+2. **TLS:** use `deploy/nginx-fleetpilot-tls.conf` (TLS 1.2/1.3, forward-secret
+   AEAD suites, HSTS) with a certificate from your internal CA.
+3. **Environment** (`/opt/fleetpilot/.env`):
+   `FLEETPILOT_FIPS=true` on FIPS-enabled systems, `FLEETPILOT_SSH_STRICT_HOST_KEYS=true`
+   after loading all managed hosts into `known_hosts`, `FLEETPILOT_OFFLINE=true`
+   in air-gapped networks. No page loads anything from third parties; fonts,
+   Bootstrap and Chart.js are served by FleetPilot.
+4. **System → Security center:** require 2FA for administrators, add the
+   system-use notice, set lockout to 3 attempts / 15 minutes, idle timeout
+   15 minutes, session lifetime 12 hours, allowed networks, and keep audit
+   events for your retention period.
+5. **Audit forwarding:** every audit event is also logged as JSON by the
+   `fleetpilot.audit` logger (journald). Forward the journal to your SIEM so
+   records exist outside FleetPilot. The audit trail inside FleetPilot is
+   HMAC-chained; the Security center reports any changed or removed event.
+
+| Control | Where |
+|---|---|
+| Identification & MFA (IA-2, 800-63B AAL2) | TOTP, WebAuthn/FIDO2, YubiKey; required for admins |
+| Re-authentication (IA-11) | Password confirmation for user, backup, token, 2FA and security changes |
+| Account lockout (AC-7) | Security center → lockout attempts / minutes |
+| System use notification (AC-8) | Security center → notice before sign-in |
+| Session termination (AC-12) | Idle timeout, absolute lifetime, per-device sign-out |
+| Least privilege (AC-6) | Viewer / operator / admin roles; read-only API tokens |
+| Audit (AU-2, AU-3, AU-9) | Audit trail with HMAC chain, CSV export, journald/SIEM output |
+| Boundary protection (SC-7) | Allowed networks, strict systemd profile, offline mode |
+| Transmission confidentiality (SC-8) | TLS reference config, HSTS, secure cookies |
+| Cryptography (SC-13) | FIPS mode, AES/HMAC-SHA256 for stored secrets, HMAC-SHA256 session cookies |
+| Flaw remediation (SI-2) | Dependabot, pip-audit, CodeQL, OpenSSF Scorecard in CI |
+
 ## Known Limitations
 
 The following security gaps are acknowledged. Contributions to address them are welcome.

@@ -36,6 +36,10 @@ DEFAULT_SETTINGS = {
     'ip_allowlist': [],         # CIDRs; empty means every address may connect
     'audit_retention_days': 365,
     'max_token_days': 365,      # 0 allows tokens that never expire
+    'session_max_hours': 12,    # absolute session lifetime (NIST SP 800-63B, AAL2)
+    'lockout_attempts': 10,     # failed sign-ins per account before it is locked (NIST AC-7)
+    'lockout_minutes': 10,
+    'login_banner': '',         # system-use notice shown and acknowledged before sign-in (NIST AC-8)
 }
 
 _settings_cache = {'mtime': None, 'value': None}
@@ -128,12 +132,15 @@ def save_settings(changes: dict) -> dict:
     value.update({k: v for k, v in changes.items() if k in DEFAULT_SETTINGS})
     value['require_2fa_admins'] = bool(value['require_2fa_admins'])
     for key, low, high in (('idle_minutes', 0, 1440), ('reauth_minutes', 1, 120),
-                           ('audit_retention_days', 30, 3650), ('max_token_days', 0, 3650)):
+                           ('audit_retention_days', 30, 3650), ('max_token_days', 0, 3650),
+                           ('session_max_hours', 1, 720), ('lockout_attempts', 3, 100),
+                           ('lockout_minutes', 1, 1440)):
         try:
             value[key] = max(low, min(int(value[key]), high))
         except (TypeError, ValueError):
             value[key] = DEFAULT_SETTINGS[key]
     value['ip_allowlist'], _ = clean_allowlist(value.get('ip_allowlist') or [])
+    value['login_banner'] = str(value.get('login_banner') or '').replace('\r\n', '\n').strip()[:4000]
     path = _settings_path()
     tmp = path + '.tmp'
     with open(tmp, 'w') as fh:
@@ -188,11 +195,14 @@ def check_session(sid: str, user_id: int, ip: str = '') -> bool:
     now = time.time()
     key = _hash(sid)
     with user_management.get_user_db() as db:
-        row = db.execute('SELECT user_id, last_seen, revoked FROM user_sessions WHERE id = ?', (key,)).fetchone()
+        row = db.execute('SELECT user_id, created_at, last_seen, revoked FROM user_sessions WHERE id = ?',
+                         (key,)).fetchone()
         if not row or row['revoked'] or row['user_id'] != user_id:
             return False
-        idle = get_settings()['idle_minutes']
-        if idle and now - row['last_seen'] > idle * 60:
+        settings = get_settings()
+        idle = settings['idle_minutes']
+        too_old = now - row['created_at'] > settings['session_max_hours'] * 3600
+        if too_old or (idle and now - row['last_seen'] > idle * 60):
             db.execute('UPDATE user_sessions SET revoked = 1 WHERE id = ?', (key,))
             return False
         if now - row['last_seen'] > TOUCH_INTERVAL:

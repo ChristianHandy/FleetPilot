@@ -5,9 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ _('Login') }} — FleetPilot</title>
   <link rel="stylesheet" href="/static/style.css?v={{ asset_version('style.css') }}">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="{{ url_for('static', filename='vendor/fonts/fonts.css') }}" rel="stylesheet">
   <script>
     (function() {
       const saved = localStorage.getItem('fp_theme') || 'dark';
@@ -78,6 +76,17 @@
             autocomplete="current-password"
           >
         </div>
+
+        {% if login_banner %}
+        <div class="login-banner" role="note" aria-labelledby="banner-title"
+             style="border:1px solid var(--border-strong);border-radius:6px;padding:.75rem .9rem;margin-bottom:.9rem;font-size:.85rem;max-height:14rem;overflow:auto;white-space:pre-line">
+          <strong id="banner-title" style="display:block;margin-bottom:.35rem">{{ _('Notice') }}</strong>{{ login_banner }}
+        </div>
+        <label class="d-flex gap-2 align-items-start" style="font-size:.9rem;margin-bottom:.9rem">
+          <input type="checkbox" name="banner_ack" value="1" required style="width:18px;height:18px;margin-top:.15rem">
+          <span>{{ _('I have read and accept this notice.') }}</span>
+        </label>
+        {% endif %}
 
         <button type="submit" class="btn btn-primary btn-lg" style="width:100%; margin-top:0.25rem;">
           {{ _('Sign In') }}

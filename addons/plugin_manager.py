@@ -69,9 +69,11 @@ def plugin_manager_index():
     # Fetch available remote plugins
     remote_plugins = []
     try:
-        response = requests.get(REMOTE_PLUGIN_REPO, timeout=5)
-        if response.status_code == 200:
-            remote_plugins = response.json().get('plugins', [])
+        from constants import offline_mode
+        if not offline_mode():
+            response = requests.get(REMOTE_PLUGIN_REPO, timeout=5)
+            if response.status_code == 200:
+                remote_plugins = response.json().get('plugins', [])
     except Exception as e:
         # Log but don't crash if remote fetch fails
         print(f"Failed to fetch remote plugins: {e}")
@@ -109,6 +111,10 @@ def install_plugin(plugin_id):
     
     try:
         # Fetch available plugins
+        from constants import offline_mode
+        if offline_mode():
+            flash('Online plugin installation is disabled (FLEETPILOT_OFFLINE).')
+            return redirect(url_for('plugin_manager.plugin_manager_index'))
         response = requests.get(REMOTE_PLUGIN_REPO, timeout=10)
         if response.status_code != 200:
             flash('Failed to fetch plugin repository.')

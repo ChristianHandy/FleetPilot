@@ -29,7 +29,7 @@ import user_management
 import version_manager
 import email_config
 import email_notifier
-from constants import is_localhost, LOCALHOST_IDENTIFIERS
+from constants import is_localhost, LOCALHOST_IDENTIFIERS, offline_mode
 import arp_tracker
 import vm_controller
 import storage_controller
@@ -89,6 +89,9 @@ class _TokenSession(_SecureCookieSession):
 
 
 class _TokenAwareSessionInterface(type(app.session_interface)):
+    # Sign session cookies with HMAC-SHA256 instead of Flask's default SHA-1 (BSI TR-02102, CNSA).
+    digest_method = staticmethod(__import__('hashlib').sha256)
+
     def open_session(self, app_, req):
         auth = req.headers.get('Authorization', '')
         if req.path.startswith('/api/') and auth.startswith('Bearer ' + account_security.TOKEN_PREFIX):
@@ -156,12 +159,19 @@ def _attempt_keys(ip, username=None):
     return keys
 
 
+def _limits():
+    """Per-kind (max failures, window seconds); the account limit comes from the security settings."""
+    settings = account_security.get_settings()
+    return {'ip': _LIMITS['ip'], 'user': (settings['lockout_attempts'], settings['lockout_minutes'] * 60)}
+
+
 def _check_rate_limit(ip, username=None):
     """Return True if neither the address nor the account is currently throttled."""
     now = _time.time()
+    limits = _limits()
     with _login_lock:
         for kind, value in _attempt_keys(ip, username):
-            limit, window = _LIMITS[kind]
+            limit, window = limits[kind]
             key = f'{kind}:{value}'
             recent = [t for t in _login_attempts.get(key, []) if now - t < window]
             if recent:
@@ -176,13 +186,14 @@ def _check_rate_limit(ip, username=None):
 def _record_failed_login(ip, username=None):
     now = _time.time()
     locked = []
+    limits = _limits()
     with _login_lock:
         if len(_login_attempts) > 10000:   # bound memory under a distributed attack
             _login_attempts.clear()
         for kind, value in _attempt_keys(ip, username):
             attempts = _login_attempts[f'{kind}:{value}']
             attempts.append(now)
-            if len(attempts) == _LIMITS[kind][0]:
+            if len(attempts) == limits[kind][0]:
                 locked.append((kind, value))
     for kind, value in locked:
         # Report each lockout once, when the limit is first reached.
@@ -194,7 +205,7 @@ def _record_failed_login(ip, username=None):
             pass
         notify.send('security', 'FleetPilot: sign-in locked',
                     f'Too many failed sign-ins for {what} (last attempt from {ip}). '
-                    f'Further attempts are blocked for {_LIMITS[kind][1] // 60} minutes.', 'warning')
+                    f'Further attempts are blocked for {limits[kind][1] // 60} minutes.', 'warning')
 
 
 def _clear_login_attempts(ip, username=None):
@@ -495,6 +506,13 @@ def inject_accessibility():
 
 
 # Template function for theme and language context
+@app.context_processor
+def inject_login_banner():
+    if request.endpoint in ('login', 'handle_csrf_error') or request.path == '/':
+        return {'login_banner': account_security.get_settings()['login_banner']}
+    return {}
+
+
 @app.context_processor
 def inject_ui_context():
     """Inject current theme and language into all templates."""
@@ -843,7 +861,8 @@ def proxy_test_service(route_id):
 @app.route('/healthz')
 def healthz():
     """Minimal unauthenticated liveness probe for a local reverse proxy or monitor."""
-    return jsonify({'status': 'ok', 'release': fleetpilot_version.release_metadata()}), 200
+    # No version number here: unauthenticated callers must not learn which release runs.
+    return jsonify({'status': 'ok'}), 200
 
 
 def is_online(host, user):
@@ -1107,12 +1126,31 @@ def recent_auth_required(f):
 MIN_PASSWORD_LENGTH = 12
 
 
-def _password_problem(password):
-    """Return a message if ``password`` is too weak, else None."""
+_SEQUENCES = ('0123456789', 'abcdefghijklmnopqrstuvwxyz', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm', 'qwertzuiop', 'yxcvbnm')
+_CONTEXT_WORDS = ('password', 'passwort', 'fleetpilot', 'admin', 'changeme', 'welcome', 'letmein', 'qwerty')
+
+
+def _password_problem(password, username=''):
+    """Return a message if ``password`` breaks the policy, else None (NIST SP 800-63B 3.1.1.2)."""
     if len(password) < MIN_PASSWORD_LENGTH:
         return f'Passwords must be at least {MIN_PASSWORD_LENGTH} characters.'
-    if password.lower() in {'password', 'changeme', 'fleetpilot', 'admin'} or len(set(password)) < 4:
-        return 'Please choose a less predictable password.'
+    if len(password) > 256:
+        return 'Passwords can be at most 256 characters.'
+    lower = password.lower()
+    if len(set(password)) < 5:
+        return 'Please use more different characters.'
+    if re.search(r'(.{1,4})\1{3,}', lower):
+        return 'Please avoid repeating the same characters or groups.'
+    for seq in _SEQUENCES:
+        for k in range(len(seq) - 5):
+            if seq[k:k + 6] in lower or seq[k:k + 6][::-1] in lower:
+                return 'Please avoid keyboard or number sequences such as 123456 or qwerty.'
+    if username and len(username) >= 3 and username.lower() in lower:
+        return 'The password must not contain the user name.'
+    stripped = re.sub(r'[^a-z]', '', lower)
+    for word in _CONTEXT_WORDS:
+        if stripped.startswith(word) and len(stripped) - len(word) <= 4:
+            return 'Please choose a less predictable password.'
     return None
 
 
@@ -1225,8 +1263,11 @@ def login():
         if not _check_rate_limit(ip, username):
             flash('Too many failed login attempts. Please wait a few minutes and try again.')
             return render_template("login.html", next=next_url, rate_limited=True), 429
+        if account_security.get_settings()['login_banner'] and not request.form.get('banner_ack'):
+            flash('Please read and accept the notice before signing in.')
+            return render_template("login.html", next=next_url), 400
 
-        user_id = user_management.verify_password(username, password)
+        user_id = user_management.verify_password(username, password, upgrade_hash=True)
         if user_id:
             _clear_login_attempts(ip, username)
             # Check if user has 2FA enabled
@@ -1334,6 +1375,7 @@ def tfa_totp_enable():
 
 @app.route('/2fa/totp/disable', methods=['POST'])
 @login_required
+@recent_auth_required
 def tfa_totp_disable():
     user_id = session.get('user_id')
     _2fa.disable_totp(user_id)
@@ -1357,6 +1399,7 @@ def tfa_yubikey_register():
 
 @app.route('/2fa/yubikey/<int:key_id>/delete', methods=['POST'])
 @login_required
+@recent_auth_required
 def tfa_yubikey_delete(key_id):
     user_id = session.get('user_id')
     if _2fa.delete_yubikey(user_id, key_id):
@@ -1406,6 +1449,7 @@ def webauthn_register_verify():
 
 @app.route('/2fa/webauthn/<int:credential_id>/delete', methods=['POST'])
 @login_required
+@recent_auth_required
 def webauthn_delete_credential(credential_id):
     if _2fa.delete_webauthn_credential(session.get('user_id'), credential_id):
         flash('Security key removed.', 'success')
@@ -1456,6 +1500,7 @@ def webauthn_authentication_verify():
 
 @app.route('/2fa/backup/regenerate', methods=['POST'])
 @login_required
+@recent_auth_required
 def tfa_backup_regenerate():
     user_id = session.get('user_id')
     codes = _2fa.regenerate_backup_codes(user_id)
@@ -1690,6 +1735,30 @@ def _security_checks():
         add('Unused accounts', 'warn', f'Not used for 90 days: {", ".join(stale)}. Consider deactivating them.',
             url_for('users_list'))
 
+    chain = audit_log.verify_chain()
+    add('Audit trail integrity', 'ok' if chain['ok'] else 'bad',
+        f'{chain["checked"]} chained events verified; none were changed or removed.' if chain['ok'] else
+        f'The audit trail was modified at event #{chain["first_bad_id"]}. Investigate and keep the CSV export as evidence.',
+        url_for('system_audit'))
+    add('Session lifetime', 'ok' if settings['session_max_hours'] <= 12 else 'warn',
+        f'Sessions end after at most {settings["session_max_hours"]} hours.' +
+        ('' if settings['session_max_hours'] <= 12 else ' NIST SP 800-63B asks for 12 hours or less.'))
+    add('Account lockout', 'ok' if settings['lockout_attempts'] <= 10 else 'warn',
+        f'Accounts lock for {settings["lockout_minutes"]} minutes after {settings["lockout_attempts"]} failed sign-ins.')
+    add('Sign-in notice', 'ok' if settings['login_banner'] else 'info',
+        'A system-use notice must be accepted before sign-in.' if settings['login_banner'] else
+        'No notice before sign-in. Government and corporate policies often require one (NIST AC-8).')
+    add('SSH host keys', 'ok' if ssh_helper.strict_host_keys() else 'info',
+        'Unknown SSH host keys are refused (FLEETPILOT_SSH_STRICT_HOST_KEYS).' if ssh_helper.strict_host_keys() else
+        'Host keys are trusted on first connection and checked afterwards. Strict sites pre-load known_hosts '
+        'and set FLEETPILOT_SSH_STRICT_HOST_KEYS=true.')
+    add('FIPS mode', 'ok' if user_management.fips_mode() else 'info',
+        'Passwords use PBKDF2-HMAC-SHA256 (FIPS 140-3 approved).' if user_management.fips_mode() else
+        'Passwords use scrypt. Set FLEETPILOT_FIPS=true on FIPS-enabled systems.')
+    add('Internet access', 'ok' if offline_mode() else 'info',
+        'Offline mode: no update checks or online plugin catalogue.' if offline_mode() else
+        'FleetPilot checks GitHub for updates. Set FLEETPILOT_OFFLINE=true for air-gapped networks.')
+
     channels = [c for c in notify.list_channels() if c['enabled'] and 'security' in (c['events'] or [])]
     add('Security alerts', 'ok' if channels else 'info',
         f'Sent to {len(channels)} notification channel{"s" if len(channels) != 1 else ""}.' if channels else
@@ -1735,6 +1804,10 @@ def system_security_settings():
         'reauth_minutes': request.form.get('reauth_minutes', before['reauth_minutes']),
         'audit_retention_days': request.form.get('audit_retention_days', before['audit_retention_days']),
         'max_token_days': request.form.get('max_token_days', before['max_token_days']),
+        'session_max_hours': request.form.get('session_max_hours', before['session_max_hours']),
+        'lockout_attempts': request.form.get('lockout_attempts', before['lockout_attempts']),
+        'lockout_minutes': request.form.get('lockout_minutes', before['lockout_minutes']),
+        'login_banner': request.form.get('login_banner', before['login_banner']),
         'ip_allowlist': allow,
     })
     changed = sorted(k for k in after if after[k] != before.get(k))
@@ -3147,7 +3220,7 @@ def users_add():
         if not username or not password:
             flash('Username and password are required.')
             return redirect(url_for('users_add'))
-        problem = _password_problem(password)
+        problem = _password_problem(password, username)
         if problem:
             flash(problem, 'error')
             return redirect(url_for('users_add'))
@@ -3195,8 +3268,8 @@ def users_edit(uid):
         if not username:
             flash('Username is required.')
             return redirect(url_for('users_edit', uid=uid))
-        if password and _password_problem(password):
-            flash(_password_problem(password), 'error')
+        if password and _password_problem(password, username):
+            flash(_password_problem(password, username), 'error')
             return redirect(url_for('users_edit', uid=uid))
         was_admin = 'admin' in user_management.get_user_role_names(uid)
         if was_admin and user['active'] and ('admin' not in roles or not active) and not _other_active_admins(uid):
@@ -3298,8 +3371,8 @@ def users_profile():
         email = request.form.get("email", "").strip() or None
         password = request.form.get("password", "")
         if password:
-            problem = _password_problem(password)
             current_name = user_management.get_user_by_id(user_id)['username']
+            problem = _password_problem(password, current_name)
             if not problem and not user_management.verify_password(current_name, request.form.get("current_password", "")):
                 problem = 'Your current password is incorrect.'
             if problem:
@@ -3377,13 +3450,14 @@ def add_security_headers(response):
     response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=(), payment=(), usb=()'
     response.headers['Cross-Origin-Opener-Policy'] = 'same-origin'
     response.headers['Cross-Origin-Resource-Policy'] = 'same-origin'
-    # Inline scripts/styles are still used by templates; eval is not needed by anything.
+    # Every asset is served by FleetPilot itself (static/vendor), so nothing may load from
+    # other origins. Inline scripts/styles are still used by templates; eval is not.
     response.headers['Content-Security-Policy'] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
-        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; "
-        "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "
-        "img-src 'self' data: https:; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "font-src 'self'; "
+        "img-src 'self' data:; "
         "connect-src 'self'; "
         "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
     )
@@ -4116,6 +4190,8 @@ def plugin_repository_json():
     """Proxy / cache the remote plugin repository JSON."""
     import urllib.request
     import urllib.error
+    if offline_mode():
+        return jsonify({"plugins": [], "offline": True})
     try:
         resp = requests.get(REMOTE_PLUGIN_REPO, timeout=5)
         resp.raise_for_status()
@@ -4134,6 +4210,9 @@ def plugin_install_remote(plugin_id):
         return redirect("/plugins")
     if not re.match(r"^[a-zA-Z0-9_]+$", plugin_id):
         flash("Invalid plugin ID.", "error")
+        return redirect("/plugins")
+    if offline_mode():
+        flash("Online plugin installation is disabled (FLEETPILOT_OFFLINE).", "error")
         return redirect("/plugins")
     import urllib.request
     import urllib.error
@@ -6099,23 +6178,19 @@ def host_shutdown(name):
     
     # ── Linux / Proxmox / Unraid fallback: SSH shutdown ──────────────────────
     try:
-        import paramiko as _pm
         ssh_host = host_ip
         ssh_port = int(host.get('port', 22))
         ssh_user = host.get('user', 'root')
         ssh_pass = host.get('password', '')
         ssh_key  = host.get('ssh_key', '')
         
-        client = _pm.SSHClient()
-        # Host key policy handled by ssh_helper
-        
         connect_kwargs = dict(hostname=ssh_host, port=ssh_port, username=ssh_user, timeout=10)
         if ssh_key:
             connect_kwargs['key_filename'] = ssh_key
         elif ssh_pass:
             connect_kwargs['password'] = ssh_pass
-        
-        client.connect(**connect_kwargs)
+        # ssh_helper verifies the host key (known_hosts / trust on first use).
+        client = ssh_helper.create_client(**connect_kwargs)
         
         # Choose shutdown command based on OS type
         if os_type == 'windows':
@@ -6136,7 +6211,7 @@ def host_shutdown(name):
         return jsonify({'ok': True, 'message': f'{name} is shutting down via SSH.'})
     except Exception as e:
         app.logger.error(f'Shutdown failed for {name}: {e}')
-        return jsonify({'ok': False, 'error': _error_message(e)}), 500
+        return jsonify({'ok': False, 'error': _error_message(e, 'Shutdown')}), 502
 
 
 @app.route('/api/hosts/<name>/shutdown', methods=['POST'])

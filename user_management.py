@@ -6,7 +6,21 @@ import sqlite3
 import os
 from pathlib import Path
 from datetime import datetime
-from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.security import generate_password_hash as _werkzeug_hash, check_password_hash
+
+
+def fips_mode():
+    """True when only FIPS 140-3 approved algorithms may be used (FLEETPILOT_FIPS=true)."""
+    return os.environ.get('FLEETPILOT_FIPS', '').strip().lower() in ('1', 'true', 'yes', 'on')
+
+
+# scrypt is memory-hard but not FIPS-approved; FIPS mode uses PBKDF2-HMAC-SHA256
+# with the iteration count OWASP recommends.
+PASSWORD_METHOD = 'pbkdf2:sha256:600000' if fips_mode() else 'scrypt'
+
+
+def generate_password_hash(password):
+    return _werkzeug_hash(password, method=PASSWORD_METHOD)
 from functools import wraps
 from flask import session, redirect, url_for, flash, request
 
@@ -257,7 +271,7 @@ def delete_user(user_id):
 _DUMMY_HASH = generate_password_hash('fleetpilot-timing-equaliser')
 
 
-def verify_password(username, password):
+def verify_password(username, password, upgrade_hash=False):
     """
     Verify username and password.
     
@@ -270,6 +284,11 @@ def verify_password(username, password):
         check_password_hash(_DUMMY_HASH, password)
         return None
     if user['active'] and check_password_hash(user['password_hash'], password):
+        if upgrade_hash and not str(user['password_hash']).startswith(PASSWORD_METHOD.split(':')[0] + ':'):
+            # Re-hash with the configured method (for example after switching on FIPS mode).
+            with get_user_db() as db:
+                db.execute('UPDATE users SET password_hash = ? WHERE id = ?',
+                           (generate_password_hash(password), user['id']))
         return user['id']
     return None
 

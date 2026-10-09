@@ -129,6 +129,9 @@ def check_for_updates():
     Returns updated version data.
     """
     data = load_version_data()
+    from constants import offline_mode
+    if offline_mode():
+        return data  # no internet access allowed
     current_sha = get_current_commit_sha()
     branch = get_current_branch()
     
