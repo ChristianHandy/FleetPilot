@@ -1,6 +1,6 @@
-# Routers
+# Routers, repeaters and access points
 
-**Servers → Routers** shows the routers in your network: whether they are online,
+**Servers → Routers** shows the routers, repeaters and access points in your network: whether they are online,
 model and firmware, uptime, load, memory, interfaces and the devices that got an
 address from them (DHCP). Operators can check for updates and take configuration
 backups. Administrators add routers, download backups and restart routers.
@@ -14,6 +14,14 @@ backups. Administrators add routers, download backups and restart routers.
 | DD-WRT, FreshTomato | SSH | ✓ | ✓ | – | ✓ nvram | ✓ |
 | MikroTik RouterOS | SSH | ✓ | ✓ | ✓ | ✓ /export | ✓ |
 | IPFire, other Linux routers | SSH | ✓ | ✓ | – | – | ✓ |
+| AVM FRITZ!Box | TR-064 (HTTPS) | ✓ + internet line, Wi-Fi, Mesh | ✓ | ✓ FRITZ!OS | ✓ FRITZ! export | ✓ |
+| AVM FRITZ!Repeater | TR-064 (HTTPS) | ✓ + Wi-Fi | ✓ | ✓ FRITZ!OS | ✓ FRITZ! export | ✓ |
+| Any other repeater / access point | TCP check | online + response time | – | – | – | – |
+
+Each device has a **role**: router, repeater or access point. Repeaters built on
+OpenWrt (for example GL.iNet travel routers in repeater mode) get the full OpenWrt
+support; for repeaters without a management interface (TP-Link, Netgear,
+Devolo, …) FleetPilot checks that their web interface answers.
 
 FleetPilot **only checks** for router updates and never installs them. A router
 upgrade that fails can take the whole network down, so it stays a step you do in
@@ -71,6 +79,26 @@ restore it by re-entering settings, not by loading it as a binary.
 Create a group with `ssh,read,test` (add `reboot` and `write` only if you want
 restarts and update checks), a user `fleetpilot` in that group, and import the
 key with `/user ssh-keys import`. RouterOS 7 leaves passwords out of `/export`.
+
+### AVM FRITZ!Box and FRITZ!Repeater
+1. In the FRITZ! user interface: *Home Network → Network → Network Settings* →
+   enable *Allow access for applications* (TR-064).
+2. *System → FRITZ!Box Users*: add a user `fleetpilot` with a strong password and
+   the right *FRITZ!Box settings* (needed for the update check, backup and
+   restart; read-only access is not offered by AVM).
+3. Add the device in FleetPilot with that user and password, port 49443 (HTTPS).
+   Port 49000 is plain HTTP and only for testing.
+
+The Mesh table on the FRITZ!Box page lists every FRITZ! repeater in the mesh and
+how it is connected; add the repeaters themselves for their own Wi-Fi and device
+lists. Backups are the official FRITZ! export, encrypted by the device with the
+password of the `fleetpilot` user; you need that password to restore it under
+*System → Backup → Restore*. FRITZ! devices use a self-signed certificate, so
+"Check the device's HTTPS certificate" is off unless you installed your own.
+
+### Other repeaters and access points
+Choose *Other repeater / access point* and the port of its web interface (80 or
+443). FleetPilot connects every few minutes and reports when it stops answering.
 
 ### IPFire and other Linux routers
 Add FleetPilot's key to `/root/.ssh/authorized_keys`. Status uses `/proc`,

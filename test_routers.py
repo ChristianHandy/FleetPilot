@@ -410,3 +410,203 @@ def test_router_pages_and_permissions(fake_ssh, monkeypatch):
         assert "fleetpilot_router_up{" in fp.metrics.render({}, {}, None, None, None, rm)
     finally:
         fp.app.config["WTF_CSRF_ENABLED"] = True
+
+
+# ── AVM FRITZ!Box / FRITZ!Repeater (TR-064) and other repeaters ──────────────
+
+def _soap(action, values):
+    body = "".join(f"<{k}>{v}</{k}>" for k, v in values.items())
+    return (f'<?xml version="1.0"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>'
+            f'<u:{action}Response xmlns:u="urn:dslforum-org:service:X:1">{body}</u:{action}Response></s:Body></s:Envelope>')
+
+
+FRITZ_HOSTS = """<?xml version="1.0" encoding="utf-8"?><List>
+<Item><Index>1</Index><IPAddress>192.168.178.20</IPAddress><MACAddress>AA:BB:CC:00:00:20</MACAddress>
+<Active>1</Active><HostName>laptop</HostName><InterfaceType>802.11</InterfaceType></Item>
+<Item><Index>2</Index><IPAddress>192.168.178.21</IPAddress><MACAddress>AA:BB:CC:00:00:21</MACAddress>
+<Active>1</Active><HostName>nas</HostName><InterfaceType>Ethernet</InterfaceType></Item>
+<Item><Index>3</Index><IPAddress>192.168.178.22</IPAddress><MACAddress>AA:BB:CC:00:00:22</MACAddress>
+<Active>0</Active><HostName>old-phone</HostName><InterfaceType>802.11</InterfaceType></Item></List>"""
+FRITZ_MESH = json.dumps({"nodes": [
+    {"device_name": "fritz.box", "device_model": "FRITZ!Box 7590 AX", "is_meshed": True, "mesh_role": "master",
+     "device_firmware_version": "8.02", "node_interfaces": [{"type": "LAN", "node_links": [{"state": "CONNECTED"}]}]},
+    {"device_name": "Repeater Flur", "device_model": "FRITZ!Repeater 3000 AX", "is_meshed": True, "mesh_role": "slave",
+     "device_firmware_version": "8.02", "node_interfaces": [{"type": "WLAN", "node_links": [{"state": "CONNECTED"}]}]},
+    {"device_name": "phone", "is_meshed": False}]})
+
+
+def test_tr064_messages_and_parsers():
+    body = rm.soap_body("X_AVM-DE_GetConfigFile", "urn:dslforum-org:service:DeviceConfig:1",
+                        {"NewX_AVM-DE_Password": "a<b&c"})
+    assert "<NewX_AVM-DE_Password>a&lt;b&amp;c</NewX_AVM-DE_Password>" in body
+    assert rm.parse_soap_response(_soap("GetInfo", {"NewModelName": "FRITZ!Box 7590", "NewUpTime": "100"})) == {
+        "NewModelName": "FRITZ!Box 7590", "NewUpTime": "100"}
+    clients = rm.parse_fritz_hostlist(FRITZ_HOSTS)
+    assert [(c["hostname"], c["connection"]) for c in clients] == [("laptop", "Wi-Fi"), ("nas", "Ethernet")]
+    mesh = rm.parse_fritz_mesh(FRITZ_MESH)
+    assert [(m["name"], m["role"], m["connection"]) for m in mesh] == [
+        ("fritz.box", "Mesh master", "LAN"), ("Repeater Flur", "Mesh repeater", "Wi-Fi")]
+    with pytest.raises(ValueError):   # no entity expansion from device XML
+        rm.parse_soap_response('<?xml version="1.0"?><!DOCTYPE x [<!ENTITY a "aaaa">]><x>&a;</x>')
+
+
+class _FakeFritz:
+    """Answers TR-064 SOAP calls like a FRITZ!Box 7590 (or a repeater when wan=False)."""
+
+    def __init__(self, wan=True, update=False):
+        self.wan, self.update, self.calls = wan, update, []
+
+    def post(self, url, data=None, headers=None, auth=None, verify=None, timeout=None, allow_redirects=None):
+        action = headers["SOAPAction"].strip('"').split("#")[1]
+        path = url.split(":49443", 1)[1]
+        self.calls.append((path, action, type(auth).__name__, verify, allow_redirects))
+        answers = {
+            ("/upnp/control/deviceinfo", "GetInfo"): {"NewModelName": "FRITZ!Box 7590 AX" if self.wan else "FRITZ!Repeater 3000 AX",
+                                                      "NewSoftwareVersion": "8.02", "NewUpTime": "86400",
+                                                      "NewSerialNumber": "ABC123", "NewDescription": "FRITZ!Box 7590 AX 8.02"},
+            ("/upnp/control/wlanconfig1", "GetInfo"): {"NewEnable": "1", "NewSSID": "Home", "NewChannel": "6",
+                                                       "NewBSSID": "AA:00:00:00:00:01", "NewStatus": "Up"},
+            ("/upnp/control/wlanconfig1", "GetTotalAssociations"): {"NewTotalAssociations": "5"},
+            ("/upnp/control/wlanconfig2", "GetInfo"): {"NewEnable": "0", "NewSSID": "Home-5G", "NewChannel": "36"},
+            ("/upnp/control/wlanconfig2", "GetTotalAssociations"): {"NewTotalAssociations": "0"},
+            ("/upnp/control/hosts", "X_AVM-DE_GetHostListPath"): {"NewX_AVM-DE_HostListPath": "/devicehostlist.lua?sid=1"},
+            ("/upnp/control/hosts", "X_AVM-DE_GetMeshListPath"): {"NewX_AVM-DE_MeshListPath": "/meshlist.lua?sid=1"},
+            ("/upnp/control/userif", "GetInfo"): {"NewUpgradeAvailable": "1" if self.update else "0",
+                                                  "NewX_AVM-DE_Version": "8.10"},
+            ("/upnp/control/deviceconfig", "X_AVM-DE_GetConfigFile"):
+                {"NewX_AVM-DE_ConfigFileUrl": "https://192.168.178.1:49443/tmp/config.export?sid=1"},
+            ("/upnp/control/deviceconfig", "Reboot"): {},
+        }
+        if self.wan:
+            answers.update({
+                ("/upnp/control/wancommonifconfig1", "GetCommonLinkProperties"): {
+                    "NewWANAccessType": "DSL", "NewPhysicalLinkStatus": "Up",
+                    "NewLayer1DownstreamMaxBitRate": "250000000", "NewLayer1UpstreamMaxBitRate": "40000000"},
+                ("/upnp/control/wanpppconn1", "GetInfo"): {"NewConnectionStatus": "Connected", "NewUptime": "3600"},
+                ("/upnp/control/wanpppconn1", "GetExternalIPAddress"): {"NewExternalIPAddress": "198.51.100.5"},
+            })
+        if (path, action) not in answers:
+            return FakeResponse(status=500, data=None)
+        resp = FakeResponse(data={})
+        resp.text = _soap(action, answers[(path, action)])
+        return resp
+
+    def get(self, url, auth=None, verify=None, timeout=None, allow_redirects=None):
+        resp = FakeResponse()
+        if "devicehostlist" in url:
+            resp.text = FRITZ_HOSTS
+        elif "meshlist" in url:
+            resp.text = FRITZ_MESH
+        elif "config.export" in url:
+            resp.content = b"**** FRITZ!Box Configuration File\n" + b"x" * 100
+        return resp
+
+
+def test_fritzbox_driver(monkeypatch):
+    import requests
+    fake = _FakeFritz(update=True)
+    monkeypatch.setattr(requests, "post", fake.post)
+    monkeypatch.setattr(requests, "get", fake.get)
+    rid = rm.add_router({"name": "FRITZ!Box", "platform": "fritzbox", "host": "192.168.178.1",
+                         "username": "fleetpilot", "password": "box-pass-123"})
+    st = rm.poll(rid)
+    assert st["online"] and st["model"] == "FRITZ!Box 7590 AX" and st["firmware"] == "FRITZ!OS 8.02"
+    assert st["wan"] == {"access": "DSL", "link": "Up", "down_kbps": 250000, "up_kbps": 40000,
+                         "status": "Connected", "external_ip": "198.51.100.5", "uptime": 3600}
+    assert [(i["name"], i["up"], i["clients"]) for i in st["interfaces"]] == [("Wi-Fi 2.4 GHz", True, 5), ("Wi-Fi 5 GHz", False, 0)]
+    assert len(st["clients"]) == 2 and st["mesh"][1]["name"] == "Repeater Flur"
+    assert all(c[2] == "HTTPDigestAuth" and c[3] is False and c[4] is False for c in fake.calls)
+    assert rm.check_updates(rid)["items"] == ["FRITZ!OS 8.10"]
+    name = rm.backup(rid)
+    assert rm.read_backup(rid, name)[1].startswith(b"**** FRITZ!Box")
+    assert any(c[1] == "X_AVM-DE_GetConfigFile" for c in fake.calls)
+    rm.reboot(rid)
+    assert fake.calls[-1][1] == "Reboot"
+
+
+def test_fritz_repeater_without_internet_services(monkeypatch):
+    import requests
+    fake = _FakeFritz(wan=False)
+    monkeypatch.setattr(requests, "post", fake.post)
+    monkeypatch.setattr(requests, "get", fake.get)
+    rid = rm.add_router({"name": "Repeater", "platform": "fritzrepeater", "host": "192.168.178.30",
+                         "password": "rep-pass-123"})
+    assert rm.get_router(rid)["role"] == "repeater"
+    st = rm.poll(rid)
+    assert st["online"] and "wan" not in st and st["model"] == "FRITZ!Repeater 3000 AX"
+    assert rm.check_updates(rid)["count"] == 0
+
+
+def test_fritz_refuses_files_from_other_hosts(monkeypatch):
+    import requests
+    fake = _FakeFritz()
+    monkeypatch.setattr(requests, "post", lambda *a, **k: _redirect_config(fake, *a, **k))
+    monkeypatch.setattr(requests, "get", fake.get)
+    rid = rm.add_router({"name": "box", "platform": "fritzbox", "host": "192.168.178.1", "password": "x-pass-123"})
+    with pytest.raises(ValueError):
+        rm.backup(rid)
+
+
+def _redirect_config(fake, url, **kw):
+    resp = fake.post(url, **kw)
+    if "X_AVM-DE_GetConfigFile" in kw["headers"]["SOAPAction"]:
+        resp.text = _soap("X_AVM-DE_GetConfigFile", {"NewX_AVM-DE_ConfigFileUrl": "https://evil.example/steal"})
+    return resp
+
+
+def test_fritz_needs_a_password_and_rejects_bad_login(monkeypatch):
+    with pytest.raises(ValueError):
+        rm.add_router({"name": "nopass", "platform": "fritzbox", "host": "192.168.178.1"})
+    import requests
+    monkeypatch.setattr(requests, "post", lambda *a, **k: FakeResponse(status=401))
+    rid = rm.add_router({"name": "wrong", "platform": "fritzbox", "host": "192.168.178.1", "password": "wrong-pass"})
+    st = rm.poll(rid)
+    assert not st["online"] and "rejected" in st["error"]
+
+
+def test_generic_repeater_availability_check():
+    import socket
+    server = socket.socket()
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    port = server.getsockname()[1]
+    rid = rm.add_router({"name": "TP-Link RE700X", "platform": "generic", "host": "127.0.0.1", "port": port})
+    router = rm.get_router(rid)
+    assert router["role"] == "repeater" and router["role_label"] == "Repeater"
+    st = rm.poll(rid)
+    assert st["online"] and st["latency_ms"] >= 0
+    server.close()
+    st = rm.poll(rid)
+    assert not st["online"]
+    with pytest.raises(ValueError):
+        rm.reboot(rid)
+    with pytest.raises(ValueError):
+        rm.backup(rid)
+    with pytest.raises(ValueError):
+        rm.add_router({"name": "bad role", "platform": "generic", "host": "127.0.0.1", "role": "toaster"})
+
+
+def test_fritz_and_repeater_pages_render(monkeypatch):
+    import requests
+    fake = _FakeFritz()
+    monkeypatch.setattr(requests, "post", fake.post)
+    monkeypatch.setattr(requests, "get", fake.get)
+    fp.app.config.update(TESTING=True, WTF_CSRF_ENABLED=False)
+    user_management.init_user_db()
+    account_security.init_db()
+    client = fp.app.test_client()
+    _login(client, "fritz_admin", "admin")
+    try:
+        box = rm.add_router({"name": "FRITZ!Box 7590", "platform": "fritzbox", "host": "192.168.178.1",
+                             "password": "box-pass-123"})
+        rm.poll(box)
+        page = client.get(f"/routers/{box}").get_data(as_text=True)
+        for text in ("198.51.100.5", "Mesh", "Repeater Flur", "Wi-Fi 2.4 GHz", "5 devices", "TR-064"):
+            assert text in page, text
+        ap = rm.add_router({"name": "Garden AP", "platform": "generic", "host": "192.0.2.60", "role": "access_point"})
+        page = client.get(f"/routers/{ap}").get_data(as_text=True)
+        assert "Access point" in page and "Restart router" not in page
+        listing = client.get("/routers").get_data(as_text=True)
+        assert "Repeaters &amp; access points" in listing and "AVM FRITZ!Repeater" in listing
+    finally:
+        fp.app.config["WTF_CSRF_ENABLED"] = True

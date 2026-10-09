@@ -9,6 +9,9 @@ Supported platforms
   ddwrt     DD-WRT, FreshTomato                                 SSH (BusyBox, nvram)
   routeros  MikroTik RouterOS                                   SSH (RouterOS CLI)
   linux     IPFire and other Linux-based routers                SSH
+  fritzbox  AVM FRITZ!Box                                       TR-064 (HTTPS, digest auth)
+  fritzrepeater  AVM FRITZ!Repeater                             TR-064
+  generic   any other repeater or access point                  TCP availability check
 
 What FleetPilot reads: model, firmware, uptime, load, memory, interfaces and
 DHCP clients. Operators can check for updates, take configuration backups and
@@ -21,6 +24,9 @@ Security
   * SSH goes through ssh_helper (host keys verified, strict mode supported).
   * Passwords, API secrets and configuration backups (which contain Wi-Fi keys,
     PPPoE passwords and VPN keys) are encrypted with SecretBox.
+FRITZ!Box / FRITZ!Repeater use TR-064 (SOAP over HTTPS, digest authentication),
+the management interface AVM documents for third-party tools. Any other
+repeater or access point can be added for an availability check (TCP connect).
 """
 from __future__ import annotations
 
@@ -57,7 +63,18 @@ PLATFORMS: Dict[str, Dict[str, Any]] = {
                  "backup_ext": "rsc", "updates": True},
     "linux":    {"label": "IPFire / Linux router", "transport": "ssh", "port": 22, "user": "root",
                  "backup_ext": "", "updates": False},
+    "fritzbox": {"label": "AVM FRITZ!Box", "transport": "tr064", "port": 49443, "user": "",
+                 "backup_ext": "fritz.export", "updates": True},
+    "fritzrepeater": {"label": "AVM FRITZ!Repeater", "transport": "tr064", "port": 49443, "user": "",
+                      "backup_ext": "fritz.export", "updates": True, "role": "repeater"},
+    "generic":  {"label": "Other repeater / access point (availability only)", "transport": "tcp", "port": 80,
+                 "user": "", "backup_ext": "", "updates": False, "reboot": False, "role": "repeater"},
 }
+for _spec in PLATFORMS.values():
+    _spec.setdefault("role", "router")
+    _spec.setdefault("reboot", True)
+
+ROLES = {"router": "Router", "repeater": "Repeater", "access_point": "Access point"}
 
 MAX_TEXT = 2 * 1024 * 1024        # largest command output read from a router
 MAX_BACKUP = 20 * 1024 * 1024     # largest backup accepted
@@ -112,6 +129,8 @@ def init_db(data_dir: Optional[str] = None) -> None:
             created_at   REAL NOT NULL
         );
         """)
+        if "role" not in {r[1] for r in db.execute("PRAGMA table_info(routers)")}:
+            db.execute("ALTER TABLE routers ADD COLUMN role TEXT NOT NULL DEFAULT 'router'")
 
 
 def validate(fields: Dict[str, Any], existing: Optional[Dict] = None) -> Dict[str, Any]:
@@ -138,7 +157,12 @@ def validate(fields: Dict[str, Any], existing: Optional[Dict] = None) -> Dict[st
     username = str(fields.get("username") or spec["user"]).strip()
     if spec["transport"] == "ssh" and not re.fullmatch(r"[A-Za-z0-9._-]{1,32}", username):
         raise ValueError("The SSH user name may only contain letters, digits, dot, dash and underscore.")
-    clean = {"name": name, "platform": platform, "host": host, "port": port, "username": username,
+    if spec["transport"] == "tr064" and username and not re.fullmatch(r"[\w.@+-]{1,64}", username):
+        raise ValueError("The FRITZ!Box user name contains characters FleetPilot cannot send.")
+    role = str(fields.get("role") or (existing or {}).get("role") or spec["role"])
+    if role not in ROLES:
+        raise ValueError("Choose router, repeater or access point.")
+    clean = {"name": name, "platform": platform, "host": host, "port": port, "username": username, "role": role,
              "verify_tls": 1 if fields.get("verify_tls") in (True, 1, "1", "on", "true") else 0,
              "notes": str(fields.get("notes", "")).strip()[:500]}
     if spec["transport"] == "api":
@@ -151,6 +175,8 @@ def validate(fields: Dict[str, Any], existing: Optional[Dict] = None) -> Dict[st
         if secret:
             clean["api_secret"] = secret[:200]
     password = str(fields.get("password", ""))
+    if spec["transport"] == "tr064" and not existing and not password:
+        raise ValueError("Enter the password of the FRITZ! user FleetPilot should use.")
     if password:
         clean["password"] = password[:200]
     return clean
@@ -206,6 +232,7 @@ def _row(row: sqlite3.Row, secrets: bool) -> Dict[str, Any]:
     except ValueError:
         data["status"] = {}
     data["platform_label"] = PLATFORMS.get(data["platform"], {}).get("label", data["platform"])
+    data["role_label"] = ROLES.get(data.get("role") or "router", "Router")
     data["has_password"] = bool(data["password"])
     data["has_api_key"] = bool(data["api_key"])
     for secret in ("password", "api_key", "api_secret"):
@@ -695,14 +722,14 @@ class OpnsenseDriver:
                                 verify=bool(self.router.get("verify_tls")), timeout=kw.pop("timeout", 15),
                                 allow_redirects=False, **kw)
         if resp.status_code in (401, 403):
-            raise PermissionError("The OPNsense API rejected the key or it lacks the required privileges.")
+            raise safe_errors.AuthenticationError("The OPNsense API rejected the key or it lacks the required privileges.")
         resp.raise_for_status()
         return resp
 
     def _get(self, path: str) -> Any:
         try:
             return self._call("GET", path).json()
-        except PermissionError:
+        except safe_errors.AuthenticationError:
             raise
         except Exception:
             return None  # endpoint missing on this OPNsense version
@@ -759,8 +786,237 @@ class OpnsenseDriver:
         self._call("POST", "/api/core/system/reboot")
 
 
+# ── AVM FRITZ! (TR-064) ──────────────────────────────────────────────────────
+
+_SOAP_ENVELOPE = ('<?xml version="1.0" encoding="utf-8"?>'
+                  '<s:Envelope s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/" '
+                  'xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>'
+                  '<u:{action} xmlns:u="{service}">{arguments}</u:{action}></s:Body></s:Envelope>')
+
+# (control URL, service type) of the TR-064 services FleetPilot uses.
+TR064 = {
+    "deviceinfo": ("/upnp/control/deviceinfo", "urn:dslforum-org:service:DeviceInfo:1"),
+    "deviceconfig": ("/upnp/control/deviceconfig", "urn:dslforum-org:service:DeviceConfig:1"),
+    "userif": ("/upnp/control/userif", "urn:dslforum-org:service:UserInterface:1"),
+    "hosts": ("/upnp/control/hosts", "urn:dslforum-org:service:Hosts:1"),
+    "wancommon": ("/upnp/control/wancommonifconfig1", "urn:dslforum-org:service:WANCommonInterfaceConfig:1"),
+    "wanppp": ("/upnp/control/wanpppconn1", "urn:dslforum-org:service:WANPPPConnection:1"),
+    "wanip": ("/upnp/control/wanipconnection1", "urn:dslforum-org:service:WANIPConnection:1"),
+    "wlan1": ("/upnp/control/wlanconfig1", "urn:dslforum-org:service:WLANConfiguration:1"),
+    "wlan2": ("/upnp/control/wlanconfig2", "urn:dslforum-org:service:WLANConfiguration:2"),
+    "wlan3": ("/upnp/control/wlanconfig3", "urn:dslforum-org:service:WLANConfiguration:3"),
+    "wlan4": ("/upnp/control/wlanconfig4", "urn:dslforum-org:service:WLANConfiguration:4"),
+}
+
+
+def _safe_xml(text: str):
+    """Parse XML from a device, refusing DTDs (entity expansion / external entities)."""
+    import xml.etree.ElementTree as ET
+    if len(text) > MAX_TEXT:
+        raise ValueError("The device sent more data than FleetPilot accepts.")
+    if "<!DOCTYPE" in text or "<!ENTITY" in text:
+        raise ValueError("Refusing XML with a document type definition.")
+    # With DTDs refused there is no entity expansion, and expat never fetches external resources.
+    return ET.fromstring(text)  # nosec B314
+
+
+def soap_body(action: str, service: str, arguments: Optional[Dict[str, str]] = None) -> str:
+    from xml.sax.saxutils import escape
+    args = "".join(f"<{k}>{escape(str(v))}</{k}>" for k, v in (arguments or {}).items())
+    return _SOAP_ENVELOPE.format(action=action, service=service, arguments=args)
+
+
+def parse_soap_response(text: str) -> Dict[str, str]:
+    """Return the New* output arguments of a TR-064 response."""
+    root = _safe_xml(text)
+    out = {}
+    for el in root.iter():
+        tag = el.tag.rsplit("}", 1)[-1]
+        if tag.startswith("New"):
+            out[tag] = (el.text or "").strip()
+    return out
+
+
+def parse_fritz_hostlist(text: str) -> List[Dict[str, Any]]:
+    """The device list behind X_AVM-DE_GetHostListPath."""
+    clients = []
+    for item in _safe_xml(text).iter("Item"):
+        get = lambda name: (item.findtext(name) or "").strip()  # noqa: E731
+        if get("Active") != "1":
+            continue
+        kind = get("InterfaceType")
+        clients.append({"ip": get("IPAddress"), "mac": get("MACAddress").lower(), "hostname": get("HostName"),
+                        "expires": None,
+                        "connection": "Wi-Fi" if kind.startswith("802.11") else (kind or "")})
+    return clients
+
+
+def parse_fritz_mesh(text: str) -> List[Dict[str, Any]]:
+    """Mesh nodes from X_AVM-DE_GetMeshListPath: the box and its repeaters."""
+    data = _json(text) or {}
+    nodes = []
+    for node in data.get("nodes", []) if isinstance(data, dict) else []:
+        if not node.get("is_meshed"):
+            continue
+        links = []
+        for iface in node.get("node_interfaces", []):
+            for link in iface.get("node_links", []):
+                if link.get("state") == "CONNECTED":
+                    links.append(iface.get("type", ""))
+        nodes.append({"name": node.get("device_name", ""), "model": node.get("device_model", ""),
+                      "role": "Mesh master" if node.get("mesh_role") == "master" else "Mesh repeater",
+                      "firmware": node.get("device_firmware_version", ""),
+                      "connection": "Wi-Fi" if "WLAN" in links else ("LAN" if links else "")})
+    return nodes
+
+
+class Tr064Driver:
+    """FRITZ!Box and FRITZ!Repeater through TR-064 (HTTP digest authentication)."""
+
+    def __init__(self, router: Dict[str, Any]):
+        self.router = router
+        scheme = "http" if int(router["port"]) == 49000 else "https"
+        self.base = f'{scheme}://{router["host"]}:{int(router["port"])}'
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def _auth(self):
+        from requests.auth import HTTPDigestAuth
+        return HTTPDigestAuth(self.router.get("username") or "", self.router.get("password") or "")
+
+    def call(self, service: str, action: str, **arguments) -> Dict[str, str]:
+        import requests
+        url, stype = TR064[service]
+        resp = requests.post(self.base + url, data=soap_body(action, stype, arguments).encode(),
+                             headers={"Content-Type": 'text/xml; charset="utf-8"',
+                                      "SOAPAction": f'"{stype}#{action}"'},
+                             auth=self._auth(), verify=bool(self.router.get("verify_tls")),
+                             timeout=15, allow_redirects=False)
+        if resp.status_code == 401:
+            raise safe_errors.AuthenticationError("The FRITZ! device rejected the user name or password.")
+        if resp.status_code >= 400:
+            raise LookupError(f"{service}#{action} returned HTTP {resp.status_code}")
+        return parse_soap_response(resp.text)
+
+    def _try(self, service: str, action: str, **arguments) -> Dict[str, str]:
+        try:
+            return self.call(service, action, **arguments)
+        except safe_errors.AuthenticationError:
+            raise
+        except Exception:
+            return {}  # service not offered by this model (repeaters have no WAN, ...)
+
+    def _fetch(self, path_or_url: str):
+        """Download a file the device pointed to; it must be on the same device."""
+        import requests
+        from urllib.parse import urlsplit
+        target = path_or_url if "://" in path_or_url else self.base + "/" + path_or_url.lstrip("/")
+        if urlsplit(target).hostname != urlsplit(self.base).hostname:
+            raise ValueError("The device pointed to a file on another host.")
+        resp = requests.get(target, auth=self._auth(), verify=bool(self.router.get("verify_tls")),
+                            timeout=30, allow_redirects=False)
+        resp.raise_for_status()
+        return resp
+
+    def status(self) -> Dict[str, Any]:
+        info = self.call("deviceinfo", "GetInfo")   # must work, or the device is unreachable
+        status: Dict[str, Any] = {
+            "model": info.get("NewModelName", ""), "hostname": info.get("NewDescription", ""),
+            "firmware": f'FRITZ!OS {info["NewSoftwareVersion"]}' if info.get("NewSoftwareVersion") else "",
+            "uptime": int(info["NewUpTime"]) if info.get("NewUpTime", "").isdigit() else None,
+            "serial": info.get("NewSerialNumber", ""), "load": []}
+        # Internet connection (FRITZ!Box only)
+        link = self._try("wancommon", "GetCommonLinkProperties")
+        if link:
+            conn = self._try("wanppp", "GetInfo") or self._try("wanip", "GetInfo")
+            ext = self._try("wanppp", "GetExternalIPAddress") or self._try("wanip", "GetExternalIPAddress")
+            status["wan"] = {
+                "access": link.get("NewWANAccessType", ""), "link": link.get("NewPhysicalLinkStatus", ""),
+                "down_kbps": int(link.get("NewLayer1DownstreamMaxBitRate", "0") or 0) // 1000,
+                "up_kbps": int(link.get("NewLayer1UpstreamMaxBitRate", "0") or 0) // 1000,
+                "status": conn.get("NewConnectionStatus", ""), "external_ip": ext.get("NewExternalIPAddress", ""),
+                "uptime": int(conn["NewUptime"]) if conn.get("NewUptime", "").isdigit() else None}
+        # Wi-Fi networks
+        interfaces = []
+        for n in (1, 2, 3, 4):
+            wlan = self._try(f"wlan{n}", "GetInfo")
+            if not wlan or not wlan.get("NewSSID"):
+                continue
+            assoc = self._try(f"wlan{n}", "GetTotalAssociations")
+            band = {"1": "2.4 GHz", "2": "5 GHz"}.get(str(n), "Guest / 6 GHz")
+            interfaces.append({"name": f'Wi-Fi {band}', "device": wlan.get("NewSSID", ""),
+                               "up": wlan.get("NewEnable") == "1" and wlan.get("NewStatus", "Up") != "Disabled",
+                               "mac": wlan.get("NewBSSID", "").lower(),
+                               "ipv4": [], "proto": f'channel {wlan.get("NewChannel", "?")}',
+                               "clients": int(assoc["NewTotalAssociations"])
+                               if assoc.get("NewTotalAssociations", "").isdigit() else None})
+        status["interfaces"] = interfaces
+        # Devices and mesh
+        status["clients"] = []
+        path = self._try("hosts", "X_AVM-DE_GetHostListPath").get("NewX_AVM-DE_HostListPath")
+        if path:
+            try:
+                status["clients"] = parse_fritz_hostlist(self._fetch(path).text)
+            except Exception as exc:
+                logger.info("[routers] FRITZ! host list unavailable: %s", exc)
+        mesh = self._try("hosts", "X_AVM-DE_GetMeshListPath").get("NewX_AVM-DE_MeshListPath")
+        if mesh:
+            try:
+                status["mesh"] = parse_fritz_mesh(self._fetch(mesh).text)
+            except Exception as exc:
+                logger.info("[routers] FRITZ! mesh list unavailable: %s", exc)
+        return status
+
+    def updates(self) -> Dict[str, Any]:
+        info = self.call("userif", "GetInfo")
+        available = info.get("NewUpgradeAvailable") in ("1", "true")
+        version = info.get("NewX_AVM-DE_Version", "")
+        return {"count": 1 if available else 0,
+                "items": [f"FRITZ!OS {version}".strip()] if available else [],
+                "note": "Install it in the FRITZ! user interface under System → Update, or let the device "
+                        "update itself automatically." if available else "FRITZ!OS is up to date."}
+
+    def backup(self) -> bytes:
+        # The file is encrypted by the device with this password (the FleetPilot user's password).
+        result = self.call("deviceconfig", "X_AVM-DE_GetConfigFile",
+                           **{"NewX_AVM-DE_Password": self.router.get("password") or ""})
+        url = result.get("NewX_AVM-DE_ConfigFileUrl", "")
+        if not url:
+            raise RuntimeError("The FRITZ! device did not offer a configuration file.")
+        return self._fetch(url).content[:MAX_BACKUP + 1]
+
+    def reboot(self) -> None:
+        self.call("deviceconfig", "Reboot")
+
+
+class TcpCheckDriver:
+    """Any repeater or access point: is its web interface (or another TCP port) answering?"""
+
+    def __init__(self, router: Dict[str, Any]):
+        self.router = router
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def status(self) -> Dict[str, Any]:
+        import socket
+        started = time.perf_counter()
+        with socket.create_connection((self.router["host"], int(self.router["port"])), timeout=5):
+            pass
+        return {"latency_ms": round((time.perf_counter() - started) * 1000, 1), "interfaces": [], "clients": [],
+                "firmware": "", "model": "", "load": []}
+
+
 _DRIVERS = {"openwrt": OpenWrtDriver, "opnsense": OpnsenseDriver, "pfsense": PfsenseDriver, "vyos": VyosDriver,
-            "ddwrt": DdwrtDriver, "routeros": RouterOsDriver, "linux": LinuxDriver}
+            "ddwrt": DdwrtDriver, "routeros": RouterOsDriver, "linux": LinuxDriver,
+            "fritzbox": Tr064Driver, "fritzrepeater": Tr064Driver, "generic": TcpCheckDriver}
 
 
 def _driver(router: Dict[str, Any]):
@@ -856,6 +1112,8 @@ def reboot(router_id: int) -> None:
     router = get_router(router_id, secrets=True)
     if not router:
         raise ValueError("Router not found.")
+    if not PLATFORMS[router["platform"]]["reboot"]:
+        raise ValueError(f'FleetPilot cannot restart {router["platform_label"]} devices.')
     try:
         with _driver(router) as drv:
             drv.reboot()
@@ -869,7 +1127,8 @@ def summary() -> Dict[str, int]:
             "online": sum(1 for r in routers if r["online"]),
             "offline": sum(1 for r in routers if r["online"] == 0),
             "updates": sum(1 for r in routers if r["status"].get("updates", {}).get("count")),
-            "clients": sum(len(r["status"].get("clients") or []) for r in routers)}
+            "clients": sum(len(r["status"].get("clients") or []) for r in routers),
+            "repeaters": sum(1 for r in routers if r.get("role") in ("repeater", "access_point"))}
 
 
 # ── Notifications and background polling ────────────────────────────────────

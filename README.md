@@ -36,7 +36,7 @@ It combines remote update management, disk health monitoring, VM controller inte
 | **Remote Updates** | SSH-based updates for Ubuntu, Debian, Fedora, Arch, Windows (winget) |
 | **VM Controllers** | Proxmox integration with retry/backoff, VM status overview |
 | **Storage Controllers** | TrueNAS and custom storage system management |
-| **Routers** | OpenWrt, OPNsense, pfSense, VyOS, DD-WRT/FreshTomato, MikroTik RouterOS, IPFire: status, interfaces, DHCP clients, update checks, encrypted config backups. See [docs/routers.md](docs/routers.md) |
+| **Routers & repeaters** | AVM FRITZ!Box and FRITZ!Repeater (incl. Mesh), OpenWrt, OPNsense, pfSense, VyOS, DD-WRT/FreshTomato, MikroTik RouterOS, IPFire, plus availability checks for any repeater or access point: status, interfaces, DHCP clients, update checks, encrypted config backups. See [docs/routers.md](docs/routers.md) |
 | **Disk & SMART** | Format (ext4/XFS/FAT32), SMART tests, block validation, history |
 | **Monitoring** | CheckMK integration and a Prometheus `/metrics` endpoint, both token-authenticated |
 | **Alerts** | Email when a disk is newly flagged by SMART, when updates fail, and scheduled reports |

@@ -25,10 +25,14 @@ except ImportError:  # pragma: no cover
     _AUTH = ()
 
 
+class AuthenticationError(Exception):
+    """A device or service rejected the user name, password, key or token."""
+
+
 def public_error(exc, action='The request'):
     """Log ``exc`` and return a message for users that reveals no internals."""
     logger.warning('%s failed: %s: %s', action, type(exc).__name__, exc)
-    if _AUTH and isinstance(exc, _AUTH):
+    if isinstance(exc, AuthenticationError) or (_AUTH and isinstance(exc, _AUTH)):
         return f'{action} failed: the user name or password was rejected.'
     if isinstance(exc, _TIMEOUTS):
         return f'{action} timed out.'

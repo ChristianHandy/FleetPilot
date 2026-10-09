@@ -4872,6 +4872,7 @@ def _router_or_404(router_id):
 def routers_index():
     return render_template('routers/index.html', routers=router_manager.list_routers(),
                            summary=router_manager.summary(), platforms=router_manager.PLATFORMS,
+                           roles=router_manager.ROLES,
                            is_admin=current_user_has_role('admin'),
                            can_operate=current_user_has_role('operator', 'admin'))
 
@@ -4899,6 +4900,7 @@ def routers_add():
 def routers_detail(router_id):
     router = _router_or_404(router_id)
     return render_template('routers/detail.html', router=router, platforms=router_manager.PLATFORMS,
+                           roles=router_manager.ROLES,
                            spec=router_manager.PLATFORMS[router['platform']],
                            backups=router_manager.list_backups(router_id),
                            is_admin=current_user_has_role('admin'),

@@ -1,13 +1,14 @@
 {% extends "base.html" %}
 {% from "_macros.html" import stat_tile %}
 {% block title %}Routers{% endblock %}
-{% block page_subtitle %}OpenWrt, OPNsense, pfSense, VyOS, DD-WRT/FreshTomato, MikroTik RouterOS and other Linux routers.{% endblock %}
-{% block page_actions %}{% if is_admin %}<a class="btn btn-primary btn-sm" href="#add-router">{{ icon('plus') }} Add router</a>{% endif %}{% endblock %}
+{% block page_subtitle %}Routers, repeaters and access points: FRITZ!Box and FRITZ!Repeater, OpenWrt, OPNsense, pfSense, VyOS, DD-WRT/FreshTomato, MikroTik RouterOS and more.{% endblock %}
+{% block page_actions %}{% if is_admin %}<a class="btn btn-primary btn-sm" href="#add-router">{{ icon('plus') }} Add device</a>{% endif %}{% endblock %}
 {% block content %}
 <div class="stat-grid-v4 mb-3">
   {{ stat_tile(summary.total, 'Routers', 'network', 'blue') }}
   {{ stat_tile(summary.online, 'Online', 'check-circle', 'green') }}
   {{ stat_tile(summary.offline, 'Offline', 'x-circle', 'red' if summary.offline else '') }}
+  {{ stat_tile(summary.repeaters, 'Repeaters & access points', 'radio') }}
   {{ stat_tile(summary.updates, 'With updates', 'download', 'amber' if summary.updates else '') }}
 </div>
 
@@ -23,11 +24,11 @@
         {% set st = r.status %}
         <tr>
           <td><a href="{{ url_for('routers_detail', router_id=r.id) }}"><strong>{{ r.name }}</strong></a>
-            <div class="text-muted small"><code>{{ r.host }}</code> · {{ r.platform_label }}</div></td>
+            <div class="text-muted small"><code>{{ r.host }}</code> · {{ r.platform_label }}{% if r.role != 'router' %} · <span class="badge badge-blue">{{ r.role_label }}</span>{% endif %}</div></td>
           <td>{% if r.online is none %}<span class="status-pill offline">Not checked</span>
               {% elif r.online %}<span class="status-pill online">Online</span>
               {% else %}<span class="status-pill critical">Offline</span>{% endif %}</td>
-          <td>{{ st.firmware or '—' }}{% if st.model %}<div class="text-muted small">{{ st.model }}</div>{% endif %}</td>
+          <td>{{ st.firmware or ('Responds in ' ~ st.latency_ms ~ ' ms' if st.latency_ms is defined else '—') }}{% if st.model %}<div class="text-muted small">{{ st.model }}</div>{% endif %}</td>
           <td>{{ st.uptime|fp_duration if r.online else '—' }}</td>
           <td class="text-end num">{{ (st.clients or [])|length if r.online else '—' }}</td>
           <td>{% if st.updates is defined and st.updates %}
@@ -47,7 +48,7 @@
 
 {% if is_admin %}
 <section class="card-v4" id="add-router" aria-labelledby="add-title">
-  <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="add-title">Add a router</h2></div>
+  <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="add-title">Add a router, repeater or access point</h2></div>
   <div class="card-v4-body">
     <form method="post" action="{{ url_for('routers_add') }}" id="router-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -56,7 +57,7 @@
           <label class="form-label" for="r-platform">System</label>
           <select class="form-select" id="r-platform" name="platform" required>
             {% for key, p in platforms.items() %}
-              <option value="{{ key }}" data-port="{{ p.port }}" data-user="{{ p.user }}" data-transport="{{ p.transport }}">{{ p.label }}</option>
+              <option value="{{ key }}" data-port="{{ p.port }}" data-user="{{ p.user }}" data-transport="{{ p.transport }}" data-role="{{ p.role }}">{{ p.label }}</option>
             {% endfor %}
           </select>
         </div>
@@ -73,28 +74,35 @@
           <input class="form-control" id="r-port" name="port" type="number" min="1" max="65535" value="22">
         </div>
 
-        <div class="col-sm-6 col-lg-4 r-ssh">
-          <label class="form-label" for="r-user">SSH user</label>
-          <input class="form-control" id="r-user" name="username" value="root" autocomplete="off" spellcheck="false">
+        <div class="col-sm-6 col-lg-4">
+          <label class="form-label" for="r-role">Role</label>
+          <select class="form-select" id="r-role" name="role">
+            {% for key, label in roles.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+          </select>
         </div>
-        <div class="col-sm-6 col-lg-4 r-ssh">
-          <label class="form-label" for="r-pass">SSH password <span class="text-muted">(optional)</span></label>
+        <div class="col-sm-6 col-lg-4 r-user">
+          <label class="form-label" for="r-user"><span class="r-user-label">SSH user</span></label>
+          <input class="form-control" id="r-user" name="username" value="root" autocomplete="off" spellcheck="false" aria-describedby="r-user-hint">
+          <div class="form-hint" id="r-user-hint"></div>
+        </div>
+        <div class="col-sm-6 col-lg-4 r-pass">
+          <label class="form-label" for="r-pass"><span class="r-pass-label">SSH password</span></label>
           <input class="form-control" id="r-pass" name="password" type="password" autocomplete="new-password" aria-describedby="r-pass-hint">
-          <div class="form-hint" id="r-pass-hint">Leave empty to sign in with FleetPilot's SSH key (recommended).</div>
+          <div class="form-hint" id="r-pass-hint"></div>
         </div>
 
-        <div class="col-sm-6 col-lg-4 r-api" hidden>
+        <div class="col-sm-6 col-lg-4 r-key" hidden>
           <label class="form-label" for="r-key">API key</label>
           <input class="form-control" id="r-key" name="api_key" autocomplete="off" spellcheck="false">
         </div>
-        <div class="col-sm-6 col-lg-4 r-api" hidden>
+        <div class="col-sm-6 col-lg-4 r-secret" hidden>
           <label class="form-label" for="r-secret">API secret</label>
           <input class="form-control" id="r-secret" name="api_secret" type="password" autocomplete="new-password">
         </div>
-        <div class="col-12 r-api" hidden>
+        <div class="col-12 r-tls" hidden>
           <label class="d-inline-flex gap-2 align-items-center" style="font-weight:400">
-            <input type="checkbox" name="verify_tls" value="1" checked> Check the router's HTTPS certificate</label>
-          <div class="form-hint">Turn off only for the self-signed certificate OPNsense creates on first boot.</div>
+            <input type="checkbox" name="verify_tls" value="1" id="r-tls"> Check the device's HTTPS certificate</label>
+          <div class="form-hint" id="r-tls-hint"></div>
         </div>
         <div class="col-12">
           <label class="form-label" for="r-notes">Notes <span class="text-muted">(optional)</span></label>
@@ -102,27 +110,46 @@
         </div>
       </div>
       <p class="form-hint mt-3 mb-2">Setup for each system is described in <code>docs/routers.md</code>. Passwords and API secrets are stored encrypted.</p>
-      <button class="btn btn-primary" type="submit">Add router</button>
+      <button class="btn btn-primary" type="submit">Add device</button>
     </form>
   </div>
 </section>
 <script>
 (function () {
   var select = document.getElementById('r-platform');
-  function apply(initial) {
+  // Which fields each connection type needs, and the texts shown with them.
+  var FORMS = {
+    ssh:   {show: ['r-user', 'r-pass'], user: 'SSH user', pass: 'SSH password (optional)',
+            userHint: '', passHint: "Leave empty to sign in with FleetPilot's SSH key (recommended).", tls: false},
+    api:   {show: ['r-key', 'r-secret', 'r-tls'], tls: true,
+            tlsHint: 'Turn off only for the self-signed certificate OPNsense creates on first boot.'},
+    tr064: {show: ['r-user', 'r-pass', 'r-tls'], user: 'FRITZ! user', pass: 'Password',
+            userHint: 'A FRITZ! user with the right "FRITZ!Box settings". Leave empty only if the device uses a password without user name.',
+            passHint: 'Backups are encrypted by the FRITZ! device with this password.', tls: false,
+            tlsHint: 'FRITZ! devices use a self-signed certificate on port 49443, so this is off unless you installed your own certificate.'},
+    tcp:   {show: [], tls: false}
+  };
+  function apply() {
     var opt = select.options[select.selectedIndex];
-    var api = opt.dataset.transport === 'api';
-    document.querySelectorAll('#router-form .r-api').forEach(function (el) { el.hidden = !api; });
-    document.querySelectorAll('#router-form .r-ssh').forEach(function (el) { el.hidden = api; });
-    document.getElementById('r-key').required = api;
-    document.getElementById('r-secret').required = api;
-    if (!initial) {
-      document.getElementById('r-port').value = opt.dataset.port;
-      document.getElementById('r-user').value = opt.dataset.user;
-    }
+    var form = FORMS[opt.dataset.transport];
+    ['r-user', 'r-pass', 'r-key', 'r-secret', 'r-tls'].forEach(function (cls) {
+      document.querySelectorAll('#router-form .' + cls).forEach(function (el) { el.hidden = form.show.indexOf(cls) === -1; });
+    });
+    document.getElementById('r-key').required = opt.dataset.transport === 'api';
+    document.getElementById('r-secret').required = opt.dataset.transport === 'api';
+    document.getElementById('r-pass').required = opt.dataset.transport === 'tr064';
+    if (form.user) document.querySelector('.r-user-label').textContent = form.user;
+    if (form.pass) document.querySelector('.r-pass-label').textContent = form.pass;
+    document.getElementById('r-user-hint').textContent = form.userHint || '';
+    document.getElementById('r-pass-hint').textContent = form.passHint || '';
+    document.getElementById('r-tls-hint').textContent = form.tlsHint || '';
+    document.getElementById('r-tls').checked = form.tls;
+    document.getElementById('r-port').value = opt.dataset.port;
+    document.getElementById('r-user').value = opt.dataset.user;
+    document.getElementById('r-role').value = opt.dataset.role;
   }
-  select.addEventListener('change', function () { apply(false); });
-  apply(false);
+  select.addEventListener('change', apply);
+  apply();
 })();
 </script>
 {% endif %}
