@@ -3740,7 +3740,7 @@ def server_update():
             sudo_pw = request.form.get('sudo_password', '')
             if not sudo_pw:
                 return jsonify({'error': 'Sudo password required for reboot'}), 400
-            import subprocess, threading
+            import subprocess
             def _do_reboot():
                 import time
                 time.sleep(2)  # Give the HTTP response time to reach the browser

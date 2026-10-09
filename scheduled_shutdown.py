@@ -102,7 +102,15 @@ def add_schedule(name, host, port, username, password, ssh_key,
         return cur.lastrowid
 
 
+_SCHEDULE_COLUMNS = {'name', 'host', 'port', 'username', 'password', 'ssh_key', 'shutdown_time',
+                     'days', 'enabled', 'warn_minutes', 'action', 'last_run', 'last_status'}
+
+
 def update_schedule(sid, **kwargs):
+    # Column names are interpolated below, so only known columns may pass.
+    kwargs = {k: v for k, v in kwargs.items() if k in _SCHEDULE_COLUMNS}
+    if not kwargs:
+        return
     if 'days' in kwargs and isinstance(kwargs['days'], list):
         kwargs['days'] = json.dumps(kwargs['days'])
     sets = ', '.join(f'{k}=?' for k in kwargs)
