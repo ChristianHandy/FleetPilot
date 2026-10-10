@@ -1,10 +1,10 @@
 import runtime_env  # must stay first: loads .env and SECRET_KEY before other modules
-from flask import Flask, render_template, redirect, session, request, flash, jsonify, send_file, url_for, make_response, abort
+from flask import Flask, render_template, redirect, session, request, flash, jsonify, send_file, url_for, make_response, abort, g
 from markupsafe import escape as html_escape
 import re, time as _time
 from collections import defaultdict
 from i18n import get_translator, SUPPORTED_LANGUAGES
-import json, threading, paramiko, os, secrets, hmac
+import json, threading, paramiko, os, secrets, hmac, socket, concurrent.futures
 import requests
 import sqlite3
 import audit_log
@@ -456,10 +456,11 @@ with app.app_context():
     if _REGISTRY_AVAILABLE:
         try:
             _reg = _registry.get_registry(DATA_DIR)
-            _reg.import_from_hosts_json(os.path.join(DATA_DIR, 'hosts.json'))
-            _reg.import_from_hw_monitor_db(os.path.join(DATA_DIR, 'hw_monitor.db'))
-            _reg.import_from_fan_controller_db(os.path.join(DATA_DIR, 'fan_controller.db'))
-            _reg.import_from_backup_db(os.path.join(DATA_DIR, 'backup_controller.db'))
+            with _reg.batch():   # one transaction instead of one commit per server
+                _reg.import_from_hosts_json(os.path.join(DATA_DIR, 'hosts.json'))
+                _reg.import_from_hw_monitor_db(os.path.join(DATA_DIR, 'hw_monitor.db'))
+                _reg.import_from_fan_controller_db(os.path.join(DATA_DIR, 'fan_controller.db'))
+                _reg.import_from_backup_db(os.path.join(DATA_DIR, 'backup_controller.db'))
             print(f'[ServerRegistry] Ready — {_reg.stats()["total_servers"]} servers registered')
         except Exception as _re:
             print(f'[ServerRegistry] Init error: {_re}')
@@ -481,7 +482,7 @@ def inject_user_context():
     is_admin = False
     is_operator = False
     if user_id:
-        user_roles = user_management.get_user_role_names(user_id)
+        user_roles = _roles_of(user_id)
         is_admin = 'admin' in user_roles
         is_operator = 'operator' in user_roles or is_admin
     return dict(
@@ -540,12 +541,20 @@ def inject_version_notification():
 logs = {}  # type: dict
 _LOGS_MAX_SIZE = 100  # max log entries to prevent memory leak
 
+def _roles_of(user_id):
+    """Role names of ``user_id``, looked up once per request."""
+    cache = g.setdefault('fp_roles', {})
+    if user_id not in cache:
+        cache[user_id] = user_management.get_user_role_names(user_id)
+    return cache[user_id]
+
+
 def current_user_has_role(*roles):
     """Check if the current logged-in user has any of the specified roles."""
     user_id = session.get("user_id")
     if not user_id:
         return False
-    user_roles = user_management.get_user_role_names(user_id)
+    user_roles = _roles_of(user_id)
     # Admin has access to everything
     if 'admin' in user_roles:
         return True
@@ -868,18 +877,43 @@ def healthz():
     return jsonify({'status': 'ok'}), 200
 
 
-def is_online(host, user):
-    # Check if this is localhost
+_ONLINE_CACHE = {}            # (host, port) -> (checked_at, online)
+_ONLINE_TTL = 30              # seconds a result is reused
+_ONLINE_TIMEOUT = 1.5         # seconds per connection attempt
+
+
+def is_online(host, user=None, port=22):
+    """True if the host's SSH port accepts connections.
+
+    Only a TCP connection is made: no SSH login, so nothing shows up as a failed
+    authentication in the host's logs (fail2ban, auth.log).
+    """
     if is_localhost(host):
-        # For localhost, just return True (we're always online to ourselves)
         return True
-    
+    key = (host, int(port or 22))
+    cached = _ONLINE_CACHE.get(key)
+    if cached and _time.time() - cached[0] < _ONLINE_TTL:
+        return cached[1]
     try:
-        client = ssh_helper.create_client(hostname=host, username=user, timeout=3)
-        client.close()
-        return True
-    except Exception:
-        return False
+        with socket.create_connection(key, timeout=_ONLINE_TIMEOUT):
+            online = True
+    except (OSError, ValueError):
+        online = False
+    if len(_ONLINE_CACHE) > 5000:
+        _ONLINE_CACHE.clear()
+    _ONLINE_CACHE[key] = (_time.time(), online)
+    return online
+
+
+def hosts_online(hosts):
+    """{name: online} for all hosts, checked in parallel."""
+    if not hosts:
+        return {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(32, len(hosts))) as pool:
+        futures = {name: pool.submit(is_online, h.get("host", ""), h.get("user"), h.get("port") or 22)
+                   for name, h in hosts.items()}
+        return {name: f.result() for name, f in futures.items()}
+
 
 # Predefined tag palette for hosts
 HOST_TAG_PRESETS = [
@@ -941,24 +975,29 @@ def _sync_hosts_to_registry(hosts):
         return
     try:
         registry = _registry.get_registry(DATA_DIR)
-        for name, data in hosts.items():
-            server_id = registry.upsert_server(
-                name=name,
-                host=data.get('host', ''),
-                port=data.get('port', 22),
-                user=data.get('user', 'root'),
-                ssh_key=data.get('ssh_key', ''),
-                description=data.get('description', ''),
-                location=data.get('location', ''),
-                environment=data.get('environment', 'Production'),
-                criticality=data.get('criticality', 'Medium'),
-                tags=data.get('tags', []),
-                mac=data.get('mac', ''),
-                notes=data.get('notes', ''),
-            )
-            registry.register_module(server_id, 'update_manager')
+        with registry.batch():
+            _sync_hosts_into(registry, hosts)
     except Exception as registry_error:
         app.logger.warning('[ServerRegistry] Host sync error: %s', registry_error)
+
+
+def _sync_hosts_into(registry, hosts):
+    for name, data in hosts.items():
+        server_id = registry.upsert_server(
+            name=name,
+            host=data.get('host', ''),
+            port=data.get('port', 22),
+            user=data.get('user', 'root'),
+            ssh_key=data.get('ssh_key', ''),
+            description=data.get('description', ''),
+            location=data.get('location', ''),
+            environment=data.get('environment', 'Production'),
+            criticality=data.get('criticality', 'Medium'),
+            tags=data.get('tags', []),
+            mac=data.get('mac', ''),
+            notes=data.get('notes', ''),
+        )
+        registry.register_module(server_id, 'update_manager')
 
 
 def _discover_host_and_store(name):
@@ -1060,7 +1099,7 @@ def _session_is_valid(user):
 def _needs_2fa_enrolment(user_id):
     if session.get('api_token_id') or not account_security.get_settings()['require_2fa_admins']:
         return False
-    if not _2FA_AVAILABLE or 'admin' not in user_management.get_user_role_names(user_id):
+    if not _2FA_AVAILABLE or 'admin' not in _roles_of(user_id):
         return False
     return not _2fa.user_has_2fa(user_id)
 
@@ -1700,8 +1739,8 @@ def _security_checks():
         'FleetPilot is reached over plain HTTP, so passwords cross the network unencrypted. Put it behind HTTPS.',
         url_for('proxy_services') if 'proxy_services' in app.view_functions else None)
 
-    admins = [u for u in user_management.list_users()
-              if u['active'] and 'admin' in user_management.get_user_role_names(u['id'])]
+    all_roles = user_management.roles_by_user()
+    admins = [u for u in user_management.list_users() if u['active'] and 'admin' in all_roles.get(u['id'], [])]
     no_2fa = [u['username'] for u in admins if not (_2FA_AVAILABLE and _2fa.user_has_2fa(u['id']))]
     add('Two-factor sign-in for admins', 'ok' if not no_2fa else ('warn' if settings['require_2fa_admins'] else 'bad'),
         'Every administrator uses a second factor.' if not no_2fa else
@@ -1766,7 +1805,7 @@ def _security_checks():
         add('Unused accounts', 'warn', f'Not used for 90 days: {", ".join(stale)}. Consider deactivating them.',
             url_for('users_list'))
 
-    chain = audit_log.verify_chain()
+    chain = audit_log.verify_chain_cached()
     add('Audit trail integrity', 'ok' if chain['ok'] else 'bad',
         f'{chain["checked"]} chained events verified; none were changed or removed.' if chain['ok'] else
         f'The audit trail was modified at event #{chain["first_bad_id"]}. Investigate and keep the CSV export as evidence.',
@@ -2220,7 +2259,7 @@ def dashboard():
             history = json.load(_hf)
     except (FileNotFoundError, json.JSONDecodeError):
         history = []
-    status = {n: is_online(h["host"], h["user"]) for n, h in hosts.items()}
+    status = hosts_online(hosts)
     
     # Load update settings for display
     settings = scheduler.load_update_settings()
@@ -3216,16 +3255,16 @@ def users_list():
         return redirect(url_for('index'))
     
     users = user_management.list_users()
-    roles_by_user = {}
-    for user in users:
-        roles_by_user[user['id']] = user_management.get_user_role_names(user['id'])
+    all_roles = user_management.roles_by_user()
+    roles_by_user = {user['id']: all_roles.get(user['id'], []) for user in users}
     
     return render_template('users/list.html', users=users, roles_by_user=roles_by_user)
 
 def _other_active_admins(uid):
     """Number of active admins other than ``uid``."""
+    all_roles = user_management.roles_by_user()
     return sum(1 for u in user_management.list_users()
-               if u['id'] != uid and u['active'] and 'admin' in user_management.get_user_role_names(u['id']))
+               if u['id'] != uid and u['active'] and 'admin' in all_roles.get(u['id'], []))
 
 
 @app.route("/users/add", methods=["GET", "POST"])
@@ -3506,7 +3545,7 @@ def add_security_headers(response):
 
 # ---- Network Scanner Routes ----
 
-import socket, subprocess, concurrent.futures
+import subprocess
 
 def _detect_hostname(ip):
     """Try reverse DNS lookup for a discovered IP."""
@@ -4223,12 +4262,17 @@ def plugin_repository_json():
     import urllib.error
     if offline_mode():
         return jsonify({"plugins": [], "offline": True})
+    data = cache_get('plugin_repository')
+    if data is not None:
+        return app.response_class(data, mimetype="application/json")
     try:
         resp = requests.get(REMOTE_PLUGIN_REPO, timeout=5)
         resp.raise_for_status()
         data = resp.text
+        cache_set('plugin_repository', data, ttl=600)
         return app.response_class(data, mimetype="application/json")
     except Exception:
+        cache_set('plugin_repository', '{"plugins": []}', ttl=600)  # do not retry on every page view
         return jsonify({"plugins": []})
 
 

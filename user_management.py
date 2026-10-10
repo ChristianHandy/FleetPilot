@@ -268,7 +268,15 @@ def delete_user(user_id):
                 pass  # table not created yet
         db.commit()
 
-_DUMMY_HASH = generate_password_hash('fleetpilot-timing-equaliser')
+_DUMMY_HASH = None
+
+
+def _dummy_hash():
+    """Hash used to spend equal time on unknown user names; made on first use, not at import."""
+    global _DUMMY_HASH
+    if _DUMMY_HASH is None:
+        _DUMMY_HASH = generate_password_hash('fleetpilot-timing-equaliser')
+    return _DUMMY_HASH
 
 
 def verify_password(username, password, upgrade_hash=False):
@@ -281,7 +289,7 @@ def verify_password(username, password, upgrade_hash=False):
     user = get_user(username)
     if not user:
         # Spend the same time as a real check so response timing does not reveal usernames.
-        check_password_hash(_DUMMY_HASH, password)
+        check_password_hash(_dummy_hash(), password)
         return None
     if user['active'] and check_password_hash(user['password_hash'], password):
         if upgrade_hash and not str(user['password_hash']).startswith(PASSWORD_METHOD.split(':')[0] + ':'):
@@ -306,6 +314,16 @@ def get_user_role_names(user_id):
     """Get role names for a user as a list."""
     roles = get_user_roles(user_id)
     return [role['name'] for role in roles]
+
+def roles_by_user():
+    """{user_id: [role names]} for every user, in one query."""
+    result = {}
+    with get_user_db() as db:
+        for row in db.execute('SELECT ur.user_id, r.name FROM user_roles ur JOIN roles r ON r.id = ur.role_id '
+                              'ORDER BY r.name'):
+            result.setdefault(row['user_id'], []).append(row['name'])
+    return result
+
 
 def user_has_role(user_id, role_name):
     """Check if user has a specific role."""

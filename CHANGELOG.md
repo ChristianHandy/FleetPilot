@@ -28,6 +28,18 @@ Alle bemerkenswerten Änderungen an FleetPilot werden in diesem Dokument festgeh
 - Security center: notice that must be accepted before sign-in, absolute session lifetime (default 12 hours), configurable account lockout, audit-trail integrity check.
 - The audit trail is HMAC-chained so changed or deleted events are detected, and every event is also logged as JSON for forwarding to a SIEM.
 
+### Performance
+
+- Update dashboard: hosts are checked in parallel with a TCP connection to the SSH port (cached 30 s) instead of a full SSH login one after another. With 10 switched-off hosts a page view went from 30 s to 1.6 s (then instant); monitored hosts no longer log failed SSH logins from FleetPilot.
+- HW Monitor polls every 8 s only while someone views it, otherwise every 30 s (history resolution unchanged): about 70 % fewer SSH logins to monitored servers.
+- Role checks are read once per request; user list and security center use one query for all users' roles; the audit-chain check is reused for 5 minutes.
+- Server-registry imports at startup and host saves use one database transaction instead of one commit per server; the timing-equaliser password hash is created on first use instead of at startup.
+- The online plugin catalogue is cached for 10 minutes (also when GitHub is unreachable) instead of being downloaded on every page view.
+
+### Fixed
+
+- HW Monitor never imported servers from hosts.json (it expected a list); it now does, and stores SSH passwords encrypted like every other module (existing plain-text passwords are encrypted at start).
+
 ### Security
 
 - All fonts, icons, Bootstrap and Chart.js are served by FleetPilot; pages no longer contact Google Fonts or CDNs (GDPR, air-gapped networks) and the Content-Security-Policy only allows FleetPilot itself.

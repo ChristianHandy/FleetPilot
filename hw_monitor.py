@@ -12,8 +12,21 @@ New in this version:
 """
 
 import safe_errors
+import secret_box
 import paramiko
 import ssh_helper, threading, time, json, os, re, shlex, sqlite3, datetime, uuid
+
+_box = secret_box.SecretBox("sha256")
+
+
+def _enc(password):
+    """Encrypt an SSH password for storage (empty stays empty)."""
+    return _box.encrypt(password) if password else ""
+
+
+def _pw(row):
+    """Decrypted SSH password of a hw_servers row; plain values from old versions still work."""
+    return _box.decrypt(row["ssh_pass"] or "")
 
 # ─── Database ────────────────────────────────────────────────────────────────
 
@@ -43,7 +56,11 @@ def _auto_import_from_hosts(data_dir):
         with open(hosts_path) as f:
             hosts = _json.load(f)
         conn = get_db(data_dir)
-        for h in hosts:
+        # hosts.json is {name: settings}; very old versions wrote a list.
+        entries = [dict(h, name=h.get('name') or n) for n, h in hosts.items()] if isinstance(hosts, dict) else hosts
+        for h in entries:
+            if not isinstance(h, dict):
+                continue
             ip = h.get('ip') or h.get('address') or h.get('host')
             name = h.get('name') or h.get('hostname') or ip
             port = int(h.get('port') or h.get('ssh_port') or 22)
@@ -54,14 +71,16 @@ def _auto_import_from_hosts(data_dir):
             # Upsert: insert if not exists, update credentials if exists
             existing = conn.execute('SELECT id FROM hw_servers WHERE ip=?', (ip,)).fetchone()
             if existing:
+                # Keep a password set in HW Monitor when hosts.json has none.
                 conn.execute(
-                    'UPDATE hw_servers SET name=?, ssh_port=?, ssh_user=?, ssh_pass=?, enabled=1 WHERE ip=?',
-                    (name, port, user, pw, ip)
-                )
+                    'UPDATE hw_servers SET name=?, ssh_port=?, ssh_user=?, enabled=1 WHERE ip=?',
+                    (name, port, user, ip))
+                if pw:
+                    conn.execute('UPDATE hw_servers SET ssh_pass=? WHERE ip=?', (_enc(pw), ip))
             else:
                 conn.execute(
                     'INSERT INTO hw_servers (name, ip, ssh_port, ssh_user, ssh_pass, enabled) VALUES (?,?,?,?,?,1)',
-                    (name, ip, port, user, pw)
+                    (name, ip, port, user, _enc(pw))
                 )
         conn.commit()
         conn.close()
@@ -143,6 +162,9 @@ def init_db(data_dir):
         except: pass
     conn.execute("UPDATE hw_servers SET stress_log='/root/hw_stress_test/stress_test.log' WHERE stress_log IS NULL")
     conn.execute("UPDATE hw_servers SET stress_script='/root/hw_stress_test.py' WHERE stress_script IS NULL")
+    # Encrypt passwords stored in plain text by earlier versions.
+    for row in conn.execute("SELECT id, ssh_pass FROM hw_servers WHERE ssh_pass != '' AND ssh_pass NOT LIKE 'gAAAAA%'").fetchall():
+        conn.execute("UPDATE hw_servers SET ssh_pass=? WHERE id=?", (_enc(row[1]), row[0]))
     conn.commit(); conn.close()
     # Auto-import servers from hosts.json (central registry)
     _auto_import_from_hosts(data_dir)
@@ -444,7 +466,7 @@ _poll_thread = None
 def collect_metrics(server):
     sid = server["id"]
     ip = server["ip"]; port = server["ssh_port"]
-    user = server["ssh_user"]; pw = server["ssh_pass"]
+    user = server["ssh_user"]; pw = _pw(server)
     ok, raw = ssh_run_script(ip, port, user, pw, COLLECT_SCRIPT, timeout=15)
     now = datetime.datetime.now().isoformat()
     conn = get_db()
@@ -524,6 +546,23 @@ def collect_metrics(server):
         setattr(collect_metrics, f"_lh_{sid}", time.time())
     conn.close()
 
+# Poll fast while someone looks at HW Monitor, slower otherwise. History points are
+# stored every 30 s either way, so the slower pace loses no chart data.
+POLL_ACTIVE_SECONDS = 8
+POLL_IDLE_SECONDS = 30
+VIEW_WINDOW_SECONDS = 120
+_last_view = 0.0
+
+
+def mark_viewed():
+    global _last_view
+    _last_view = time.time()
+
+
+def _poll_interval():
+    return POLL_ACTIVE_SECONDS if time.time() - _last_view < VIEW_WINDOW_SECONDS else POLL_IDLE_SECONDS
+
+
 def _polling_loop():
     while True:
         try:
@@ -536,7 +575,10 @@ def _polling_loop():
             for t in threads: t.join(timeout=18)
         except Exception as e:
             print(f"[HW Monitor] Poll error: {e}")
-        time.sleep(8)
+        waited = 0
+        while waited < _poll_interval():   # re-checked each second, so opening a page speeds up at once
+            time.sleep(1)
+            waited += 1
 
 def start_polling():
     global _poll_thread
@@ -551,6 +593,11 @@ def register_routes(app, login_required, csrf=None, operator_required=None):
     """Register all HW Monitor routes on the FleetPilot Flask app."""
     operator_only = operator_required or (lambda f: f)
     from flask import render_template, jsonify, request, redirect, Response
+
+    @app.before_request
+    def _hw_monitor_viewed():
+        if request.path.startswith(("/hw", "/api/hw")):
+            mark_viewed()
 
     def exempt(f):
         if csrf:
@@ -659,7 +706,7 @@ def register_routes(app, login_required, csrf=None, operator_required=None):
         conn.close()
         if not row: return jsonify({"ok": False, "output": "Server not found"})
         s = dict(row)
-        ip, port, user, pw = s["ip"], s["ssh_port"], s["ssh_user"], s["ssh_pass"]
+        ip, port, user, pw = s["ip"], s["ssh_port"], s["ssh_user"], _pw(s)
         script = s.get("stress_script", "/root/hw_stress_test.py")
         log = s.get("stress_log", "/root/hw_stress_test/stress_test.log")
 
@@ -675,7 +722,7 @@ def register_routes(app, login_required, csrf=None, operator_required=None):
                 cmd = (f"DEBIAN_FRONTEND=noninteractive apt-get update -qq 2>&1 | tail -2; "
                        f"DEBIAN_FRONTEND=noninteractive apt-get install -y {pkgs} 2>&1; "
                        "sensors-detect --auto 2>/dev/null | tail -3; echo SETUP_DONE")
-                ok, out = ssh_run(srv["ip"], srv["ssh_port"], srv["ssh_user"], srv["ssh_pass"], cmd, timeout=300)
+                ok, out = ssh_run(srv["ip"], srv["ssh_port"], srv["ssh_user"], _pw(srv), cmd, timeout=300)
                 log_fn(out[-1000:])
                 return "OK" if ok else out[-200:]
             title = {"setup_all":"Install all dependencies","install_amd":"Install AMD GPU tools","install_nvidia":"Install NVIDIA tools"}.get(action, action)
@@ -686,7 +733,7 @@ def register_routes(app, login_required, csrf=None, operator_required=None):
             def _do_start(srv, log_fn):
                 cmd = (f"mkdir -p $(dirname {log}); pkill -f hw_stress_test.py 2>/dev/null || true; "
                        f"nohup python3 {script} > {log} 2>&1 & echo PID:$!")
-                ok, out = ssh_run(srv["ip"], srv["ssh_port"], srv["ssh_user"], srv["ssh_pass"], cmd)
+                ok, out = ssh_run(srv["ip"], srv["ssh_port"], srv["ssh_user"], _pw(srv), cmd)
                 log_fn(out)
                 return out
             task_id = start_task(s, _do_start, f"Stress test on {s['name']}")
@@ -740,7 +787,7 @@ def register_routes(app, login_required, csrf=None, operator_required=None):
         q_pwm, q_enable = shlex.quote(pwm_path), shlex.quote(pwm_path + "_enable")
         cmd = (f"echo 1 > {q_enable} 2>/dev/null || true; "
                f"echo {pwm_val} > {q_pwm} && cat {q_pwm}")
-        ok, out = ssh_run(s["ip"], s["ssh_port"], s["ssh_user"], s["ssh_pass"], cmd)
+        ok, out = ssh_run(s["ip"], s["ssh_port"], s["ssh_user"], _pw(s), cmd)
         return jsonify({"ok": ok, "output": out})
 
     @app.route("/api/hw/server/<int:sid>/acknowledge", methods=["POST"])
@@ -840,7 +887,7 @@ def register_routes(app, login_required, csrf=None, operator_required=None):
             d = request.json
             conn = get_db()
             conn.execute("INSERT INTO hw_servers (name,ip,ssh_port,ssh_user,ssh_pass) VALUES (?,?,?,?,?)",
-                         (d["name"], d["ip"], d.get("port", 22), d.get("user", "root"), d.get("password", "")))
+                         (d["name"], d["ip"], d.get("port", 22), d.get("user", "root"), _enc(d.get("password", ""))))
             conn.commit(); conn.close()
             return jsonify({"ok": True})
         conn = get_db()

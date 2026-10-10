@@ -130,6 +130,18 @@ def record_event(
     _siem.info(json.dumps(dict(row, entry_hash=entry_hash), ensure_ascii=False, separators=(",", ":")))
 
 
+_chain_cache: dict[str, Any] = {"at": 0.0, "result": None}
+CHAIN_CHECK_SECONDS = 300
+
+
+def verify_chain_cached() -> dict[str, Any]:
+    """verify_chain(), reused for 5 minutes: a full check reads every event."""
+    import time
+    if _chain_cache["result"] is None or time.time() - _chain_cache["at"] > CHAIN_CHECK_SECONDS:
+        _chain_cache.update(result=verify_chain(), at=time.time())
+    return _chain_cache["result"]
+
+
 def verify_chain() -> dict[str, Any]:
     """Check that no audit event was changed, inserted or removed.
 

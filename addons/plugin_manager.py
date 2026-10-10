@@ -39,6 +39,24 @@ def sanitize_path(base_dir, filename):
         return None
     return Path(target)
 
+_remote_cache = {'at': 0.0, 'plugins': []}
+
+
+def _remote_plugins():
+    """The online plugin list, fetched at most every 10 minutes."""
+    import time
+    if time.time() - _remote_cache['at'] > 600:
+        plugins = []
+        try:
+            response = requests.get(REMOTE_PLUGIN_REPO, timeout=5)
+            if response.status_code == 200:
+                plugins = response.json().get('plugins', [])
+        except Exception as exc:  # offline: try again in 10 minutes, not on every page view
+            print(f"Failed to fetch remote plugins: {exc}")
+        _remote_cache.update(at=time.time(), plugins=plugins)
+    return _remote_cache['plugins']
+
+
 def current_user_has_role(*roles):
     """Check if the current logged-in user has any of the specified roles."""
     user_id = session.get("user_id")
@@ -71,9 +89,7 @@ def plugin_manager_index():
     try:
         from constants import offline_mode
         if not offline_mode():
-            response = requests.get(REMOTE_PLUGIN_REPO, timeout=5)
-            if response.status_code == 200:
-                remote_plugins = response.json().get('plugins', [])
+            remote_plugins = _remote_plugins()
     except Exception as e:
         # Log but don't crash if remote fetch fails
         print(f"Failed to fetch remote plugins: {e}")

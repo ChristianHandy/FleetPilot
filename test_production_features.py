@@ -4,6 +4,7 @@ import json
 import os
 import sqlite3
 import tarfile
+import time
 
 import pytest
 
@@ -117,7 +118,8 @@ def test_metrics_requires_token_and_renders():
 def test_smart_alerts_are_not_duplicated(monkeypatch):
     sent = []
     monkeypatch.setattr(smart_manager, '_notify_new_alert', lambda *a: sent.append(a))
-    disk_id = smart_manager.register_disk('local', '/dev/test-dup', serial='DUP1', model='Test')
+    tag = str(time.time_ns())   # unique disk, so leftovers from earlier runs cannot interfere
+    disk_id = smart_manager.register_disk('local', f'/dev/test-dup-{tag}', serial=f'DUP{tag}', model='Test')
     parsed = {'reallocated': 8, 'pending': 0, 'uncorrectable': 0, 'temp': 40, 'overall_status': 'PASSED'}
     for _ in range(3):
         smart_manager._check_and_alert(disk_id, 'WARNING', parsed)
