@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+{% from "_macros.html" import post_button, stat_tile %}
+{% block title %}{{ router.name }}{% endblock %}
+{% block page_back %}<a href="{{ url_for('routers_index') }}">{{ icon('arrow-left', 14) }} Routers</a>{% endblock %}
+{% block page_subtitle %}{{ router.role_label }} · {{ router.platform_label }} at <code>{{ router.host }}:{{ router.port }}</code>{% if router.notes %} · {{ router.notes }}{% endif %}{% endblock %}
+{% block page_actions %}
+  {% if can_operate %}{{ post_button(url_for('routers_refresh', router_id=router.id), icon('refresh') ~ ' Refresh', 'btn btn-sm') }}{% endif %}
+{% endblock %}
+{% block content %}
+{% set st = router.status %}
+
+{% if router.online == 0 %}
+<div class="alert alert-danger" role="status">{{ icon('x-circle') }}
+  <div><strong>Not reachable.</strong> {{ st.error or 'The router did not answer.' }}
+    <div class="small text-muted">Last attempt {{ st.checked_at|fp_ts }}.</div></div>
+</div>
+{% elif router.online is none %}
+<div class="alert alert-info" role="status">{{ icon('activity') }}<div>This router has not been checked yet. Use <strong>Refresh</strong>.</div></div>
+{% endif %}
+
+<div class="stat-grid-v4 mb-3">
+  {{ stat_tile('Online' if router.online else ('Offline' if router.online == 0 else '—'), 'Status',
+               'check-circle' if router.online else 'x-circle', 'green' if router.online else ('red' if router.online == 0 else '')) }}
+  {{ stat_tile(st.uptime|fp_duration, 'Uptime', 'clock') }}
+  {{ stat_tile((st.clients or [])|length, 'Connected devices', 'laptop', 'blue') }}
+  {% if spec.transport == 'tcp' %}
+    {{ stat_tile((st.latency_ms ~ ' ms') if st.latency_ms is defined else '—', 'Response time', 'activity') }}
+  {% elif st.wan %}
+    {{ stat_tile(st.wan.status or st.wan.link or '—', 'Internet', 'globe', 'green' if st.wan.status == 'Connected' else 'amber',
+                 note=st.wan.external_ip or None) }}
+  {% elif st.mem_total %}
+    {{ stat_tile(((st.mem_used or 0) * 100 / st.mem_total)|round|int ~ ' %', 'Memory used', 'cpu',
+                 note=(st.mem_used|fp_bytes) ~ ' of ' ~ (st.mem_total|fp_bytes)) }}
+  {% else %}
+    {{ stat_tile(st.load[0] if st.load else '—', 'Load', 'activity') }}
+  {% endif %}
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-lg-6">
+    <section class="card-v4 h-100" aria-labelledby="sys-title">
+      <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="sys-title">System</h2></div>
+      <div class="card-v4-body">
+        <dl class="row mb-0 small">
+          <dt class="col-5">Firmware</dt><dd class="col-7">{{ st.firmware or '—' }}</dd>
+          <dt class="col-5">Model</dt><dd class="col-7">{{ st.model or '—' }}</dd>
+          <dt class="col-5">Host name</dt><dd class="col-7">{{ st.hostname or '—' }}</dd>
+          <dt class="col-5">Load (1/5/15 min)</dt><dd class="col-7">{{ st.load|join(' / ') if st.load else '—' }}</dd>
+          {% if st.serial %}<dt class="col-5">Serial number</dt><dd class="col-7"><code>{{ st.serial }}</code></dd>{% endif %}
+          {% if st.wan %}
+          <dt class="col-5">Internet</dt><dd class="col-7">{{ st.wan.access or '—' }}{% if st.wan.down_kbps %}, {{ (st.wan.down_kbps / 1000)|round(1) }} / {{ (st.wan.up_kbps / 1000)|round(1) }} Mbit/s{% endif %}</dd>
+          <dt class="col-5">External IP</dt><dd class="col-7"><code>{{ st.wan.external_ip or '—' }}</code></dd>
+          <dt class="col-5">Connected for</dt><dd class="col-7">{{ st.wan.uptime|fp_duration }}</dd>
+          {% endif %}
+          <dt class="col-5">Connection</dt><dd class="col-7">{{ {'api': 'REST API', 'tr064': 'TR-064 (HTTPS)', 'tcp': 'Availability check on port ' ~ router.port}.get(spec.transport, 'SSH as ' ~ router.username) }}</dd>
+          <dt class="col-5">Last check</dt><dd class="col-7">{{ st.checked_at|fp_ts }}</dd>
+        </dl>
+      </div>
+    </section>
+  </div>
+  <div class="col-lg-6">
+    <section class="card-v4 h-100" aria-labelledby="upd-title">
+      <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="upd-title">Updates</h2>
+        {% if can_operate and spec.updates %}{{ post_button(url_for('routers_check_updates', router_id=router.id), 'Check now', 'btn btn-sm') }}{% endif %}</div>
+      <div class="card-v4-body">
+        {% if not spec.updates %}
+          <p class="mb-0 text-muted">{{ router.platform_label }} has no update check FleetPilot can run. Check the project's download page for new firmware.</p>
+        {% elif st.updates %}
+          {% if st.updates.count %}
+            <p><span class="badge badge-amber">{{ st.updates.count }} available</span> <span class="text-muted small">checked {{ st.updates.checked_at|fp_ts }}</span></p>
+            <ul class="small" style="max-height:12rem;overflow:auto">{% for item in st.updates['items'] %}<li><code>{{ item }}</code></li>{% endfor %}</ul>
+          {% else %}
+            <p><span class="badge badge-green">Up to date</span> <span class="text-muted small">checked {{ st.updates.checked_at|fp_ts }}</span></p>
+          {% endif %}
+          <p class="form-hint mb-0">{{ st.updates.note }} FleetPilot only checks; it does not install router updates.</p>
+        {% else %}
+          <p class="mb-0 text-muted">Not checked yet.</p>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+</div>
+
+{% if spec.transport != 'tcp' %}
+<section class="card-v4 mb-3" aria-labelledby="if-title">
+  <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="if-title">Interfaces</h2></div>
+  {% if st.interfaces %}
+  <div class="table-responsive">
+    <table class="table">
+      <thead><tr><th>Interface</th><th>State</th><th>IPv4</th><th>MAC</th></tr></thead>
+      <tbody>
+      {% for i in st.interfaces %}
+        <tr><td><strong>{{ i.name }}</strong>{% if i.device and i.device != i.name %} <span class="text-muted small">{{ i.device }}</span>{% endif %}{% if i.proto %} <span class="text-muted small">({{ i.proto }})</span>{% endif %}</td>
+          <td>{% if i.up %}<span class="status-pill online">Up</span>{% else %}<span class="status-pill offline">Down</span>{% endif %}{% if i.clients is not none and i.clients is defined %} <span class="text-muted small">{{ i.clients }} device{{ '' if i.clients == 1 else 's' }}</span>{% endif %}</td>
+          <td>{% for a in i.ipv4 %}<code>{{ a }}</code>{% if not loop.last %}<br>{% endif %}{% else %}—{% endfor %}</td>
+          <td><code>{{ i.mac or '—' }}</code></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}<div class="empty-state">No interface data.</div>{% endif %}
+</section>
+
+{% if st.mesh %}
+<section class="card-v4 mb-3" aria-labelledby="mesh-title">
+  <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="mesh-title">Mesh</h2>
+    <span class="text-muted small">{{ st.mesh|length }} device{{ '' if st.mesh|length == 1 else 's' }}</span></div>
+  <div class="table-responsive">
+    <table class="table">
+      <thead><tr><th>Device</th><th>Role</th><th>Model</th><th>FRITZ!OS</th><th>Connected by</th></tr></thead>
+      <tbody>
+      {% for m in st.mesh %}
+        <tr><td><strong>{{ m.name }}</strong></td><td>{{ m.role }}</td><td>{{ m.model or '—' }}</td>
+          <td>{{ m.firmware or '—' }}</td><td>{{ m.connection or '—' }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<section class="card-v4 mb-3" aria-labelledby="cl-title">
+  <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="cl-title">Connected devices{% if spec.transport != 'tr064' %} (DHCP){% endif %}</h2>
+    {% if st.clients %}<label class="visually-hidden" for="client-filter">Filter devices</label>
+    <input class="form-control form-control-sm" id="client-filter" type="search" placeholder="Filter…" style="max-width:14rem">{% endif %}</div>
+  {% if st.clients %}
+  <div class="table-responsive">
+    <table class="table" id="client-table">
+      <thead><tr><th>Name</th><th>IP address</th><th>MAC</th><th>{{ 'Connected by' if spec.transport == 'tr064' else 'Lease ends' }}</th></tr></thead>
+      <tbody>
+      {% for c in st.clients|sort(attribute='ip') %}
+        <tr><td>{{ c.hostname or '—' }}</td><td><code>{{ c.ip }}</code></td><td><code>{{ c.mac }}</code></td>
+          <td>{% if spec.transport == 'tr064' %}{{ c.connection or '—' }}{% else %}{{ c.expires|fp_ts if c.expires else '—' }}{% endif %}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <script>
+  document.getElementById('client-filter').addEventListener('input', function () {
+    var q = this.value.toLowerCase(), shown = 0;
+    document.querySelectorAll('#client-table tbody tr').forEach(function (row) {
+      var match = row.textContent.toLowerCase().indexOf(q) !== -1;
+      row.hidden = !match; if (match) shown++;
+    });
+    fpAnnounce(shown + ' devices shown');
+  });
+  </script>
+  {% else %}<div class="empty-state">No DHCP leases reported. The router may not be the DHCP server.</div>{% endif %}
+</section>
+{% endif %}
+
+<section class="card-v4 mb-3" aria-labelledby="bk-title">
+  <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="bk-title">Configuration backups</h2>
+    {% if can_operate and spec.backup_ext %}{{ post_button(url_for('routers_backup', router_id=router.id), icon('download') ~ ' Back up now', 'btn btn-sm') }}{% endif %}</div>
+  {% if not spec.backup_ext %}
+    <div class="card-v4-body"><p class="mb-0 text-muted">FleetPilot cannot export the configuration of {{ router.platform_label }}. Use the router's own backup function.</p></div>
+  {% elif backups %}
+  <div class="table-responsive">
+    <table class="table">
+      <thead><tr><th>Created</th><th class="text-end">Size (encrypted)</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+      <tbody>
+      {% for b in backups %}
+        <tr><td>{{ b.created }}</td><td class="text-end num">{{ b.size|fp_bytes }}</td>
+          <td class="text-end">{% if is_admin %}<a class="btn btn-sm" href="{{ url_for('routers_backup_download', router_id=router.id, name=b.name) }}">Download<span class="visually-hidden"> backup from {{ b.created }}</span></a>{% endif %}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-v4-body pt-0"><p class="form-hint mb-0">The newest 10 backups are kept, encrypted. They contain Wi-Fi keys and other secrets: store downloads safely.
+    {% if spec.transport == 'tr064' %}The FRITZ! device encrypts the export with the password of the FleetPilot user; you need that password to restore it (System → Backup → Restore).{% endif %}</p></div>
+  {% else %}
+    <div class="empty-state">No backups yet.</div>
+  {% endif %}
+</section>
+
+{% if is_admin %}
+<section class="card-v4 mb-3" aria-labelledby="set-title">
+  <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="set-title">Settings</h2></div>
+  <div class="card-v4-body">
+    <form method="post" action="{{ url_for('routers_edit', router_id=router.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="row g-3">
+        <div class="col-sm-6 col-lg-4"><label class="form-label" for="e-name">Name</label>
+          <input class="form-control" id="e-name" name="name" value="{{ router.name }}" maxlength="64" required></div>
+        <div class="col-sm-4 col-lg-2"><label class="form-label" for="e-host">Address</label>
+          <input class="form-control" id="e-host" name="host" value="{{ router.host }}" required spellcheck="false"></div>
+        <div class="col-sm-2 col-lg-2"><label class="form-label" for="e-port">Port</label>
+          <input class="form-control" id="e-port" name="port" type="number" min="1" max="65535" value="{{ router.port }}"></div>
+        <div class="col-sm-6 col-lg-2"><label class="form-label" for="e-role">Role</label>
+          <select class="form-select" id="e-role" name="role">{% for key, label in roles.items() %}<option value="{{ key }}" {% if router.role == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+        {% if spec.transport == 'tcp' %}
+        {% elif spec.transport in ('ssh', 'tr064') %}
+        <div class="col-sm-6 col-lg-2"><label class="form-label" for="e-user">{{ 'FRITZ! user' if spec.transport == 'tr064' else 'SSH user' }}</label>
+          <input class="form-control" id="e-user" name="username" value="{{ router.username }}" spellcheck="false"></div>
+        <div class="col-sm-6 col-lg-2"><label class="form-label" for="e-pass">New password</label>
+          <input class="form-control" id="e-pass" name="password" type="password" autocomplete="new-password"
+                 placeholder="{{ 'unchanged' if router.has_password else 'uses SSH key' }}"></div>
+        {% if spec.transport == 'tr064' %}
+        <div class="col-12"><label class="d-inline-flex gap-2 align-items-center" style="font-weight:400">
+          <input type="checkbox" name="verify_tls" value="1" {% if router.verify_tls %}checked{% endif %}> Check the device's HTTPS certificate</label></div>
+        {% endif %}
+        {% else %}
+        <div class="col-sm-6 col-lg-2"><label class="form-label" for="e-key">New API key</label>
+          <input class="form-control" id="e-key" name="api_key" autocomplete="off" placeholder="unchanged"></div>
+        <div class="col-sm-6 col-lg-2"><label class="form-label" for="e-secret">New API secret</label>
+          <input class="form-control" id="e-secret" name="api_secret" type="password" autocomplete="new-password" placeholder="unchanged"></div>
+        <div class="col-12"><label class="d-inline-flex gap-2 align-items-center" style="font-weight:400">
+          <input type="checkbox" name="verify_tls" value="1" {% if router.verify_tls %}checked{% endif %}> Check the router's HTTPS certificate</label></div>
+        {% endif %}
+        <div class="col-12"><label class="form-label" for="e-notes">Notes</label>
+          <input class="form-control" id="e-notes" name="notes" value="{{ router.notes }}" maxlength="500"></div>
+      </div>
+      <button class="btn btn-primary mt-3" type="submit">Save settings</button>
+    </form>
+  </div>
+</section>
+
+<section class="card-v4" aria-labelledby="danger-title">
+  <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="danger-title">{{ 'Restart or remove' if spec.reboot else 'Remove' }}</h2></div>
+  <div class="card-v4-body">
+    {% if spec.reboot %}
+    <form method="post" action="{{ url_for('routers_reboot', router_id=router.id) }}" class="d-flex gap-2 flex-wrap align-items-end mb-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div><label class="form-label" for="reboot-confirm">Type <strong>{{ router.name }}</strong> to restart the router</label>
+        <input class="form-control" id="reboot-confirm" name="confirm" autocomplete="off" required style="max-width:20rem"
+               aria-describedby="reboot-hint"></div>
+      <button class="btn btn-danger" type="submit">{{ icon('power') }} Restart router</button>
+      <div class="form-hint w-100" id="reboot-hint">Devices behind this router lose their connection until it is back, usually one to three minutes.</div>
+    </form>
+    {% endif %}
+    {{ post_button(url_for('routers_delete', router_id=router.id), icon('trash') ~ ' Remove from FleetPilot', 'btn btn-sm',
+                   confirm='Remove ' ~ router.name ~ ' and its stored backups from FleetPilot? The router itself is not changed.') }}
+  </div>
+</section>
+{% endif %}
+{% endblock %}

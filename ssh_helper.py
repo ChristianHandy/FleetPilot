@@ -41,6 +41,11 @@ def _get_known_hosts_path() -> str:
     return os.path.expanduser("~/.ssh/known_hosts")
 
 
+def strict_host_keys() -> bool:
+    """True when unknown SSH host keys must be rejected instead of trusted on first use."""
+    return os.environ.get("FLEETPILOT_SSH_STRICT_HOST_KEYS", "").strip().lower() in ("1", "true", "yes", "on")
+
+
 class _TOFUPolicy(paramiko.MissingHostKeyPolicy):
     """Trust-On-First-Use policy.
 
@@ -122,8 +127,12 @@ def create_client(
     # Also load system-wide known_hosts for additional trust anchors
     client.load_system_host_keys()
 
-    # Use TOFU policy for unknown hosts
-    client.set_missing_host_key_policy(_TOFUPolicy(kh_path))
+    # Unknown hosts: trust on first use, or refuse them in strict mode
+    # (FLEETPILOT_SSH_STRICT_HOST_KEYS=true; host keys must be added to known_hosts in advance).
+    if strict_host_keys():
+        client.set_missing_host_key_policy(paramiko.RejectPolicy())
+    else:
+        client.set_missing_host_key_policy(_TOFUPolicy(kh_path))
 
     connect_kwargs: dict = {
         "hostname": hostname,

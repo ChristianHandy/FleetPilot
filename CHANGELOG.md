@@ -4,8 +4,13 @@ Alle bemerkenswerten Änderungen an FleetPilot werden in diesem Dokument festgeh
 
 ## [Unreleased]
 
+## [1.7.0] — 2026-10-09
+
 ### Added
 
+- **AVM FRITZ!Box and FRITZ!Repeater** via TR-064: model, FRITZ!OS version, uptime, internet line (status, external IP, line speed), Wi-Fi networks with client counts, all devices, the Mesh overview, FRITZ!OS update check, encrypted FRITZ! export backup and restart. **Repeaters and access points** of any brand can be added for an availability check; every device has a role (router, repeater, access point).
+- Tables that scroll sideways on small screens can be reached and scrolled with the keyboard on every page.
+- **Routers** (Servers → Routers): OpenWrt, OPNsense (REST API), pfSense, VyOS, DD-WRT/FreshTomato, MikroTik RouterOS and IPFire/Linux routers. Shows status, firmware, uptime, memory, interfaces and DHCP clients; update checks (OpenWrt opkg/apk, OPNsense, pfSense, RouterOS), encrypted configuration backups, restart with name confirmation, offline/online and update notifications, Prometheus metrics and `GET /api/routers`. See `docs/routers.md`.
 - **Security center** (System → Security center): checks for HTTPS, admins without 2FA, the first-run password file, secret-key permissions, CSRF, debug mode, failed sign-ins, backup age, never-expiring tokens and unused accounts; sign-in rules (require 2FA for admins, idle timeout, password-confirmation window, longest token life, audit retention, allowed networks); every active session and API token with sign-out/revoke.
 - **Sign-in & security** (Account): your active sessions by device with "sign out" and "sign out all other sessions", recent sign-ins and failures, and personal **API tokens** (read-only or read/write, expiring, shown once, stored hashed) for scripts and Home Assistant. `GET /api/me` shows who a token belongs to.
 - After signing in, FleetPilot shows when and from where you last signed in and how many failed attempts happened since.
@@ -19,7 +24,33 @@ Alle bemerkenswerten Änderungen an FleetPilot werden in diesem Dokument festgeh
 - **SMART alert emails** when a disk is newly flagged; repeat polls of the same problem no longer create duplicate alerts.
 - Styled error pages; production checklist in `docs/production_profile.md`.
 
+- **High-security deployment** (see SECURITY.md): FIPS mode (`FLEETPILOT_FIPS`, PBKDF2-HMAC-SHA256 with automatic re-hashing at sign-in), strict SSH host keys (`FLEETPILOT_SSH_STRICT_HOST_KEYS`), offline mode for air-gapped networks (`FLEETPILOT_OFFLINE`), a strict systemd profile (`deploy/fleetpilot-strict.conf`, exposure 1.2) and a TLS reference configuration (`deploy/nginx-fleetpilot-tls.conf`).
+- Security center: notice that must be accepted before sign-in, absolute session lifetime (default 12 hours), configurable account lockout, audit-trail integrity check.
+- The audit trail is HMAC-chained so changed or deleted events are detected, and every event is also logged as JSON for forwarding to a SIEM.
+
+### Performance
+
+- Update dashboard: hosts are checked in parallel with a TCP connection to the SSH port (cached 30 s) instead of a full SSH login one after another. With 10 switched-off hosts a page view went from 30 s to 1.6 s (then instant); monitored hosts no longer log failed SSH logins from FleetPilot.
+- HW Monitor polls every 8 s only while someone views it, otherwise every 30 s (history resolution unchanged): about 70 % fewer SSH logins to monitored servers.
+- Role checks are read once per request; user list and security center use one query for all users' roles; the audit-chain check is reused for 5 minutes.
+- Server-registry imports at startup and host saves use one database transaction instead of one commit per server; the timing-equaliser password hash is created on first use instead of at startup.
+- The online plugin catalogue is cached for 10 minutes (also when GitHub is unreachable) instead of being downloaded on every page view.
+
+### Fixed
+
+- HW Monitor never imported servers from hosts.json (it expected a list); it now does, and stores SSH passwords encrypted like every other module (existing plain-text passwords are encrypted at start).
+
 ### Security
+
+- All fonts, icons, Bootstrap and Chart.js are served by FleetPilot; pages no longer contact Google Fonts or CDNs (GDPR, air-gapped networks) and the Content-Security-Policy only allows FleetPilot itself.
+- Turning off or changing two-factor sign-in asks for the password again.
+- Passwords that are repetitive, sequential, or contain the user name or product name are rejected (NIST SP 800-63B).
+- Session cookies are signed with HMAC-SHA256; `/healthz` no longer reveals the version; host shutdown now verifies the SSH host key.
+- Fixed the CodeQL findings: uploaded SMART reports were saved under the browser-supplied filename (a name like `../app.py` could overwrite files); redirects that followed the `Referer` header could leave the site; exception text with paths, hosts or credential-bearing URLs was returned to the browser; the CheckMK host lookup echoed the host name into an HTML page.
+- Disk commands only run for devices that exist on the server; plugin, add-on template and backup files are looked up safely; fan-controller SSH keys must be in the data folder or `~/.ssh`.
+- GitHub workflows: fixed a script injection in `notify-version.yml`, pinned every action to a commit SHA, read-only token permissions by default; added CI tests (Python 3.11–3.13, pip-audit, Bandit, crash lint), OpenSSF Scorecard and Dependabot.
+- Fixed "Update this server" failing with `UnboundLocalError` before it started.
+- Removed local databases, build output and old duplicate folders from the repository and ignore them from now on.
 
 - Every request now validates the session centrally. Routes using `user_management.login_required` (audit trail, production status, Storage workspace, plugin manager) accepted sessions of deactivated users and sessions that had ended through a password change.
 - Sessions are recorded on the server: logout really ends a session (a copied cookie no longer works), sessions end after inactivity (default 120 minutes), and resetting a user's password or disabling the account signs out all their devices.

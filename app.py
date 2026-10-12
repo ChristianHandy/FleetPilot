@@ -1,10 +1,10 @@
 import runtime_env  # must stay first: loads .env and SECRET_KEY before other modules
-from flask import Flask, render_template, redirect, session, request, flash, jsonify, send_file, url_for, make_response, abort
+from flask import Flask, render_template, redirect, session, request, flash, jsonify, send_file, url_for, make_response, abort, g
 from markupsafe import escape as html_escape
 import re, time as _time
 from collections import defaultdict
 from i18n import get_translator, SUPPORTED_LANGUAGES
-import json, threading, paramiko, os, secrets, hmac
+import json, threading, paramiko, os, secrets, hmac, socket, concurrent.futures
 import requests
 import sqlite3
 import audit_log
@@ -18,7 +18,9 @@ import metrics
 import easy_language
 import config_backup
 import account_security
+import safe_errors
 import notify
+import router_manager
 from updater import run_update
 import scheduler
 import disktool_core
@@ -28,7 +30,7 @@ import user_management
 import version_manager
 import email_config
 import email_notifier
-from constants import is_localhost, LOCALHOST_IDENTIFIERS
+from constants import is_localhost, LOCALHOST_IDENTIFIERS, offline_mode
 import arp_tracker
 import vm_controller
 import storage_controller
@@ -88,6 +90,9 @@ class _TokenSession(_SecureCookieSession):
 
 
 class _TokenAwareSessionInterface(type(app.session_interface)):
+    # Sign session cookies with HMAC-SHA256 instead of Flask's default SHA-1 (BSI TR-02102, CNSA).
+    digest_method = staticmethod(__import__('hashlib').sha256)
+
     def open_session(self, app_, req):
         auth = req.headers.get('Authorization', '')
         if req.path.startswith('/api/') and auth.startswith('Bearer ' + account_security.TOKEN_PREFIX):
@@ -155,12 +160,19 @@ def _attempt_keys(ip, username=None):
     return keys
 
 
+def _limits():
+    """Per-kind (max failures, window seconds); the account limit comes from the security settings."""
+    settings = account_security.get_settings()
+    return {'ip': _LIMITS['ip'], 'user': (settings['lockout_attempts'], settings['lockout_minutes'] * 60)}
+
+
 def _check_rate_limit(ip, username=None):
     """Return True if neither the address nor the account is currently throttled."""
     now = _time.time()
+    limits = _limits()
     with _login_lock:
         for kind, value in _attempt_keys(ip, username):
-            limit, window = _LIMITS[kind]
+            limit, window = limits[kind]
             key = f'{kind}:{value}'
             recent = [t for t in _login_attempts.get(key, []) if now - t < window]
             if recent:
@@ -175,13 +187,14 @@ def _check_rate_limit(ip, username=None):
 def _record_failed_login(ip, username=None):
     now = _time.time()
     locked = []
+    limits = _limits()
     with _login_lock:
         if len(_login_attempts) > 10000:   # bound memory under a distributed attack
             _login_attempts.clear()
         for kind, value in _attempt_keys(ip, username):
             attempts = _login_attempts[f'{kind}:{value}']
             attempts.append(now)
-            if len(attempts) == _LIMITS[kind][0]:
+            if len(attempts) == limits[kind][0]:
                 locked.append((kind, value))
     for kind, value in locked:
         # Report each lockout once, when the limit is first reached.
@@ -193,13 +206,46 @@ def _record_failed_login(ip, username=None):
             pass
         notify.send('security', 'FleetPilot: sign-in locked',
                     f'Too many failed sign-ins for {what} (last attempt from {ip}). '
-                    f'Further attempts are blocked for {_LIMITS[kind][1] // 60} minutes.', 'warning')
+                    f'Further attempts are blocked for {limits[kind][1] // 60} minutes.', 'warning')
 
 
 def _clear_login_attempts(ip, username=None):
     with _login_lock:
         for kind, value in _attempt_keys(ip, username):
             _login_attempts.pop(f'{kind}:{value}', None)
+
+# ── Safe redirects ────────────────────────────────────────────────────────────
+from urllib.parse import urlparse as _urlparse
+
+
+def _local_url(target, fallback=None):
+    """Return ``target`` if it is a path on this site, otherwise ``fallback``.
+
+    Browsers ignore tabs/newlines in URLs and treat backslashes as slashes, so
+    both are normalised before checking that there is no scheme or host.
+    """
+    fallback = fallback or url_for('index')
+    if not target:
+        return fallback
+    target = ''.join(ch for ch in str(target) if ch >= ' ').replace('\\', '/')
+    if (not _urlparse(target).netloc and not _urlparse(target).scheme
+            and target.startswith('/') and not target.startswith('//')):
+        return target
+    return fallback
+
+
+def _back(fallback=None):
+    """Where a "go back" redirect may go: the referring page if it is on this site."""
+    ref = _urlparse(request.referrer or '')
+    if ref.netloc != request.host:
+        return fallback or url_for('index')
+    return _local_url(ref.path + ('?' + ref.query if ref.query else ''), fallback)
+
+
+def _error_message(exc, action='The request'):
+    """Log ``exc`` and return a browser-safe message (see safe_errors.py)."""
+    return safe_errors.public_error(exc, action)
+
 
 # ── CSRF Protection ────────────────────────────────────────────────────────────
 # On by default. WTF_CSRF_ENABLED=false is meant for local debugging only.
@@ -246,7 +292,7 @@ if _CSRF_ENABLED and _CSRFProtect is not None:
         if request.path.startswith('/api/') or request.is_json:
             return jsonify({'error': 'CSRF token missing or invalid'}), 400
         flash('Your form expired. Please try again.', 'error')
-        return redirect(request.referrer if request.referrer and request.referrer.startswith(request.host_url) else url_for('index'))
+        return redirect(_back())
 
     @app.context_processor
     def _inject_csrf():
@@ -368,6 +414,8 @@ with app.app_context():
                                           keep=_BACKUP_KEEP, hour=_BACKUP_HOUR)
     vm_controller.init_db(DATA_DIR)
     storage_controller.init_db(DATA_DIR)
+    router_manager.init_db(DATA_DIR)
+    router_manager.start_poller()
     smart_manager.init_db(DATA_DIR)
     smart_manager.start_polling()
     system_monitor.init_db(DATA_DIR)
@@ -408,10 +456,11 @@ with app.app_context():
     if _REGISTRY_AVAILABLE:
         try:
             _reg = _registry.get_registry(DATA_DIR)
-            _reg.import_from_hosts_json(os.path.join(DATA_DIR, 'hosts.json'))
-            _reg.import_from_hw_monitor_db(os.path.join(DATA_DIR, 'hw_monitor.db'))
-            _reg.import_from_fan_controller_db(os.path.join(DATA_DIR, 'fan_controller.db'))
-            _reg.import_from_backup_db(os.path.join(DATA_DIR, 'backup_controller.db'))
+            with _reg.batch():   # one transaction instead of one commit per server
+                _reg.import_from_hosts_json(os.path.join(DATA_DIR, 'hosts.json'))
+                _reg.import_from_hw_monitor_db(os.path.join(DATA_DIR, 'hw_monitor.db'))
+                _reg.import_from_fan_controller_db(os.path.join(DATA_DIR, 'fan_controller.db'))
+                _reg.import_from_backup_db(os.path.join(DATA_DIR, 'backup_controller.db'))
             print(f'[ServerRegistry] Ready — {_reg.stats()["total_servers"]} servers registered')
         except Exception as _re:
             print(f'[ServerRegistry] Init error: {_re}')
@@ -433,7 +482,7 @@ def inject_user_context():
     is_admin = False
     is_operator = False
     if user_id:
-        user_roles = user_management.get_user_role_names(user_id)
+        user_roles = _roles_of(user_id)
         is_admin = 'admin' in user_roles
         is_operator = 'operator' in user_roles or is_admin
     return dict(
@@ -462,6 +511,13 @@ def inject_accessibility():
 
 # Template function for theme and language context
 @app.context_processor
+def inject_login_banner():
+    if request.endpoint in ('login', 'handle_csrf_error') or request.path == '/':
+        return {'login_banner': account_security.get_settings()['login_banner']}
+    return {}
+
+
+@app.context_processor
 def inject_ui_context():
     """Inject current theme and language into all templates."""
     lang = session.get('lang', 'en')
@@ -485,12 +541,20 @@ def inject_version_notification():
 logs = {}  # type: dict
 _LOGS_MAX_SIZE = 100  # max log entries to prevent memory leak
 
+def _roles_of(user_id):
+    """Role names of ``user_id``, looked up once per request."""
+    cache = g.setdefault('fp_roles', {})
+    if user_id not in cache:
+        cache[user_id] = user_management.get_user_role_names(user_id)
+    return cache[user_id]
+
+
 def current_user_has_role(*roles):
     """Check if the current logged-in user has any of the specified roles."""
     user_id = session.get("user_id")
     if not user_id:
         return False
-    user_roles = user_management.get_user_role_names(user_id)
+    user_roles = _roles_of(user_id)
     # Admin has access to everything
     if 'admin' in user_roles:
         return True
@@ -809,21 +873,47 @@ def proxy_test_service(route_id):
 @app.route('/healthz')
 def healthz():
     """Minimal unauthenticated liveness probe for a local reverse proxy or monitor."""
-    return jsonify({'status': 'ok', 'release': fleetpilot_version.release_metadata()}), 200
+    # No version number here: unauthenticated callers must not learn which release runs.
+    return jsonify({'status': 'ok'}), 200
 
 
-def is_online(host, user):
-    # Check if this is localhost
+_ONLINE_CACHE = {}            # (host, port) -> (checked_at, online)
+_ONLINE_TTL = 30              # seconds a result is reused
+_ONLINE_TIMEOUT = 1.5         # seconds per connection attempt
+
+
+def is_online(host, user=None, port=22):
+    """True if the host's SSH port accepts connections.
+
+    Only a TCP connection is made: no SSH login, so nothing shows up as a failed
+    authentication in the host's logs (fail2ban, auth.log).
+    """
     if is_localhost(host):
-        # For localhost, just return True (we're always online to ourselves)
         return True
-    
+    key = (host, int(port or 22))
+    cached = _ONLINE_CACHE.get(key)
+    if cached and _time.time() - cached[0] < _ONLINE_TTL:
+        return cached[1]
     try:
-        client = ssh_helper.create_client(hostname=host, username=user, timeout=3)
-        client.close()
-        return True
-    except Exception:
-        return False
+        with socket.create_connection(key, timeout=_ONLINE_TIMEOUT):
+            online = True
+    except (OSError, ValueError):
+        online = False
+    if len(_ONLINE_CACHE) > 5000:
+        _ONLINE_CACHE.clear()
+    _ONLINE_CACHE[key] = (_time.time(), online)
+    return online
+
+
+def hosts_online(hosts):
+    """{name: online} for all hosts, checked in parallel."""
+    if not hosts:
+        return {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(32, len(hosts))) as pool:
+        futures = {name: pool.submit(is_online, h.get("host", ""), h.get("user"), h.get("port") or 22)
+                   for name, h in hosts.items()}
+        return {name: f.result() for name, f in futures.items()}
+
 
 # Predefined tag palette for hosts
 HOST_TAG_PRESETS = [
@@ -885,24 +975,29 @@ def _sync_hosts_to_registry(hosts):
         return
     try:
         registry = _registry.get_registry(DATA_DIR)
-        for name, data in hosts.items():
-            server_id = registry.upsert_server(
-                name=name,
-                host=data.get('host', ''),
-                port=data.get('port', 22),
-                user=data.get('user', 'root'),
-                ssh_key=data.get('ssh_key', ''),
-                description=data.get('description', ''),
-                location=data.get('location', ''),
-                environment=data.get('environment', 'Production'),
-                criticality=data.get('criticality', 'Medium'),
-                tags=data.get('tags', []),
-                mac=data.get('mac', ''),
-                notes=data.get('notes', ''),
-            )
-            registry.register_module(server_id, 'update_manager')
+        with registry.batch():
+            _sync_hosts_into(registry, hosts)
     except Exception as registry_error:
         app.logger.warning('[ServerRegistry] Host sync error: %s', registry_error)
+
+
+def _sync_hosts_into(registry, hosts):
+    for name, data in hosts.items():
+        server_id = registry.upsert_server(
+            name=name,
+            host=data.get('host', ''),
+            port=data.get('port', 22),
+            user=data.get('user', 'root'),
+            ssh_key=data.get('ssh_key', ''),
+            description=data.get('description', ''),
+            location=data.get('location', ''),
+            environment=data.get('environment', 'Production'),
+            criticality=data.get('criticality', 'Medium'),
+            tags=data.get('tags', []),
+            mac=data.get('mac', ''),
+            notes=data.get('notes', ''),
+        )
+        registry.register_module(server_id, 'update_manager')
 
 
 def _discover_host_and_store(name):
@@ -1004,7 +1099,7 @@ def _session_is_valid(user):
 def _needs_2fa_enrolment(user_id):
     if session.get('api_token_id') or not account_security.get_settings()['require_2fa_admins']:
         return False
-    if not _2FA_AVAILABLE or 'admin' not in user_management.get_user_role_names(user_id):
+    if not _2FA_AVAILABLE or 'admin' not in _roles_of(user_id):
         return False
     return not _2fa.user_has_2fa(user_id)
 
@@ -1062,11 +1157,7 @@ def recent_auth_required(f):
     def wrapped(*args, **kwargs):
         if _recently_authenticated():
             return f(*args, **kwargs)
-        if request.method == 'GET':
-            back = request.full_path.rstrip('?')
-        else:
-            ref = request.referrer or ''
-            back = ref[len(request.host_url) - 1:] if ref.startswith(request.host_url) else url_for('index')
+        back = _local_url(request.full_path.rstrip('?')) if request.method == 'GET' else _back()
         if request.path.startswith('/api/') or request.is_json:
             return jsonify({'error': 'Confirm your password first.', 'reauth': url_for('reauth', next=back)}), 401
         flash('Please confirm your password to continue.', 'warning')
@@ -1077,12 +1168,31 @@ def recent_auth_required(f):
 MIN_PASSWORD_LENGTH = 12
 
 
-def _password_problem(password):
-    """Return a message if ``password`` is too weak, else None."""
+_SEQUENCES = ('0123456789', 'abcdefghijklmnopqrstuvwxyz', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm', 'qwertzuiop', 'yxcvbnm')
+_CONTEXT_WORDS = ('password', 'passwort', 'fleetpilot', 'admin', 'changeme', 'welcome', 'letmein', 'qwerty')
+
+
+def _password_problem(password, username=''):
+    """Return a message if ``password`` breaks the policy, else None (NIST SP 800-63B 3.1.1.2)."""
     if len(password) < MIN_PASSWORD_LENGTH:
         return f'Passwords must be at least {MIN_PASSWORD_LENGTH} characters.'
-    if password.lower() in {'password', 'changeme', 'fleetpilot', 'admin'} or len(set(password)) < 4:
-        return 'Please choose a less predictable password.'
+    if len(password) > 256:
+        return 'Passwords can be at most 256 characters.'
+    lower = password.lower()
+    if len(set(password)) < 5:
+        return 'Please use more different characters.'
+    if re.search(r'(.{1,4})\1{3,}', lower):
+        return 'Please avoid repeating the same characters or groups.'
+    for seq in _SEQUENCES:
+        for k in range(len(seq) - 5):
+            if seq[k:k + 6] in lower or seq[k:k + 6][::-1] in lower:
+                return 'Please avoid keyboard or number sequences such as 123456 or qwerty.'
+    if username and len(username) >= 3 and username.lower() in lower:
+        return 'The password must not contain the user name.'
+    stripped = re.sub(r'[^a-z]', '', lower)
+    for word in _CONTEXT_WORDS:
+        if stripped.startswith(word) and len(stripped) - len(word) <= 4:
+            return 'Please choose a less predictable password.'
     return None
 
 
@@ -1158,8 +1268,8 @@ def _complete_authenticated_login(user_id, username, next_url, method='password'
     if notice:
         flash(notice, 'info')
     if json_response:
-        return jsonify({'ok': True, 'next': next_url})
-    return redirect(next_url)
+        return jsonify({'ok': True, 'next': _local_url(next_url)})
+    return redirect(_local_url(next_url))
 
 
 def _webauthn_request_context():
@@ -1187,7 +1297,7 @@ def login():
     # exists, returning the login form at '/' is confusing and hides the
     # Service Hub. Redirect authenticated users to the requested page or home.
     if request.method == "GET" and session.get("user_id"):
-        return redirect(next_url)
+        return redirect(_local_url(next_url))
     if request.method == "POST":
         ip = request.remote_addr or '127.0.0.1'  # Use loopback as fallback, not all-interfaces
         username = sanitize_input(request.form.get("user", ""), max_len=128)
@@ -1195,8 +1305,11 @@ def login():
         if not _check_rate_limit(ip, username):
             flash('Too many failed login attempts. Please wait a few minutes and try again.')
             return render_template("login.html", next=next_url, rate_limited=True), 429
+        if account_security.get_settings()['login_banner'] and not request.form.get('banner_ack'):
+            flash('Please read and accept the notice before signing in.')
+            return render_template("login.html", next=next_url), 400
 
-        user_id = user_management.verify_password(username, password)
+        user_id = user_management.verify_password(username, password, upgrade_hash=True)
         if user_id:
             _clear_login_attempts(ip, username)
             # Check if user has 2FA enabled
@@ -1304,6 +1417,7 @@ def tfa_totp_enable():
 
 @app.route('/2fa/totp/disable', methods=['POST'])
 @login_required
+@recent_auth_required
 def tfa_totp_disable():
     user_id = session.get('user_id')
     _2fa.disable_totp(user_id)
@@ -1327,6 +1441,7 @@ def tfa_yubikey_register():
 
 @app.route('/2fa/yubikey/<int:key_id>/delete', methods=['POST'])
 @login_required
+@recent_auth_required
 def tfa_yubikey_delete(key_id):
     user_id = session.get('user_id')
     if _2fa.delete_yubikey(user_id, key_id):
@@ -1344,8 +1459,11 @@ def webauthn_register_options():
     user_id = session.get('user_id')
     try:
         registration = _2fa.generate_webauthn_registration(user_id, session.get('username', 'user'), rp_id)
-    except RuntimeError as exception:
-        return jsonify({'ok': False, 'error': str(exception)}), 400
+    except RuntimeError:
+        message = ('No security key is registered for this account.'
+                   if getattr(_2fa, 'WEBAUTHN_AVAILABLE', False) else
+                   'WebAuthn support is not installed on this FleetPilot server.')
+        return jsonify({'ok': False, 'error': message}), 400
     session['_webauthn_register'] = {
         'challenge': registration['challenge'], 'rp_id': rp_id, 'origin': origin,
         'created': int(_time.time()),
@@ -1373,6 +1491,7 @@ def webauthn_register_verify():
 
 @app.route('/2fa/webauthn/<int:credential_id>/delete', methods=['POST'])
 @login_required
+@recent_auth_required
 def webauthn_delete_credential(credential_id):
     if _2fa.delete_webauthn_credential(session.get('user_id'), credential_id):
         flash('Security key removed.', 'success')
@@ -1391,8 +1510,11 @@ def webauthn_authentication_options():
         return jsonify({'ok': False, 'error': error}), 400
     try:
         authentication = _2fa.generate_webauthn_authentication(user_id, rp_id)
-    except RuntimeError as exception:
-        return jsonify({'ok': False, 'error': str(exception)}), 400
+    except RuntimeError:
+        message = ('No security key is registered for this account.'
+                   if getattr(_2fa, 'WEBAUTHN_AVAILABLE', False) else
+                   'WebAuthn support is not installed on this FleetPilot server.')
+        return jsonify({'ok': False, 'error': message}), 400
     session['_webauthn_authenticate'] = {
         'challenge': authentication['challenge'], 'rp_id': rp_id, 'origin': origin,
         'created': int(_time.time()),
@@ -1420,6 +1542,7 @@ def webauthn_authentication_verify():
 
 @app.route('/2fa/backup/regenerate', methods=['POST'])
 @login_required
+@recent_auth_required
 def tfa_backup_regenerate():
     user_id = session.get('user_id')
     codes = _2fa.regenerate_backup_codes(user_id)
@@ -1445,18 +1568,11 @@ def logout():
     return redirect(url_for('login'))
 
 
-def _safe_next(raw, default=None):
-    """Only allow same-site relative paths as redirect targets."""
-    if raw and raw.startswith('/') and not raw.startswith('//') and '\\' not in raw and '//' not in raw:
-        return raw
-    return default or url_for('index')
-
-
 @app.route('/reauth', methods=['GET', 'POST'])
 @login_required
 def reauth():
     """Confirm the password before a sensitive action."""
-    next_url = _safe_next(request.values.get('next'))
+    next_url = _local_url(request.values.get('next'))
     if session.get('api_token_id'):
         abort(403)
     if request.method == 'POST':
@@ -1470,7 +1586,7 @@ def reauth():
             _clear_login_attempts(ip, username)
             session['auth_time'] = _time.time()
             _audit('reauth')
-            return redirect(next_url)
+            return redirect(_local_url(next_url))
         _record_failed_login(ip, username)
         _audit('reauth', outcome='failure')
         flash('That password is not correct.', 'error')
@@ -1485,6 +1601,34 @@ def _fmt_ts(value):
 
 
 app.jinja_env.filters['fp_ts'] = _fmt_ts
+
+
+import jinja2.exceptions
+
+
+def _fmt_duration(seconds):
+    """3d 4h, 5h 12m or 7m."""
+    try:
+        seconds = int(seconds)
+    except (TypeError, ValueError, jinja2.exceptions.UndefinedError):
+        return '—'  # missing value, e.g. a router that was never reached
+    days, hours, minutes = seconds // 86400, seconds % 86400 // 3600, seconds % 3600 // 60
+    return f'{days}d {hours}h' if days else (f'{hours}h {minutes}m' if hours else f'{minutes}m')
+
+
+def _fmt_bytes(value):
+    try:
+        value = float(value)
+    except (TypeError, ValueError, jinja2.exceptions.UndefinedError):
+        return '—'
+    for unit in ('B', 'KB', 'MB', 'GB', 'TB'):
+        if value < 1024 or unit == 'TB':
+            return f'{value:.0f} {unit}' if unit in ('B', 'KB') else f'{value:.1f} {unit}'
+        value /= 1024
+
+
+app.jinja_env.filters['fp_duration'] = _fmt_duration
+app.jinja_env.filters['fp_bytes'] = _fmt_bytes
 
 
 def _describe_agent(ua):
@@ -1595,8 +1739,8 @@ def _security_checks():
         'FleetPilot is reached over plain HTTP, so passwords cross the network unencrypted. Put it behind HTTPS.',
         url_for('proxy_services') if 'proxy_services' in app.view_functions else None)
 
-    admins = [u for u in user_management.list_users()
-              if u['active'] and 'admin' in user_management.get_user_role_names(u['id'])]
+    all_roles = user_management.roles_by_user()
+    admins = [u for u in user_management.list_users() if u['active'] and 'admin' in all_roles.get(u['id'], [])]
     no_2fa = [u['username'] for u in admins if not (_2FA_AVAILABLE and _2fa.user_has_2fa(u['id']))]
     add('Two-factor sign-in for admins', 'ok' if not no_2fa else ('warn' if settings['require_2fa_admins'] else 'bad'),
         'Every administrator uses a second factor.' if not no_2fa else
@@ -1661,6 +1805,30 @@ def _security_checks():
         add('Unused accounts', 'warn', f'Not used for 90 days: {", ".join(stale)}. Consider deactivating them.',
             url_for('users_list'))
 
+    chain = audit_log.verify_chain_cached()
+    add('Audit trail integrity', 'ok' if chain['ok'] else 'bad',
+        f'{chain["checked"]} chained events verified; none were changed or removed.' if chain['ok'] else
+        f'The audit trail was modified at event #{chain["first_bad_id"]}. Investigate and keep the CSV export as evidence.',
+        url_for('system_audit'))
+    add('Session lifetime', 'ok' if settings['session_max_hours'] <= 12 else 'warn',
+        f'Sessions end after at most {settings["session_max_hours"]} hours.' +
+        ('' if settings['session_max_hours'] <= 12 else ' NIST SP 800-63B asks for 12 hours or less.'))
+    add('Account lockout', 'ok' if settings['lockout_attempts'] <= 10 else 'warn',
+        f'Accounts lock for {settings["lockout_minutes"]} minutes after {settings["lockout_attempts"]} failed sign-ins.')
+    add('Sign-in notice', 'ok' if settings['login_banner'] else 'info',
+        'A system-use notice must be accepted before sign-in.' if settings['login_banner'] else
+        'No notice before sign-in. Government and corporate policies often require one (NIST AC-8).')
+    add('SSH host keys', 'ok' if ssh_helper.strict_host_keys() else 'info',
+        'Unknown SSH host keys are refused (FLEETPILOT_SSH_STRICT_HOST_KEYS).' if ssh_helper.strict_host_keys() else
+        'Host keys are trusted on first connection and checked afterwards. Strict sites pre-load known_hosts '
+        'and set FLEETPILOT_SSH_STRICT_HOST_KEYS=true.')
+    add('FIPS mode', 'ok' if user_management.fips_mode() else 'info',
+        'Passwords use PBKDF2-HMAC-SHA256 (FIPS 140-3 approved).' if user_management.fips_mode() else
+        'Passwords use scrypt. Set FLEETPILOT_FIPS=true on FIPS-enabled systems.')
+    add('Internet access', 'ok' if offline_mode() else 'info',
+        'Offline mode: no update checks or online plugin catalogue.' if offline_mode() else
+        'FleetPilot checks GitHub for updates. Set FLEETPILOT_OFFLINE=true for air-gapped networks.')
+
     channels = [c for c in notify.list_channels() if c['enabled'] and 'security' in (c['events'] or [])]
     add('Security alerts', 'ok' if channels else 'info',
         f'Sent to {len(channels)} notification channel{"s" if len(channels) != 1 else ""}.' if channels else
@@ -1706,6 +1874,10 @@ def system_security_settings():
         'reauth_minutes': request.form.get('reauth_minutes', before['reauth_minutes']),
         'audit_retention_days': request.form.get('audit_retention_days', before['audit_retention_days']),
         'max_token_days': request.form.get('max_token_days', before['max_token_days']),
+        'session_max_hours': request.form.get('session_max_hours', before['session_max_hours']),
+        'lockout_attempts': request.form.get('lockout_attempts', before['lockout_attempts']),
+        'lockout_minutes': request.form.get('lockout_minutes', before['lockout_minutes']),
+        'login_banner': request.form.get('login_banner', before['login_banner']),
         'ip_allowlist': allow,
     })
     changed = sorted(k for k in after if after[k] != before.get(k))
@@ -1735,7 +1907,7 @@ def system_security_sign_out_user(uid):
     count = account_security.revoke_user_sessions(uid, keep_sid=keep)
     _audit('user_signed_out_by_admin', str(uid))
     flash(f'Signed out {count} session{"s" if count != 1 else ""}.')
-    return redirect(request.referrer if (request.referrer or '').startswith(request.host_url) else url_for('system_security'))
+    return redirect(_back(url_for('system_security')))
 
 
 @app.route('/system/security/tokens/<int:token_id>/revoke', methods=['POST'])
@@ -2065,8 +2237,8 @@ def api_dashboard_layout_save():
     try:
         user_management.save_dashboard_layout(user_id, data)
         return jsonify({"ok": True})
-    except ValueError as e:
-        return jsonify({"ok": False, "error": str(e)}), 400
+    except ValueError:
+        return jsonify({"ok": False, "error": "Invalid layout structure"}), 400
 
 
 @app.route("/api/dashboard/layout/reset", methods=["POST"])
@@ -2087,7 +2259,7 @@ def dashboard():
             history = json.load(_hf)
     except (FileNotFoundError, json.JSONDecodeError):
         history = []
-    status = {n: is_online(h["host"], h["user"]) for n, h in hosts.items()}
+    status = hosts_online(hosts)
     
     # Load update settings for display
     settings = scheduler.load_update_settings()
@@ -2120,7 +2292,7 @@ def update(name):
         args=(hosts[name]["host"], hosts[name]["user"], name, logs[name])
     ).start()
     _safe_name = re.sub(r'[^a-zA-Z0-9_-]', '', str(name))
-    return redirect(f"/progress/{_safe_name}")
+    return redirect(_local_url(f"/progress/{_safe_name}"))
 
 @app.route("/progress/<name>")
 @login_required
@@ -2258,11 +2430,7 @@ def check_dashboard_version():
 def dismiss_dashboard_notification():
     """Dismiss the current update notification"""
     version_manager.dismiss_notification()
-    _ref = request.referrer or ''
-    # Security: Only allow relative paths to prevent open redirect
-    if _ref and (not _ref.startswith('/') or '//' in _ref or _ref.startswith('//')):
-        _ref = ''
-    return redirect(_ref or url_for('index'))
+    return redirect(_back())
 
 @app.route("/dashboard_version/update", methods=["GET", "POST"])
 @login_required
@@ -2308,7 +2476,7 @@ def update_repo(name):
         args=(hosts[name]["host"], hosts[name]["user"], name, logs[name], True)
     ).start()
     _safe_name = re.sub(r'[^a-zA-Z0-9_-]', '', str(name))
-    return redirect(f"/progress/{_safe_name}")
+    return redirect(_local_url(f"/progress/{_safe_name}"))
 
 # Host management routes
 @app.route("/hosts", methods=["GET", "POST"])
@@ -2605,10 +2773,10 @@ def detect_mac(name):
 def detect_os(name):
     """Auto-detect OS type for a host via SSH (reads /etc/os-release or uname)."""
     if session.get("user_id") and not current_user_has_role('operator', 'admin'):
-        return json.dumps({"ok": False, "error": "Permission denied"}), 403, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "Permission denied"}), 403
     hosts = load_hosts()
     if name not in hosts:
-        return json.dumps({"ok": False, "error": "Host not found"}), 404, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "Host not found"}), 404
     h = hosts[name]
     ip   = h.get("host", "")
     user = h.get("user", "root")
@@ -2635,7 +2803,7 @@ def detect_os(name):
             ssh.close()
             os_info = _parse_os_release(output)
         except Exception as e:
-            return json.dumps({"ok": False, "error": str(e)}), 500, {"Content-Type": "application/json"}
+            return jsonify({"ok": False, "error": _error_message(e)}), 500
     # Update host os_profiles
     existing = h.get("os_profiles", [])
     profile = {"name": os_info["name"], "type": os_info["type"], "version": os_info.get("version", ""), "default": True, "auto_detected": True}
@@ -2645,7 +2813,7 @@ def detect_os(name):
     h["os_profiles"] = new_profiles
     hosts[name] = h
     save_hosts(hosts)
-    return json.dumps({"ok": True, "os": os_info}), 200, {"Content-Type": "application/json"}
+    return jsonify({"ok": True, "os": os_info}), 200
 
 
 def _parse_os_release(text: str) -> dict:
@@ -2687,39 +2855,39 @@ def _parse_os_release(text: str) -> dict:
 def upload_host_image(name):
     """Upload a custom image for a host."""
     if session.get("user_id") and not current_user_has_role('operator', 'admin'):
-        return json.dumps({"ok": False, "error": "Permission denied"}), 403, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "Permission denied"}), 403
     hosts = load_hosts()
     if name not in hosts:
-        return json.dumps({"ok": False, "error": "Host not found"}), 404, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "Host not found"}), 404
     if 'image' not in request.files:
-        return json.dumps({"ok": False, "error": "No file uploaded"}), 400, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "No file uploaded"}), 400
     f = request.files['image']
     if not f.filename:
-        return json.dumps({"ok": False, "error": "Empty filename"}), 400, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "Empty filename"}), 400
     # Validate file type
     allowed_ext = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'}
     import pathlib
     ext = pathlib.Path(f.filename).suffix.lower()
     if ext not in allowed_ext:
-        return json.dumps({"ok": False, "error": f"File type {ext} not allowed"}), 400, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": f"File type {ext} not allowed"}), 400
     # Save to static/host_images/
     img_dir = os.path.join(_APP_DIR, "static", "host_images")
     os.makedirs(img_dir, exist_ok=True)
     safe_name = "".join(c for c in name if c.isalnum() or c in "_-")
     if not safe_name:
-        return json.dumps({"ok": False, "error": "Invalid host name"}), 400, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "Invalid host name"}), 400
     filename = f"{safe_name}{ext}"
     filepath = os.path.join(img_dir, filename)
     # Security: Ensure resolved path stays within img_dir (prevent path traversal)
     real_img_dir = os.path.realpath(img_dir)
     real_filepath = os.path.realpath(filepath)
     if not real_filepath.startswith(real_img_dir + os.sep):
-        return json.dumps({"ok": False, "error": "Invalid path"}), 400, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "Invalid path"}), 400
     f.save(real_filepath)
     # Update host record
     hosts[name]["custom_image"] = f"/static/host_images/{filename}"
     save_hosts(hosts)
-    return json.dumps({"ok": True, "image_url": f"/static/host_images/{filename}"}), 200, {"Content-Type": "application/json"}
+    return jsonify({"ok": True, "image_url": f"/static/host_images/{filename}"}), 200
 
 
 @app.route("/hosts/scan_ip_changes")
@@ -2793,7 +2961,7 @@ def toggle_auto():
 @login_required
 def format_route(device):
     try:
-        device = disktool_core.sanitize_device_name(device)
+        device = disktool_core.local_block_device(device)
     except ValueError as e:
         flash(f'Invalid device name: {e}')
         return redirect(url_for('disks_index'))
@@ -2834,7 +3002,7 @@ def smart_start_route(device, mode):
         return redirect(url_for('disks_index'))
     
     try:
-        device = disktool_core.sanitize_device_name(device)
+        device = disktool_core.local_block_device(device)
     except ValueError as e:
         flash(f'Invalid device name: {e}')
         return redirect(url_for('disks_index'))
@@ -2849,7 +3017,7 @@ def smart_start_route(device, mode):
 @login_required
 def smart_view_route(device):
     try:
-        device = disktool_core.sanitize_device_name(device)
+        device = disktool_core.local_block_device(device)
     except ValueError as e:
         flash(f'Invalid device name: {e}')
         return redirect(url_for('disks_index'))
@@ -2860,7 +3028,7 @@ def smart_view_route(device):
 @login_required
 def validate_route(device):
     try:
-        device = disktool_core.sanitize_device_name(device)
+        device = disktool_core.local_block_device(device)
     except ValueError as e:
         flash(f'Invalid device name: {e}')
         return redirect(url_for('disks_index'))
@@ -2984,9 +3152,7 @@ def render_plugin_page(plugin, device):
         return redirect(url_for('disks_index'))
     
     # Check if the plugin template exists
-    from pathlib import Path
-    template_path = Path(app.template_folder) / 'addons' / f'{plugin}.html'
-    if not template_path.exists():
+    if _existing_file(_ADDON_TEMPLATE_DIR, f'{plugin}.html') is None:
         flash(f'Plugin {plugin} not found')
         return redirect(url_for('disks_index'))
     
@@ -3089,16 +3255,16 @@ def users_list():
         return redirect(url_for('index'))
     
     users = user_management.list_users()
-    roles_by_user = {}
-    for user in users:
-        roles_by_user[user['id']] = user_management.get_user_role_names(user['id'])
+    all_roles = user_management.roles_by_user()
+    roles_by_user = {user['id']: all_roles.get(user['id'], []) for user in users}
     
     return render_template('users/list.html', users=users, roles_by_user=roles_by_user)
 
 def _other_active_admins(uid):
     """Number of active admins other than ``uid``."""
+    all_roles = user_management.roles_by_user()
     return sum(1 for u in user_management.list_users()
-               if u['id'] != uid and u['active'] and 'admin' in user_management.get_user_role_names(u['id']))
+               if u['id'] != uid and u['active'] and 'admin' in all_roles.get(u['id'], []))
 
 
 @app.route("/users/add", methods=["GET", "POST"])
@@ -3124,7 +3290,7 @@ def users_add():
         if not username or not password:
             flash('Username and password are required.')
             return redirect(url_for('users_add'))
-        problem = _password_problem(password)
+        problem = _password_problem(password, username)
         if problem:
             flash(problem, 'error')
             return redirect(url_for('users_add'))
@@ -3172,8 +3338,8 @@ def users_edit(uid):
         if not username:
             flash('Username is required.')
             return redirect(url_for('users_edit', uid=uid))
-        if password and _password_problem(password):
-            flash(_password_problem(password), 'error')
+        if password and _password_problem(password, username):
+            flash(_password_problem(password, username), 'error')
             return redirect(url_for('users_edit', uid=uid))
         was_admin = 'admin' in user_management.get_user_role_names(uid)
         if was_admin and user['active'] and ('admin' not in roles or not active) and not _other_active_admins(uid):
@@ -3275,8 +3441,8 @@ def users_profile():
         email = request.form.get("email", "").strip() or None
         password = request.form.get("password", "")
         if password:
-            problem = _password_problem(password)
             current_name = user_management.get_user_by_id(user_id)['username']
+            problem = _password_problem(password, current_name)
             if not problem and not user_management.verify_password(current_name, request.form.get("current_password", "")):
                 problem = 'Your current password is incorrect.'
             if problem:
@@ -3335,8 +3501,7 @@ def _handle_integrity_error(exc):
     if _wants_json():
         return jsonify({'ok': False, 'error': message}), 409
     flash(message, 'error')
-    ref = request.referrer
-    return redirect(ref if ref and ref.startswith(request.host_url) else url_for('index'))
+    return redirect(_back())
 
 
 @app.errorhandler(500)
@@ -3355,13 +3520,14 @@ def add_security_headers(response):
     response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=(), payment=(), usb=()'
     response.headers['Cross-Origin-Opener-Policy'] = 'same-origin'
     response.headers['Cross-Origin-Resource-Policy'] = 'same-origin'
-    # Inline scripts/styles are still used by templates; eval is not needed by anything.
+    # Every asset is served by FleetPilot itself (static/vendor), so nothing may load from
+    # other origins. Inline scripts/styles are still used by templates; eval is not.
     response.headers['Content-Security-Policy'] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
-        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; "
-        "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "
-        "img-src 'self' data: https:; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "font-src 'self'; "
+        "img-src 'self' data:; "
         "connect-src 'self'; "
         "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
     )
@@ -3379,7 +3545,7 @@ def add_security_headers(response):
 
 # ---- Network Scanner Routes ----
 
-import socket, subprocess, concurrent.futures
+import subprocess
 
 def _detect_hostname(ip):
     """Try reverse DNS lookup for a discovered IP."""
@@ -3495,7 +3661,7 @@ def discover_host_capabilities(name):
         flash(f'Checking management interfaces for {name} in the background.', 'success')
     else:
         flash(f'A capability check for {name} is already running.', 'warning')
-    return redirect(request.referrer or url_for('manage_hosts'))
+    return redirect(_back(url_for('manage_hosts')))
 
 
 @app.route('/hosts/discover_all', methods=['POST'])
@@ -3507,7 +3673,7 @@ def discover_all_host_capabilities():
         return redirect(url_for('index'))
     scheduled = sum(1 for name in load_hosts() if schedule_host_discovery(name))
     flash(f'Capability checks scheduled for {scheduled} configured host(s).', 'success')
-    return redirect(request.referrer or url_for('index'))
+    return redirect(_back())
 
 
 @app.route('/hosts/quick_add', methods=['POST'])
@@ -3718,7 +3884,7 @@ def server_update():
             sudo_pw = request.form.get('sudo_password', '')
             if not sudo_pw:
                 return jsonify({'error': 'Sudo password required for reboot'}), 400
-            import subprocess, threading
+            import subprocess
             def _do_reboot():
                 import time
                 time.sleep(2)  # Give the HTTP response time to reach the browser
@@ -3929,11 +4095,8 @@ def set_language():
         lang = 'en'
     session['lang'] = lang
     session.modified = True          # force session save even if nothing else changed
-    next_url = request.args.get('next') or request.form.get('next') or request.referrer or '/index'
-    # Security: Only allow relative paths to prevent open redirect attacks
-    if not next_url or not next_url.startswith('/') or '//' in next_url or next_url.startswith('//') or '\\' in next_url:
-        next_url = '/index'
-    return redirect(next_url)
+    next_url = request.args.get('next') or request.form.get('next')
+    return redirect(_local_url(next_url) if next_url else _back())
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Plugin Manager Routes
@@ -3961,15 +4124,38 @@ EXAMPLE_PLUGINS = [
 ]
 
 
-def _sanitize_addon_path(filename: str):
-    """Return a safe absolute path inside addons/ or None if invalid."""
-    base = Path("addons").resolve()
-    target = (base / filename).resolve()
+_ADDON_DIR = os.path.join(_APP_DIR, 'addons')
+_ADDON_TEMPLATE_DIR = os.path.join(_APP_DIR, 'templates', 'addons')
+
+
+def _existing_file(folder, filename):
+    """Path of the file in ``folder`` whose name equals ``filename``, else None.
+
+    The returned path is built from the directory listing, so a request value
+    never becomes part of a file path.
+    """
     try:
-        target.relative_to(base)
-        return target
-    except ValueError:
+        entries = os.listdir(folder)
+    except OSError:
         return None
+    for entry in entries:
+        if entry == filename:
+            path = os.path.join(folder, entry)
+            return path if os.path.isfile(path) else None
+    return None
+
+
+def _new_addon_path(filename: str):
+    """Absolute path for a new add-on file, or None if the name is not a plain module name."""
+    from werkzeug.utils import secure_filename
+    name = secure_filename(filename or '')
+    if not re.fullmatch(r'[A-Za-z0-9_]+\.py', name):
+        return None
+    base = os.path.realpath(_ADDON_DIR)
+    path = os.path.realpath(os.path.join(base, name))
+    if not path.startswith(base + os.sep):
+        return None
+    return path
 
 
 @app.route("/plugins")
@@ -4005,15 +4191,12 @@ def plugin_upload():
     if not f or not f.filename.endswith(".py"):
         flash("Please upload a valid .py file.", "error")
         return redirect("/plugins")
-    fname = re.sub(r"[^a-zA-Z0-9_.\/]", "_", f.filename)
-    if not re.match(r"^[a-zA-Z0-9_]+\.py$", fname):
-        flash("Invalid filename.", "error")
-        return redirect("/plugins")
-    dest = _sanitize_addon_path(fname)
+    dest = _new_addon_path(f.filename)
     if dest is None:
-        flash("Invalid path.", "error")
+        flash("Invalid filename. Use letters, digits and underscores, ending in .py.", "error")
         return redirect("/plugins")
-    f.save(str(dest))
+    fname = os.path.basename(dest)
+    f.save(dest)
     flash(f"Plugin '{fname}' uploaded. Restart FleetPilot to activate it.", "success")
     return redirect("/plugins")
 
@@ -4031,14 +4214,14 @@ def plugin_uninstall(plugin_file):
     if not re.match(r"^[a-zA-Z0-9_]+\.py$", plugin_file):
         flash("Invalid filename.", "error")
         return redirect("/plugins")
-    path = _sanitize_addon_path(plugin_file)
-    if path is None or not path.exists():
+    path = _existing_file(_ADDON_DIR, plugin_file)
+    if path is None:
         flash("Plugin not found.", "error")
         return redirect("/plugins")
     os.remove(path)
     # Remove associated template if present
-    tpl = Path("templates/addons") / plugin_file.replace(".py", ".html")
-    if tpl.exists():
+    tpl = _existing_file(_ADDON_TEMPLATE_DIR, plugin_file[:-3] + ".html")
+    if tpl:
         os.remove(tpl)
     flash(f"Plugin '{plugin_file}' removed. Restart FleetPilot to deactivate it.", "success")
     return redirect("/plugins")
@@ -4051,11 +4234,12 @@ def plugin_view_source(plugin_file):
     if not re.match(r"^[a-zA-Z0-9_]+\.py$", plugin_file):
         flash("Invalid filename.", "error")
         return redirect("/plugins")
-    path = _sanitize_addon_path(plugin_file)
-    if path is None or not path.exists():
+    path = _existing_file(_ADDON_DIR, plugin_file)
+    if path is None:
         flash("Plugin not found.", "error")
         return redirect("/plugins")
-    source = path.read_text(encoding="utf-8")
+    with open(path, encoding="utf-8") as fh:
+        source = fh.read()
     return render_template(
         "plugin_source.html",
         filename=plugin_file,
@@ -4076,12 +4260,19 @@ def plugin_repository_json():
     """Proxy / cache the remote plugin repository JSON."""
     import urllib.request
     import urllib.error
+    if offline_mode():
+        return jsonify({"plugins": [], "offline": True})
+    data = cache_get('plugin_repository')
+    if data is not None:
+        return app.response_class(data, mimetype="application/json")
     try:
         resp = requests.get(REMOTE_PLUGIN_REPO, timeout=5)
         resp.raise_for_status()
         data = resp.text
+        cache_set('plugin_repository', data, ttl=600)
         return app.response_class(data, mimetype="application/json")
     except Exception:
+        cache_set('plugin_repository', '{"plugins": []}', ttl=600)  # do not retry on every page view
         return jsonify({"plugins": []})
 
 
@@ -4094,6 +4285,9 @@ def plugin_install_remote(plugin_id):
         return redirect("/plugins")
     if not re.match(r"^[a-zA-Z0-9_]+$", plugin_id):
         flash("Invalid plugin ID.", "error")
+        return redirect("/plugins")
+    if offline_mode():
+        flash("Online plugin installation is disabled (FLEETPILOT_OFFLINE).", "error")
         return redirect("/plugins")
     import urllib.request
     import urllib.error
@@ -4115,18 +4309,18 @@ def plugin_install_remote(plugin_id):
         resp = requests.get(plugin_url, timeout=10)
         resp.raise_for_status()
         code = resp.text
-        fname = f"{plugin_id}.py"
-        dest = _sanitize_addon_path(fname)
+        dest = _new_addon_path(f"{plugin_id}.py")
         if dest is None:
-            flash("Invalid path.", "error")
+            flash("Invalid plugin ID.", "error")
             return redirect("/plugins")
-        if dest.exists():
+        if os.path.exists(dest):
             flash(f"Plugin '{plugin_id}' is already installed.", "warning")
             return redirect("/plugins")
-        dest.write_text(code, encoding="utf-8")
+        with open(dest, "w", encoding="utf-8") as fh:
+            fh.write(code)
         flash(f"Plugin '{plugin_id}' installed. Restart FleetPilot to activate it.", "success")
     except Exception as exc:
-        flash(f"Install failed: {exc}", "error")
+        flash(_error_message(exc, "Install"), "error")
     return redirect("/plugins")
 
 
@@ -4184,7 +4378,7 @@ def vm_delete(ep_id):
 @login_required
 def vm_test(ep_id):
     result = vm_controller.test_connection(ep_id)
-    return json.dumps(result), 200, {"Content-Type": "application/json"}
+    return jsonify(result), 200
 
 
 @app.route("/vm/<int:ep_id>/update", methods=["POST"])
@@ -4214,7 +4408,7 @@ def vm_update(ep_id):
         daemon=True
     ).start()
     _safe_log_key = re.sub(r'[^a-zA-Z0-9_-]', '', str(log_key))
-    return redirect(f"/progress/{_safe_log_key}")
+    return redirect(_local_url(f"/progress/{_safe_log_key}"))
 
 
 @app.route("/vm/<int:ep_id>")
@@ -4238,7 +4432,7 @@ def vm_detail(ep_id):
         elif ep["platform"] == "veeam":
             jobs = vm_controller.get_all_jobs(ep_id)
     except Exception as exc:
-        error = str(exc)
+        error = _error_message(exc, "Loading this endpoint")
     return render_template("vm/detail.html",
                            ep=ep, vms=vms, jobs=jobs, nodes=nodes, error=error)
 
@@ -4248,30 +4442,30 @@ def vm_detail(ep_id):
 def vm_action(ep_id):
     """Perform a power action on a Proxmox VM."""
     if not current_user_has_role("admin"):
-        return json.dumps({"ok": False, "error": "Permission denied"}), 403, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "Permission denied"}), 403
     node   = request.form.get("node", "")
     vmid   = int(request.form.get("vmid", 0))
     action = request.form.get("action", "")
     rtype  = request.form.get("rtype", "qemu")
     if action not in ("start", "stop", "shutdown", "reboot", "suspend", "resume"):
-        return json.dumps({"ok": False, "error": "Invalid action"}), 400, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "Invalid action"}), 400
     result = vm_controller.vm_power_action(ep_id, node, vmid, action, rtype)
-    return json.dumps(result), 200, {"Content-Type": "application/json"}
+    return jsonify(result), 200
 
 
 @app.route("/vm/<int:ep_id>/veeam/job/<job_id>/start", methods=["POST"])
 @login_required
 def veeam_start_job(ep_id, job_id):
     if not current_user_has_role("admin"):
-        return json.dumps({"ok": False, "error": "Permission denied"}), 403, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "Permission denied"}), 403
     try:
         client = vm_controller.connect(ep_id)
         result = client.start_job(job_id)
         vm_controller.log_event(ep_id, job_id, job_id, "START_JOB",
                                  "ok" if result.get("ok") else "error")
-        return json.dumps(result), 200, {"Content-Type": "application/json"}
+        return jsonify(result), 200
     except Exception as exc:
-        return json.dumps({"ok": False, "error": str(exc)}), 502, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": _error_message(exc)}), 502
 
 
 @app.route("/vm/<int:ep_id>/disks")
@@ -4296,7 +4490,7 @@ def vm_disks(ep_id):
                     source_id=str(ep_id)
                 )
     except Exception as exc:
-        error = str(exc)
+        error = _error_message(exc, "Loading this endpoint")
     return render_template("vm/disks.html", ep_id=ep_id, node=node, disks=disks, error=error)
 
 
@@ -4352,7 +4546,7 @@ def storage_delete(ep_id):
 @login_required
 def storage_test(ep_id):
     result = storage_controller.test_connection(ep_id)
-    return json.dumps(result), 200, {"Content-Type": "application/json"}
+    return jsonify(result), 200
 
 
 @app.route("/storage/<int:ep_id>")
@@ -4374,7 +4568,7 @@ def storage_detail(ep_id):
                 source_id=str(ep_id)
             )
     except Exception as exc:
-        error = str(exc)
+        error = _error_message(exc, "Loading this endpoint")
         overview = {"error": error}
     return render_template("storage/detail.html", ep_id=ep_id, overview=overview, error=error)
 
@@ -4384,12 +4578,12 @@ def storage_detail(ep_id):
 def storage_poll(ep_id):
     """Manually trigger a disk health poll for a storage endpoint."""
     if not current_user_has_role("admin"):
-        return json.dumps({"ok": False, "error": "Permission denied"}), 403, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "Permission denied"}), 403
     try:
         storage_controller.poll_and_log_disks(ep_id)
-        return json.dumps({"ok": True, "message": "Poll complete"}), 200, {"Content-Type": "application/json"}
+        return jsonify({"ok": True, "message": "Poll complete"}), 200
     except Exception as exc:
-        return json.dumps({"ok": False, "error": str(exc)}), 500, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": _error_message(exc)}), 500
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -4470,10 +4664,10 @@ def smart_poll_now():
 def smart_import_host(host_name):
     """Import disks from a single SSH-configured host into the SMART registry."""
     if not current_user_has_role("admin"):
-        return json.dumps({"ok": False, "error": "Permission denied"}), 403, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "Permission denied"}), 403
     hosts = load_hosts()
     if host_name not in hosts:
-        return json.dumps({"ok": False, "error": "Host not found"}), 404, {"Content-Type": "application/json"}
+        return jsonify({"ok": False, "error": "Host not found"}), 404
     h = hosts[host_name]
     ip = h.get("host", "")
     user = h.get("user", "root")
@@ -4544,7 +4738,7 @@ def smart_ack_alert(alert_id):
 @login_required
 def api_smart_summary():
     """JSON API: disk health summary for widgets."""
-    return json.dumps(smart_manager.get_health_summary()), 200, {"Content-Type": "application/json"}
+    return jsonify(smart_manager.get_health_summary()), 200
 
 
 @app.route("/api/smart/disks")
@@ -4552,7 +4746,7 @@ def api_smart_summary():
 def api_smart_disks():
     """JSON API: full disk list with latest health status."""
     disks = smart_manager.get_all_disks()
-    return json.dumps(disks, default=str), 200, {"Content-Type": "application/json"}
+    return app.response_class(json.dumps(disks, default=str), mimetype="application/json")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -4706,6 +4900,175 @@ def system_backups_restore_cancel():
     return redirect(url_for('system_backups'))
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# ROUTERS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _router_or_404(router_id):
+    router = router_manager.get_router(router_id)
+    if not router:
+        abort(404)
+    return router
+
+
+@app.route('/routers')
+@login_required
+def routers_index():
+    return render_template('routers/index.html', routers=router_manager.list_routers(),
+                           summary=router_manager.summary(), platforms=router_manager.PLATFORMS,
+                           roles=router_manager.ROLES,
+                           is_admin=current_user_has_role('admin'),
+                           can_operate=current_user_has_role('operator', 'admin'))
+
+
+@app.route('/routers/add', methods=['POST'])
+@admin_required
+def routers_add():
+    try:
+        router_id = router_manager.add_router(request.form.to_dict())
+    except ValueError as exc:
+        flash(str(exc), 'error')
+        return redirect(url_for('routers_index'))
+    _audit('router_added', request.form.get('name', '')[:64])
+    try:
+        status = router_manager.poll(router_id)
+        flash('Router added.' + ('' if status.get('online') else f' It could not be reached yet: {status.get("error")}'),
+              'success' if status.get('online') else 'warning')
+    except Exception as exc:
+        flash(_error_message(exc, 'First contact'), 'warning')
+    return redirect(url_for('routers_detail', router_id=router_id))
+
+
+@app.route('/routers/<int:router_id>')
+@login_required
+def routers_detail(router_id):
+    router = _router_or_404(router_id)
+    return render_template('routers/detail.html', router=router, platforms=router_manager.PLATFORMS,
+                           roles=router_manager.ROLES,
+                           spec=router_manager.PLATFORMS[router['platform']],
+                           backups=router_manager.list_backups(router_id),
+                           is_admin=current_user_has_role('admin'),
+                           can_operate=current_user_has_role('operator', 'admin'))
+
+
+@app.route('/routers/<int:router_id>/edit', methods=['POST'])
+@admin_required
+@recent_auth_required
+def routers_edit(router_id):
+    _router_or_404(router_id)
+    try:
+        router_manager.update_router(router_id, request.form.to_dict())
+    except ValueError as exc:
+        flash(str(exc), 'error')
+    else:
+        _audit('router_updated', str(router_id))
+        flash('Router settings saved.')
+    return redirect(url_for('routers_detail', router_id=router_id))
+
+
+@app.route('/routers/<int:router_id>/delete', methods=['POST'])
+@admin_required
+@recent_auth_required
+def routers_delete(router_id):
+    router = _router_or_404(router_id)
+    router_manager.delete_router(router_id)
+    _audit('router_deleted', router['name'])
+    flash(f'{router["name"]} and its stored backups were removed.')
+    return redirect(url_for('routers_index'))
+
+
+@app.route('/routers/<int:router_id>/refresh', methods=['POST'])
+@operator_required
+def routers_refresh(router_id):
+    _router_or_404(router_id)
+    status = router_manager.poll(router_id)
+    if _wants_json():
+        return jsonify({'ok': bool(status.get('online')), 'status': status})
+    flash('Status updated.' if status.get('online') else status.get('error', 'The router did not answer.'),
+          'success' if status.get('online') else 'error')
+    return redirect(url_for('routers_detail', router_id=router_id))
+
+
+@app.route('/routers/<int:router_id>/updates', methods=['POST'])
+@operator_required
+def routers_check_updates(router_id):
+    _router_or_404(router_id)
+    try:
+        result = router_manager.check_updates(router_id)
+        flash(f'{result["count"]} update(s) available.' if result['count'] else 'No updates available.',
+              'warning' if result['count'] else 'success')
+    except ValueError as exc:
+        flash(str(exc), 'error')
+    except Exception as exc:
+        flash(_error_message(exc, 'Update check'), 'error')
+    return redirect(url_for('routers_detail', router_id=router_id))
+
+
+@app.route('/routers/<int:router_id>/backup', methods=['POST'])
+@operator_required
+def routers_backup(router_id):
+    _router_or_404(router_id)
+    try:
+        name = router_manager.backup(router_id)
+        _audit('router_backup_created', name)
+        flash('Configuration backup saved (encrypted).', 'success')
+    except ValueError as exc:
+        flash(str(exc), 'error')
+    except Exception as exc:
+        flash(_error_message(exc, 'Backup'), 'error')
+    return redirect(url_for('routers_detail', router_id=router_id))
+
+
+@app.route('/routers/<int:router_id>/backups/<name>')
+@admin_required
+@recent_auth_required
+def routers_backup_download(router_id, name):
+    _router_or_404(router_id)
+    found = router_manager.read_backup(router_id, name)
+    if not found:
+        abort(404)
+    download_name, data = found
+    _audit('router_backup_downloaded', name)
+    response = make_response(data)
+    response.headers['Content-Type'] = 'application/octet-stream'
+    response.headers['Content-Disposition'] = f'attachment; filename="{download_name}"'
+    return response
+
+
+@app.route('/routers/<int:router_id>/reboot', methods=['POST'])
+@admin_required
+@recent_auth_required
+def routers_reboot(router_id):
+    router = _router_or_404(router_id)
+    if request.form.get('confirm', '') != router['name']:
+        flash(f'Type the router name ({router["name"]}) to confirm the reboot.', 'error')
+        return redirect(url_for('routers_detail', router_id=router_id))
+    try:
+        router_manager.reboot(router_id)
+        _audit('router_rebooted', router['name'])
+        notify.send('router', f'FleetPilot: {router["name"]} rebooting',
+                    f'{session.get("username")} restarted {router["name"]}.', 'warning')
+        flash(f'{router["name"]} is restarting. The network may be unavailable for a few minutes.', 'warning')
+    except Exception as exc:
+        flash(_error_message(exc, 'Reboot'), 'error')
+    return redirect(url_for('routers_detail', router_id=router_id))
+
+
+@app.route('/api/routers')
+@login_required
+def api_routers():
+    """Router inventory and last known state (no credentials)."""
+    out = []
+    for r in router_manager.list_routers():
+        st = r['status']
+        out.append({'id': r['id'], 'name': r['name'], 'platform': r['platform'], 'host': r['host'],
+                    'online': bool(r['online']), 'last_poll': r['last_poll'], 'model': st.get('model'),
+                    'firmware': st.get('firmware'), 'uptime': st.get('uptime'),
+                    'clients': len(st.get('clients') or []),
+                    'updates': (st.get('updates') or {}).get('count')})
+    return jsonify({'routers': out})
+
+
 @app.route("/metrics")
 def prometheus_metrics():
     """Prometheus metrics. Authenticate with the API token shown on the CheckMK page."""
@@ -4713,7 +5076,7 @@ def prometheus_metrics():
         return "Unauthorized\n", 401, {"Content-Type": "text/plain; charset=utf-8",
                                        "WWW-Authenticate": 'Bearer realm="fleetpilot"'}
     body = metrics.render(fleetpilot_version.release_metadata(), load_hosts(),
-                          smart_manager, system_monitor, disktool_core)
+                          smart_manager, system_monitor, disktool_core, router_manager)
     return body, 200, {"Content-Type": "text/plain; version=0.0.4; charset=utf-8"}
 
 
@@ -4739,7 +5102,7 @@ def api_checkmk_host(host_name):
         return "Unauthorized", 401
     hosts = load_hosts()
     if host_name not in hosts:
-        return f"Host '{host_name}' not found", 404
+        abort(404)
     output = _cmk.build_host_piggyback(
         host_name, hosts[host_name], smart_manager=smart_manager
     )
@@ -5076,8 +5439,9 @@ def commander_set_fan(dev_id):
                     t, r = pair.split(',')
                     pairs.append((int(t.strip()), int(r.strip())))
             speed = pairs
-        except Exception as exc:
-            return jsonify({'ok': False, 'error': f'Invalid profile: {exc}'}), 400
+        except (ValueError, TypeError):
+            return jsonify({'ok': False, 'error': 'Invalid profile. Use temperature,speed pairs separated by '
+                                                  'semicolons, for example 40,30; 60,60; 80,100.'}), 400
 
     result = corsair_commander.set_fan_speed(dev, channel, speed)
     return jsonify(result)
@@ -5376,8 +5740,9 @@ def fc_set_fan(dev_id):
                 if pair:
                     t, r = pair.split(',')
                     speed.append((int(t.strip()), int(r.strip())))
-        except Exception as exc:
-            return jsonify({'ok': False, 'error': f'Invalid profile: {exc}'}), 400
+        except (ValueError, TypeError):
+            return jsonify({'ok': False, 'error': 'Invalid profile. Use temperature,speed pairs separated by '
+                                                  'semicolons, for example 40,30; 60,60; 80,100.'}), 400
 
     extra = {}
     for k in ['zone']:
@@ -5410,7 +5775,7 @@ def fc_install(dev_id):
 
     threading.Thread(target=_run, daemon=True).start()
     _safe_progress_key = re.sub(r'[^a-zA-Z0-9_-]', '', str(progress_key))
-    return redirect(f"/progress/{_safe_progress_key}")
+    return redirect(_local_url(f"/progress/{_safe_progress_key}"))
 
 
 # ── Fan Controller JSON API ───────────────────────────────────────────────────
@@ -5820,7 +6185,7 @@ def api_disks_scan():
         disks = disktool_core.list_disks()
         return jsonify({'disks': disks, 'count': len(disks)})
     except Exception as e:
-        return jsonify({'error': str(e), 'disks': []}), 200
+        return jsonify({'error': _error_message(e), 'disks': []}), 200
 
 
 @app.route('/api/smart/status')
@@ -5831,7 +6196,7 @@ def api_smart_status():
         summary = smart_manager.get_summary()
         return jsonify(summary)
     except Exception as e:
-        return jsonify({'error': str(e), 'hosts': [], 'total_disks': 0}), 200
+        return jsonify({'error': _error_message(e), 'hosts': [], 'total_disks': 0}), 200
 
 
 @app.route('/api/fans/list')
@@ -5842,7 +6207,7 @@ def api_fans_list_alias():
         devices = _fc.list_devices()
         return jsonify({'devices': devices, 'count': len(devices)})
     except Exception as e:
-        return jsonify({'devices': [], 'error': str(e)})
+        return jsonify({'devices': [], 'error': _error_message(e)})
 
 
 @app.route('/api/backup/list')
@@ -5853,7 +6218,7 @@ def api_backup_list_alias():
         servers = _bc.list_servers()
         return jsonify({'servers': servers})
     except Exception as e:
-        return jsonify({'servers': [], 'error': str(e)})
+        return jsonify({'servers': [], 'error': _error_message(e)})
 
 
 @app.route('/api/monitor/data')
@@ -5864,7 +6229,7 @@ def api_monitor_data_alias():
         data = system_monitor.get_latest()
         return jsonify(data if data else {})
     except Exception as e:
-        return jsonify({'error': str(e)})
+        return jsonify({'error': _error_message(e)})
 
 
 @app.route('/api/hw_overview')
@@ -5877,7 +6242,7 @@ def api_hw_overview_alias():
             return jsonify({'servers': servers})
         return jsonify({'servers': [], 'error': 'HW Info not available'})
     except Exception as e:
-        return jsonify({'servers': [], 'error': str(e)}), 200
+        return jsonify({'servers': [], 'error': _error_message(e)}), 200
 
 
 @app.route('/api/fp_version')
@@ -5964,7 +6329,7 @@ def api_host_metrics():
             })
         return jsonify({'error': 'parse error', 'raw': out})
     except Exception as e:
-        return jsonify({'error': str(e)}), 503
+        return jsonify({'error': _error_message(e)}), 503
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -5997,7 +6362,7 @@ def host_wol(name):
         app.logger.info(f'WOL magic packet sent to {name} ({mac})')
         return jsonify({'ok': True, 'message': f'Magic packet sent to {name} ({mac}). Server should wake up within 30 seconds.'})
     except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        return jsonify({'ok': False, 'error': _error_message(e)}), 500
 
 
 @app.route('/api/hosts/<name>/wol', methods=['POST'])
@@ -6057,23 +6422,19 @@ def host_shutdown(name):
     
     # ── Linux / Proxmox / Unraid fallback: SSH shutdown ──────────────────────
     try:
-        import paramiko as _pm
         ssh_host = host_ip
         ssh_port = int(host.get('port', 22))
         ssh_user = host.get('user', 'root')
         ssh_pass = host.get('password', '')
         ssh_key  = host.get('ssh_key', '')
         
-        client = _pm.SSHClient()
-        # Host key policy handled by ssh_helper
-        
         connect_kwargs = dict(hostname=ssh_host, port=ssh_port, username=ssh_user, timeout=10)
         if ssh_key:
             connect_kwargs['key_filename'] = ssh_key
         elif ssh_pass:
             connect_kwargs['password'] = ssh_pass
-        
-        client.connect(**connect_kwargs)
+        # ssh_helper verifies the host key (known_hosts / trust on first use).
+        client = ssh_helper.create_client(**connect_kwargs)
         
         # Choose shutdown command based on OS type
         if os_type == 'windows':
@@ -6094,7 +6455,7 @@ def host_shutdown(name):
         return jsonify({'ok': True, 'message': f'{name} is shutting down via SSH.'})
     except Exception as e:
         app.logger.error(f'Shutdown failed for {name}: {e}')
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        return jsonify({'ok': False, 'error': _error_message(e, 'Shutdown')}), 502
 
 
 @app.route('/api/hosts/<name>/shutdown', methods=['POST'])

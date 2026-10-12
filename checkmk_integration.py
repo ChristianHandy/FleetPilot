@@ -19,6 +19,7 @@ Author: FleetPilot
 """
 
 from __future__ import annotations
+import safe_errors
 import json
 import os
 import time
@@ -445,7 +446,7 @@ def build_status_json(hosts: dict, smart_manager=None,
                 if health in ("FAILED", "CRITICAL"):
                     failed_disks.append(entry)
         except Exception as e:
-            disk_summary = [{"error": str(e)}]
+            disk_summary = [{"error": safe_errors.public_error(e, "Disk summary")}]
 
     # VM summary
     vm_summary = []

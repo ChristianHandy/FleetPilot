@@ -22,6 +22,27 @@ def sanitize_device_name(device):
         raise ValueError(f"Invalid device name: {device}")
     return device
 
+def _present_block_devices():
+    """Names of the block devices this machine has right now (sda, nvme0n1, ...)."""
+    try:
+        return os.listdir('/sys/block')
+    except OSError:
+        return []
+
+
+def local_block_device(device):
+    """Return the name of an existing local block device that equals ``device``.
+
+    The returned string comes from /sys/block, never from the caller, so only
+    disks that really exist can reach smartctl, lsblk or the disk helper.
+    """
+    device = sanitize_device_name(device)
+    for present in _present_block_devices():
+        if present == device:
+            return present
+    raise ValueError(f"No disk named {device} on this server")
+
+
 def get_db():
     """Stellt eine DB-Verbindung her und liefert das Connection-Objekt zurück."""
     conn = sqlite3.connect(DB_FILE, timeout=15)
@@ -291,7 +312,7 @@ def protected_system_disks():
 
 def validate_format_target(device):
     """Allow only a present, whole, non-system disk to enter the destructive workflow."""
-    device = sanitize_device_name(device)
+    device = local_block_device(device)
     if device in protected_system_disks():
         raise ValueError(f'/dev/{device} contains an active system mount and is protected')
     disk_type = _command_output(['lsblk', '-dn', '-o', 'TYPE', f'/dev/{device}'])
@@ -352,7 +373,7 @@ def start_format(device, fs, wipe_mode):
 
 def start_smart(device, mode):
     """Startet einen SMART-Test (kurz/lang) für device."""
-    device = sanitize_device_name(device)
+    device = local_block_device(device)
     if mode not in ('short', 'long'):
         raise ValueError("Invalid SMART mode")
     run(['smartctl', '-t', mode, f'/dev/{device}'])
@@ -360,7 +381,7 @@ def start_smart(device, mode):
 
 def view_smart(device):
     """Liest SMART-Report via smartctl und loggt Temperatur/Health in die History."""
-    device = sanitize_device_name(device)
+    device = local_block_device(device)
     out = run(['smartctl', '-a', f'/dev/{device}'])
     m = re.search(r'Temperature_Celsius.*\s(\d+)', out)
     temp = int(m.group(1)) if m else None
@@ -377,7 +398,7 @@ def validate_blocks(device):
     fixed ``validate read <device>`` command and performs 256 direct 4 KiB
     reads across the whole device; it has no write path in validation mode.
     """
-    device = sanitize_device_name(device)
+    device = local_block_device(device)
     result = subprocess.run(
         ['sudo', '-n', DISK_ACTION_HELPER, 'validate', 'read', device],
         stdout=subprocess.PIPE,
@@ -517,10 +538,8 @@ def export_smart_data():
 
 def import_smart_data(file_storage, device='UNKNOWN'):
     """Importiert einen SMART-Bericht aus einer hochgeladenen Datei in die smart_history Tabelle."""
-    filename = file_storage.filename or "smart_upload.txt"
-    path = UPLOAD_DIR / filename
-    file_storage.save(path)
-    text = path.read_text()
+    # Read the upload in memory; its filename is never used as a path.
+    text = file_storage.stream.read(2 * 1024 * 1024).decode('utf-8', errors='replace')
     m = re.search(r'Temperature_Celsius.*\s(\d+)', text)
     temp = int(m.group(1)) if m else None
     health = 'BAD' if 'FAILING_NOW' in text else 'GOOD'

@@ -38,6 +38,7 @@ EVENTS = {
     'smart': 'Disk health alerts',
     'security': 'Security events (lockouts, new admins, settings changes)',
     'backup': 'FleetPilot backups and restores',
+    'router': 'Routers going offline or online, and router updates',
 }
 LEVELS = ('info', 'warning', 'critical')
 TIMEOUT = 6

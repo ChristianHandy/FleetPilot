@@ -5,9 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Two-factor sign-in · FleetPilot</title>
   {% if csrf_token is defined %}<meta name="csrf-token" content="{{ csrf_token() }}">{% endif %}
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="{{ url_for('static', filename='vendor/fonts/fonts.css') }}" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css?v={{ asset_version('style.css') if asset_version is defined else 0 }}">
   <script>
     try { var t = localStorage.getItem('fp_theme'); if (t) document.documentElement.setAttribute('data-theme', t);

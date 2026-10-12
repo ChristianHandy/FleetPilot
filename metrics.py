@@ -43,7 +43,7 @@ def _age_seconds(timestamp):
         return None
 
 
-def render(release, hosts, smart_manager, system_monitor, disktool_core=None):
+def render(release, hosts, smart_manager, system_monitor, disktool_core=None, router_manager=None):
     """Return the metrics page as Prometheus text format."""
     w = _Writer()
     w.metric("fleetpilot_info", "gauge", "FleetPilot build information.", 1,
@@ -97,5 +97,23 @@ def render(release, hosts, smart_manager, system_monitor, disktool_core=None):
                      1 if disktool_core.auto_enabled else 0)
         except Exception:
             w.metric("fleetpilot_scrape_error", "gauge", "A collector failed during this scrape.", 1, collector="disktools")
+
+    # Routers
+    if router_manager is not None:
+        try:
+            for r in router_manager.list_routers():
+                st = r["status"]
+                labels = {"router": r["name"], "platform": r["platform"]}
+                w.metric("fleetpilot_router_up", "gauge", "1 if the router answered the last check.",
+                         1 if r["online"] else 0, **labels)
+                if r["online"]:
+                    w.metric("fleetpilot_router_uptime_seconds", "gauge", "Router uptime.", st.get("uptime") or 0, **labels)
+                    w.metric("fleetpilot_router_dhcp_clients", "gauge", "Active DHCP leases on the router.",
+                             len(st.get("clients") or []), **labels)
+                if st.get("updates"):
+                    w.metric("fleetpilot_router_updates_available", "gauge", "Updates found by the last check.",
+                             st["updates"].get("count", 0), **labels)
+        except Exception:
+            w.metric("fleetpilot_scrape_error", "gauge", "A collector failed during this scrape.", 1, collector="routers")
 
     return w.text()

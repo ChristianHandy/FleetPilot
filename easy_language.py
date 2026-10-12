@@ -15,6 +15,7 @@ NAV = {
         "Home": "Start page",
         "Manage Hosts": "My computers",
         "Network Scanner": "Find computers",
+        "Routers": "Internet boxes",
         "Update Dashboard": "Updates",
         "Server update": "Update this server",
         "Hardware overview": "Computer parts",
@@ -52,6 +53,7 @@ NAV = {
         "Home": "Startseite",
         "Manage Hosts": "Meine Computer",
         "Network Scanner": "Computer finden",
+        "Routers": "Router (Internet-Box)",
         "Update Dashboard": "Updates",
         "Server update": "Diesen Server aktualisieren",
         "Hardware overview": "Teile im Computer",
@@ -92,6 +94,7 @@ PAGES = {
     "en": {
         "/index": "This is the start page. You see your computers and services here. Green means: everything is fine. Red means: something needs help.",
         "/hosts": "Here you see all computers that FleetPilot looks after. FleetPilot calls them hosts. You can add a computer. You can update a computer. You can turn a computer on or off.",
+        "/routers": "A router connects your computers with each other and with the internet. Here you see your routers. Green means the router works. You also see which devices are connected. You can save the router settings, so you can get them back later.",
         "/scanner": "This page looks for computers in your network. A network is the connection between your computers. Press Start scan. FleetPilot then shows the computers it finds. You can add a found computer to FleetPilot.",
         "/dashboard": "Here you install updates. An update is new software that fixes problems. You can update one computer. You can also turn on automatic updates.",
         "/server_update": "Here you update the computer that runs FleetPilot. This can take a few minutes. Only administrators can do this.",
@@ -128,6 +131,7 @@ PAGES = {
     "de": {
         "/index": "Das ist die Startseite. Hier sehen Sie Ihre Computer und Dienste. Grün bedeutet: alles ist gut. Rot bedeutet: etwas braucht Hilfe.",
         "/hosts": "Hier sehen Sie alle Computer, die FleetPilot betreut. FleetPilot nennt sie Hosts. Sie können einen Computer hinzufügen. Sie können einen Computer aktualisieren. Sie können einen Computer ein- oder ausschalten.",
+        "/routers": "Ein Router verbindet Ihre Computer miteinander und mit dem Internet. Hier sehen Sie Ihre Router. Grün heißt: Der Router funktioniert. Sie sehen auch, welche Geräte verbunden sind. Sie können die Einstellungen vom Router sichern. Dann können Sie sie später zurückholen.",
         "/scanner": "Diese Seite sucht Computer in Ihrem Netzwerk. Das Netzwerk ist die Verbindung zwischen Ihren Computern. Drücken Sie auf Suche starten. Dann zeigt FleetPilot die gefundenen Computer. Sie können einen gefundenen Computer zu FleetPilot hinzufügen.",
         "/dashboard": "Hier installieren Sie Updates. Ein Update ist neue Software. Sie behebt Fehler. Sie können einen Computer aktualisieren. Sie können auch automatische Updates einschalten.",
         "/server_update": "Hier aktualisieren Sie den Computer, auf dem FleetPilot läuft. Das kann ein paar Minuten dauern. Nur Administratoren dürfen das.",

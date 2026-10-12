@@ -12,7 +12,7 @@ PAGES = ['/index', '/hosts', '/scanner', '/dashboard', '/smart', '/storage/works
          '/vm', '/storage', '/backup', '/shutdown_schedule', '/checkmk', '/hw', '/hw_overview',
          '/email_settings', '/update_settings', '/system/backups', '/users', '/users/profile',
          '/users/accessibility', '/2fa', '/plugins', '/users/security', '/system/security',
-         '/system/notifications', '/system/audit', '/reauth?next=/index']
+         '/system/notifications', '/system/audit', '/reauth?next=/index', '/routers']
 
 
 @pytest.fixture
@@ -65,7 +65,7 @@ def test_easy_language_simplifies_menu_and_explains_pages(client):
 def test_templates_link_labels_and_name_icon_buttons():
     unnamed, unlinked = [], []
     for path in glob.glob('templates/**/*.html', recursive=True):
-        src = re.sub(r'<script\b.*?</script>', '', open(path).read(), flags=re.S)
+        src = re.sub(r'<script\b.*?</script\b[^>]*>', '', open(path).read(), flags=re.S | re.I)
         for m in re.finditer(r'<label\b([^>]*)>(.*?)</label>', src, re.S):
             if 'for=' not in m.group(1) and not re.search(r'<(input|select|textarea)', m.group(2)):
                 unlinked.append(path)

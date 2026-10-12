@@ -6,7 +6,21 @@ import sqlite3
 import os
 from pathlib import Path
 from datetime import datetime
-from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.security import generate_password_hash as _werkzeug_hash, check_password_hash
+
+
+def fips_mode():
+    """True when only FIPS 140-3 approved algorithms may be used (FLEETPILOT_FIPS=true)."""
+    return os.environ.get('FLEETPILOT_FIPS', '').strip().lower() in ('1', 'true', 'yes', 'on')
+
+
+# scrypt is memory-hard but not FIPS-approved; FIPS mode uses PBKDF2-HMAC-SHA256
+# with the iteration count OWASP recommends.
+PASSWORD_METHOD = 'pbkdf2:sha256:600000' if fips_mode() else 'scrypt'
+
+
+def generate_password_hash(password):
+    return _werkzeug_hash(password, method=PASSWORD_METHOD)
 from functools import wraps
 from flask import session, redirect, url_for, flash, request
 
@@ -254,10 +268,18 @@ def delete_user(user_id):
                 pass  # table not created yet
         db.commit()
 
-_DUMMY_HASH = generate_password_hash('fleetpilot-timing-equaliser')
+_DUMMY_HASH = None
 
 
-def verify_password(username, password):
+def _dummy_hash():
+    """Hash used to spend equal time on unknown user names; made on first use, not at import."""
+    global _DUMMY_HASH
+    if _DUMMY_HASH is None:
+        _DUMMY_HASH = generate_password_hash('fleetpilot-timing-equaliser')
+    return _DUMMY_HASH
+
+
+def verify_password(username, password, upgrade_hash=False):
     """
     Verify username and password.
     
@@ -267,9 +289,14 @@ def verify_password(username, password):
     user = get_user(username)
     if not user:
         # Spend the same time as a real check so response timing does not reveal usernames.
-        check_password_hash(_DUMMY_HASH, password)
+        check_password_hash(_dummy_hash(), password)
         return None
     if user['active'] and check_password_hash(user['password_hash'], password):
+        if upgrade_hash and not str(user['password_hash']).startswith(PASSWORD_METHOD.split(':')[0] + ':'):
+            # Re-hash with the configured method (for example after switching on FIPS mode).
+            with get_user_db() as db:
+                db.execute('UPDATE users SET password_hash = ? WHERE id = ?',
+                           (generate_password_hash(password), user['id']))
         return user['id']
     return None
 
@@ -287,6 +314,16 @@ def get_user_role_names(user_id):
     """Get role names for a user as a list."""
     roles = get_user_roles(user_id)
     return [role['name'] for role in roles]
+
+def roles_by_user():
+    """{user_id: [role names]} for every user, in one query."""
+    result = {}
+    with get_user_db() as db:
+        for row in db.execute('SELECT ur.user_id, r.name FROM user_roles ur JOIN roles r ON r.id = ur.role_id '
+                              'ORDER BY r.name'):
+            result.setdefault(row['user_id'], []).append(row['name'])
+    return result
+
 
 def user_has_role(user_id, role_name):
     """Check if user has a specific role."""

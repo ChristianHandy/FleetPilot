@@ -5,7 +5,10 @@ recording request bodies, passwords, SSH keys, tokens, or command output.
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
+import logging
 import os
 import sqlite3
 from datetime import datetime, timezone
@@ -20,6 +23,23 @@ def _data_dir() -> Path:
 
 
 DB_PATH = _data_dir() / "audit_log.db"
+
+# Every event is also written to this logger (journald/syslog), so it can be
+# forwarded to a SIEM or a remote log host outside FleetPilot's control.
+_siem = logging.getLogger("fleetpilot.audit")
+
+# Hash chain fields, in a fixed order.
+_CHAIN_FIELDS = ("occurred_at", "actor_id", "actor", "event_type", "target", "outcome", "remote_addr", "metadata_json")
+
+
+def _chain_key() -> bytes:
+    return hashlib.sha256(b"fleetpilot-audit-chain:" + os.environ.get("SECRET_KEY", "").encode()).digest()
+
+
+def _entry_hash(prev_hash: str, row) -> str:
+    """HMAC-SHA256 over the previous hash and this event; changing or removing any event breaks the chain."""
+    canonical = json.dumps([prev_hash] + [row[f] for f in _CHAIN_FIELDS], ensure_ascii=False, separators=(",", ":"))
+    return hmac.new(_chain_key(), canonical.encode(), hashlib.sha256).hexdigest()
 
 
 def _connect() -> sqlite3.Connection:
@@ -53,6 +73,10 @@ def init_db() -> None:
               ON audit_events(event_type);
             """
         )
+        columns = {r[1] for r in db.execute("PRAGMA table_info(audit_events)")}
+        for column in ("prev_hash", "entry_hash"):
+            if column not in columns:
+                db.execute(f"ALTER TABLE audit_events ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
 
 
 def record_event(
@@ -79,22 +103,62 @@ def record_event(
         payload = json.dumps(metadata or {}, ensure_ascii=False, separators=(",", ":"))[:2000]
     except (TypeError, ValueError):
         payload = "{}"
-    with _connect() as db:
+    row = {
+        "occurred_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "actor_id": actor_id, "actor": safe_actor, "event_type": safe_event, "target": safe_target,
+        "outcome": safe_outcome, "remote_addr": safe_addr, "metadata_json": payload,
+    }
+    db = _connect()
+    try:
+        db.execute("BEGIN IMMEDIATE")  # serialise writers so the chain stays linear
+        last = db.execute("SELECT entry_hash FROM audit_events ORDER BY id DESC LIMIT 1").fetchone()
+        prev_hash = last[0] if last else ""
+        entry_hash = _entry_hash(prev_hash, row)
         db.execute(
             """INSERT INTO audit_events
-               (occurred_at, actor_id, actor, event_type, target, outcome, remote_addr, metadata_json)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                actor_id,
-                safe_actor,
-                safe_event,
-                safe_target,
-                safe_outcome,
-                safe_addr,
-                payload,
-            ),
+               (occurred_at, actor_id, actor, event_type, target, outcome, remote_addr, metadata_json,
+                prev_hash, entry_hash)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            tuple(row[f] for f in _CHAIN_FIELDS) + (prev_hash, entry_hash),
         )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+    _siem.info(json.dumps(dict(row, entry_hash=entry_hash), ensure_ascii=False, separators=(",", ":")))
+
+
+_chain_cache: dict[str, Any] = {"at": 0.0, "result": None}
+CHAIN_CHECK_SECONDS = 300
+
+
+def verify_chain_cached() -> dict[str, Any]:
+    """verify_chain(), reused for 5 minutes: a full check reads every event."""
+    import time
+    if _chain_cache["result"] is None or time.time() - _chain_cache["at"] > CHAIN_CHECK_SECONDS:
+        _chain_cache.update(result=verify_chain(), at=time.time())
+    return _chain_cache["result"]
+
+
+def verify_chain() -> dict[str, Any]:
+    """Check that no audit event was changed, inserted or removed.
+
+    The oldest remaining event is trusted as the anchor, because pruning removes
+    events from the start. Returns {"ok", "checked", "first_bad_id"}.
+    """
+    expected_prev = None
+    checked = 0
+    with _connect() as db:
+        for event in db.execute("SELECT * FROM audit_events WHERE entry_hash != '' ORDER BY id"):
+            if expected_prev is not None and event["prev_hash"] != expected_prev:
+                return {"ok": False, "checked": checked, "first_bad_id": event["id"]}
+            if not hmac.compare_digest(event["entry_hash"], _entry_hash(event["prev_hash"], event)):
+                return {"ok": False, "checked": checked, "first_bad_id": event["id"]}
+            expected_prev = event["entry_hash"]
+            checked += 1
+    return {"ok": True, "checked": checked, "first_bad_id": None}
 
 
 def _filters(actor=None, event_type=None, outcome=None, since=None, search=None):

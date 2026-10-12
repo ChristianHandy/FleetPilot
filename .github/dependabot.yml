@@ -1,0 +1,22 @@
+# Weekly dependency update pull requests (OpenSSF Scorecard: Dependency-Update-Tool).
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      python:
+        patterns: ["*"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: nuget
+    directory: /FleetPilotCS
+    schedule:
+      interval: monthly
+  - package-ecosystem: gradle
+    directory: /FleetPilotAndroid
+    schedule:
+      interval: monthly

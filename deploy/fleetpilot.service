@@ -18,7 +18,7 @@ ExecStart=/opt/fleetpilot/venv/bin/gunicorn --config /opt/fleetpilot/gunicorn.co
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=45
-UMask=0027
+UMask=0077
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=fleetpilot
@@ -41,6 +41,13 @@ RestrictNamespaces=true
 LockPersonality=true
 SystemCallArchitectures=native
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictSUIDSGID=true
+KeyringMode=private
+RemoveIPC=true
+PrivateMounts=true
+# Not enabled on purpose: ProtectKernelTunables (local fan control writes /sys),
+# PrivateDevices/DevicePolicy (Disk Tools reads disks), NoNewPrivileges and
+# CapabilityBoundingSet (the root disk helper is started through sudo).
 
 [Install]
 WantedBy=multi-user.target

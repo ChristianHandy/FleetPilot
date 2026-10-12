@@ -2,7 +2,7 @@
 {% block title %}{{ server.name }} — HW Details{% endblock %}
 
 {% block head %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" integrity="sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g" crossorigin="anonymous"></script>
+<script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.min.js') }}" integrity="sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g" crossorigin="anonymous"></script>
 <style>
 .action-bar{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;align-items:center;}
 .action-bar .page-title{font-size:1.2rem;font-weight:600;flex:1;}

@@ -1,5 +1,8 @@
 name: Notify New Version Available
 
+permissions:
+  contents: read
+
 on:
   push:
     branches:
@@ -16,31 +19,47 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       
       - name: Get commit info
         id: commit_info
+        # Event data (release name, commit message) is passed through the
+        # environment, never pasted into the script, so it cannot inject commands.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_NAME: ${{ github.event.release.name }}
+          RELEASE_URL: ${{ github.event.release.html_url }}
+          REPO: ${{ github.repository }}
         run: |
-          if [ "${{ github.event_name }}" == "release" ]; then
-            echo "type=release" >> $GITHUB_OUTPUT
-            echo "version=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
-            echo "description=${{ github.event.release.name }}" >> $GITHUB_OUTPUT
-            echo "url=${{ github.event.release.html_url }}" >> $GITHUB_OUTPUT
+          if [ "$EVENT_NAME" = "release" ]; then
+            {
+              echo "type=release"
+              echo "version=$RELEASE_TAG"
+              echo "description=$(printf '%s' "$RELEASE_NAME" | head -n 1)"
+              echo "url=$RELEASE_URL"
+            } >> "$GITHUB_OUTPUT"
           else
-            echo "type=commit" >> $GITHUB_OUTPUT
-            echo "version=${GITHUB_SHA:0:7}" >> $GITHUB_OUTPUT
-            COMMIT_MSG=$(git log -1 --pretty=%B | head -n 1)
-            echo "description=$COMMIT_MSG" >> $GITHUB_OUTPUT
-            echo "url=https://github.com/${{ github.repository }}/commit/${{ github.sha }}" >> $GITHUB_OUTPUT
+            {
+              echo "type=commit"
+              echo "version=${GITHUB_SHA:0:7}"
+              echo "description=$(git log -1 --pretty=%s)"
+              echo "url=https://github.com/$REPO/commit/$GITHUB_SHA"
+            } >> "$GITHUB_OUTPUT"
           fi
-      
+
       - name: Create notification summary
+        env:
+          INFO_TYPE: ${{ steps.commit_info.outputs.type }}
+          INFO_VERSION: ${{ steps.commit_info.outputs.version }}
+          INFO_DESCRIPTION: ${{ steps.commit_info.outputs.description }}
+          INFO_URL: ${{ steps.commit_info.outputs.url }}
         run: |
           echo "## 🚀 New Dashboard Version Available" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Type:** ${{ steps.commit_info.outputs.type }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** ${{ steps.commit_info.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Description:** ${{ steps.commit_info.outputs.description }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Type:** $INFO_TYPE" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** $INFO_VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "**Description:** $INFO_DESCRIPTION" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Update Instructions:**" >> $GITHUB_STEP_SUMMARY
           echo "1. Log in to your dashboard as an administrator" >> $GITHUB_STEP_SUMMARY
@@ -48,7 +67,7 @@ jobs:
           echo "3. Look for the update notification banner" >> $GITHUB_STEP_SUMMARY
           echo "4. Click 'Update Now' to update the dashboard" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Or check manually at: ${{ steps.commit_info.outputs.url }}" >> $GITHUB_STEP_SUMMARY
+          echo "Or check manually at: $INFO_URL" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

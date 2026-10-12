@@ -28,6 +28,7 @@ Usage:
     servers = reg.get_servers_for_module("hw_monitor")
 """
 
+import contextlib
 import sqlite3
 import json
 import os
@@ -105,6 +106,26 @@ class ServerRegistry:
             self._local.conn = conn
         return self._local.conn
 
+    def _commit(self):
+        """Commit now, unless inside batch(), which commits once at the end."""
+        if not getattr(self._local, 'batch', 0):
+            self._conn().commit()
+
+    @contextlib.contextmanager
+    def batch(self):
+        """Group many changes into one transaction (one disk write instead of one per change)."""
+        self._local.batch = getattr(self._local, 'batch', 0) + 1
+        try:
+            yield self
+        except Exception:
+            self._local.batch -= 1
+            if not self._local.batch:
+                self._conn().rollback()
+            raise
+        self._local.batch -= 1
+        if not self._local.batch:
+            self._conn().commit()
+
     def _init_db(self):
         with sqlite3.connect(self._db_path, timeout=15) as conn:
             conn.executescript(self.SCHEMA)
@@ -165,7 +186,7 @@ class ServerRegistry:
             ))
             sid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
-        conn.commit()
+        self._commit()
         logger.info(f"[ServerRegistry] Upserted server '{name}' (id={sid})")
         return sid
 
@@ -205,7 +226,7 @@ class ServerRegistry:
         """Delete a server and all its module registrations."""
         conn = self._conn()
         conn.execute("DELETE FROM servers WHERE id=?", (id,))
-        conn.commit()
+        self._commit()
         logger.info(f"[ServerRegistry] Deleted server id={id}")
 
     def update_online_status(self, id: int, online: bool):
@@ -215,7 +236,7 @@ class ServerRegistry:
             "UPDATE servers SET online=?, last_seen=? WHERE id=?",
             (1 if online else 0, datetime.utcnow().isoformat(), id)
         )
-        conn.commit()
+        self._commit()
 
     # ── Module Registration ────────────────────────────────────────────────────
 
@@ -231,7 +252,7 @@ class ServerRegistry:
                 config=excluded.config,
                 enabled=1
         """, (server_id, module, module_id, json.dumps(config or {})))
-        conn.commit()
+        self._commit()
 
     def unregister_module(self, server_id: int, module: str):
         """Remove a module registration for a server."""
@@ -240,7 +261,7 @@ class ServerRegistry:
             "DELETE FROM server_modules WHERE server_id=? AND module=?",
             (server_id, module)
         )
-        conn.commit()
+        self._commit()
 
     def get_modules_for_server(self, server_id: int) -> List[Dict]:
         """Get all modules registered for a server."""

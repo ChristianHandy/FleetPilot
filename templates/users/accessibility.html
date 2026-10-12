@@ -93,7 +93,7 @@ document.querySelectorAll('#a11yForm [data-attr]').forEach(function (input) {
     if (input.dataset.attr === 'font' && value === 'readable' && !document.getElementById('fp-readable-font')) {
       var link = document.createElement('link');
       link.id = 'fp-readable-font'; link.rel = 'stylesheet';
-      link.href = 'https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap';
+      link.href = {{ url_for('static', filename='vendor/fonts/readable.css')|tojson }};
       document.head.appendChild(link);
     }
   });

@@ -18,3 +18,13 @@ def is_windows():
 def get_platform():
     """Get the current platform (linux, windows, darwin, etc.)"""
     return platform.system().lower()
+
+
+def offline_mode():
+    """True when FleetPilot must not contact the internet (air-gapped networks).
+
+    Set FLEETPILOT_OFFLINE=true. Update checks and the online plugin catalogue
+    are then switched off; managed hosts on the local network still work.
+    """
+    import os
+    return os.environ.get('FLEETPILOT_OFFLINE', '').strip().lower() in ('1', 'true', 'yes', 'on')

@@ -36,11 +36,13 @@ It combines remote update management, disk health monitoring, VM controller inte
 | **Remote Updates** | SSH-based updates for Ubuntu, Debian, Fedora, Arch, Windows (winget) |
 | **VM Controllers** | Proxmox integration with retry/backoff, VM status overview |
 | **Storage Controllers** | TrueNAS and custom storage system management |
+| **Routers & repeaters** | AVM FRITZ!Box and FRITZ!Repeater (incl. Mesh), OpenWrt, OPNsense, pfSense, VyOS, DD-WRT/FreshTomato, MikroTik RouterOS, IPFire, plus availability checks for any repeater or access point: status, interfaces, DHCP clients, update checks, encrypted config backups. See [docs/routers.md](docs/routers.md) |
 | **Disk & SMART** | Format (ext4/XFS/FAT32), SMART tests, block validation, history |
 | **Monitoring** | CheckMK integration and a Prometheus `/metrics` endpoint, both token-authenticated |
 | **Alerts** | Email when a disk is newly flagged by SMART, when updates fail, and scheduled reports |
 | **Backups** | One-click and daily automatic backups of FleetPilot's own data, with verified restore |
 | **User Management** | Multi-user RBAC (Admin / Operator / Viewer), profile management |
+| **Security** | Security center, 2FA (TOTP, WebAuthn, YubiKey), session management, API tokens, tamper-evident audit trail, FIPS and offline modes. See [SECURITY.md](SECURITY.md) |
 | **Plugins** | Extensible addon system with remote plugin repository |
 | **Scheduling** | Automatic updates (daily/weekly/monthly) with email notifications |
 | **i18n** | Interface available in EN, DE, FR, ES, NL |

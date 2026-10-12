@@ -15,6 +15,7 @@ Requirements on the remote host:
 Database: DATA_DIR/corsair_commander.db
 """
 
+import safe_errors
 import json
 import logging
 import os
@@ -263,7 +264,7 @@ def fetch_status(dev: Dict) -> Dict:
         result["ok"] = True
 
     except Exception as exc:
-        result["error"] = str(exc)
+        result["error"] = safe_errors.public_error(exc)
         logger.warning("[corsair_commander] fetch_status error for %s: %s",
                        dev.get("name"), exc)
     finally:
@@ -363,7 +364,7 @@ def set_fan_speed(dev: Dict, channel: str, speed) -> Dict:
         result["ok"] = (code == 0)
         result["message"] = out or err or ("OK" if code == 0 else "Error")
     except Exception as exc:
-        result["message"] = str(exc)
+        result["message"] = safe_errors.public_error(exc)
         logger.warning("[corsair_commander] set_fan_speed error for %s: %s",
                        dev.get("name"), exc)
     finally:
@@ -399,7 +400,7 @@ def test_connection(dev_id: int) -> Dict:
             }
         return {"ok": True, "message": f"Connected. Found {len(found)} matching device(s). liquidctl {out}"}
     except Exception as exc:
-        return {"ok": False, "message": str(exc)}
+        return {"ok": False, "message": safe_errors.public_error(exc)}
     finally:
         if ssh:
             try:
