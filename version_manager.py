@@ -7,8 +7,6 @@ import json
 import logging
 import os
 import re
-import time
-import shutil
 import subprocess
 import requests
 from datetime import datetime, timedelta
@@ -234,86 +232,3 @@ def get_update_notification():
         }
     
     return None
-
-def perform_self_update(preserve_configs=True):
-    """
-    Update the dashboard to the latest version while preserving configurations.
-    Returns (success, message)
-    """
-    try:
-        repo_dir = os.path.dirname(os.path.abspath(__file__))
-        
-        # Files and directories to preserve
-        preserve_files = [
-            "hosts.json",
-            "history.json",
-            "update_settings.json",
-            "version_check.json",
-            "users.db",
-            "disks.db",
-            ".env",
-            "operations.db",
-            "smart.db"
-        ]
-        
-        import tempfile
-        backup_dir = tempfile.mkdtemp(prefix="dashboard_backup_") if preserve_configs else None  # 0700
-        
-        if preserve_configs:
-            
-            # Backup configuration files
-            for filename in preserve_files:
-                filepath = os.path.join(repo_dir, filename)
-                if os.path.exists(filepath):
-                    backup_path = os.path.join(backup_dir, filename)
-                    shutil.copy2(filepath, backup_path)
-        
-        # Fetch latest changes
-        result = subprocess.run(
-            ["git", "fetch", "origin"],
-            cwd=repo_dir,
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
-        
-        if result.returncode != 0:
-            return False, f"Failed to fetch updates: {result.stderr}"
-        
-        # Get current branch (already sanitized by get_current_branch)
-        branch = get_current_branch()
-        
-        # Pull latest changes
-        result = subprocess.run(
-            ["git", "reset", "--hard", f"origin/{branch}"],
-            cwd=repo_dir,
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
-        
-        if result.returncode != 0:
-            return False, f"Failed to update: {result.stderr}"
-        
-        if preserve_configs:
-            # Restore configuration files
-            for filename in preserve_files:
-                backup_path = os.path.join(backup_dir, filename)
-                if os.path.exists(backup_path):
-                    filepath = os.path.join(repo_dir, filename)
-                    shutil.copy2(backup_path, filepath)
-            
-            # Clean up backup
-            shutil.rmtree(backup_dir, ignore_errors=True)
-        
-        # Update version data
-        data = load_version_data()
-        data["current_version"] = get_current_commit_sha()
-        data["update_available"] = False
-        data["notification_dismissed"] = False
-        save_version_data(data)
-        
-        return True, "Dashboard updated successfully. Please restart the application."
-        
-    except Exception as e:
-        return False, f"Update failed: {str(e)}"

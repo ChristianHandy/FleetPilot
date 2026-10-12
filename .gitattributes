@@ -1,0 +1,13 @@
+# Left out of release tarballs, which community-scripts.org and other packagers
+# install from. The git repository and install.sh keep everything.
+/.github export-ignore
+/FleetPilotAndroid export-ignore
+/FleetPilotCS export-ignore
+/docs/screenshots export-ignore
+/docs/security export-ignore
+/docs/user-guides export-ignore
+/test_*.py export-ignore
+/conftest.py export-ignore
+
+*.sh text eol=lf
+scripts/* text eol=lf

@@ -24,6 +24,7 @@ import router_manager
 from updater import run_update
 import scheduler
 import disktool_core
+import privileged
 from addon_loader import AddonManager
 from functools import wraps
 import user_management
@@ -2439,26 +2440,8 @@ def dismiss_dashboard_notification():
 @app.route("/dashboard_version/update", methods=["GET", "POST"])
 @login_required
 def update_dashboard():
-    """Update the dashboard to the latest version"""
-    # Require admin role to update dashboard
-    if session.get("user_id") and not current_user_has_role('admin'):
-        flash('Only administrators can update the dashboard.')
-        return redirect(url_for('index'))
-    
-    if request.method == "POST":
-        preserve_configs = request.form.get("preserve_configs", "yes") == "yes"
-        success, message = version_manager.perform_self_update(preserve_configs)
-        
-        if success:
-            flash(message, 'success')
-        else:
-            flash(message, 'error')
-        
-        return redirect(url_for('index'))
-    
-    # GET request - show confirmation page
-    version_data = version_manager.load_version_data()
-    return render_template("dashboard_update.html", version_data=version_data)
+    """Old "Update now" links: FleetPilot updates only through the protected update page."""
+    return redirect(url_for('fleetpilot_update'))
 
 @app.route("/update_repo/<name>", methods=["POST"])
 @login_required
@@ -3975,11 +3958,9 @@ def _run_fp_update_bg(channel, do_restart, check_only=False):
         _fp_update_running = False
         return
 
-    helper = '/usr/local/lib/fleetpilot/update'
-
     def run_helper(action, label, timeout=360):
-        command = ['sudo', '-n', helper, action]
-        _fp_log('$ sudo fleetpilot-update ' + action)
+        command = privileged.command('update', action)
+        _fp_log('$ fleetpilot-update ' + action)
         try:
             proc = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
             for line in (proc.stdout + proc.stderr).splitlines():
@@ -4030,8 +4011,12 @@ def fleetpilot_update():
         flash('You need admin role to update FleetPilot.', 'error')
         return redirect(url_for('index'))
 
+    release_install = not privileged.is_git_checkout()
     if request.method == 'POST':
         action = request.form.get('action', 'start')
+        if release_install and action in ('check', 'start'):
+            return jsonify({'error': 'This installation was made from a release; update it with the '
+                                     'installer that created it (see the update page).'}), 409
         if action == 'check':
             if _fp_update_running:
                 return jsonify({'error': 'Update already running'}), 409
@@ -4087,7 +4072,8 @@ def fleetpilot_update():
                            log=_fp_update_log,
                            current_version=cur_ver,
                            git_branch=branch,
-                           last_commit=commit)
+                           last_commit=commit,
+                           release_install=release_install)
 
 
 @app.route('/api/fleetpilot_update_log')

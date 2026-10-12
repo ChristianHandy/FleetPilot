@@ -16,9 +16,10 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+import privileged
+
 _DATA_DIR = Path(os.environ.get("FLEETPILOT_DATA_DIR", Path(__file__).parent / "data"))
 ROUTES_FILE = _DATA_DIR / "proxy_routes.json"
-HELPER = "/usr/local/lib/fleetpilot/proxy-apply"
 
 _NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,47}$")
 _HOST_RE = re.compile(r"^(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)*[A-Za-z0-9][A-Za-z0-9-]*$")
@@ -168,7 +169,7 @@ def apply() -> tuple[bool, str]:
     """Ask the fixed root-owned helper to validate, render and reload HAProxy."""
     try:
         result = subprocess.run(
-            ["sudo", "-n", HELPER, "apply"],
+            privileged.command("proxy-apply", "apply"),
             capture_output=True,
             text=True,
             timeout=45,
@@ -182,7 +183,7 @@ def apply() -> tuple[bool, str]:
 def status() -> tuple[bool, str]:
     try:
         result = subprocess.run(
-            ["sudo", "-n", HELPER, "status"],
+            privileged.command("proxy-apply", "status"),
             capture_output=True,
             text=True,
             timeout=15,

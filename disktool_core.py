@@ -2,6 +2,8 @@ import os, json, csv, sqlite3, shutil, subprocess, threading, re
 from datetime import datetime
 from pathlib import Path
 
+import privileged
+
 # Globale Pfade und Variablen
 DB_FILE = None  # set by init_db(data_dir); see _migrate_legacy_db()
 UPLOAD_DIR = Path(__file__).parent / 'uploads'  # moved below the data dir by init_db()
@@ -282,7 +284,6 @@ def update_op(op_id, status=None, progress=None, details=None):
 # --- Destructive local-disk actions ---
 FORMAT_FILESYSTEMS = {'ext4', 'xfs', 'fat32'}
 WIPE_MODES = {'quick', 'full'}
-DISK_ACTION_HELPER = '/usr/local/lib/fleetpilot/disk-action'
 
 
 def _command_output(cmd):
@@ -334,7 +335,7 @@ def format_worker(device, fs, wipe_mode, op_id):
             f'Validating /dev/{device} for a {wipe_mode} wipe.'
         ))
         result = subprocess.run(
-            ['sudo', '-n', DISK_ACTION_HELPER, wipe_mode, fs, device],
+            privileged.command('disk-action', wipe_mode, fs, device),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -400,7 +401,7 @@ def validate_blocks(device):
     """
     device = local_block_device(device)
     result = subprocess.run(
-        ['sudo', '-n', DISK_ACTION_HELPER, 'validate', 'read', device],
+        privileged.command('disk-action', 'validate', 'read', device),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
