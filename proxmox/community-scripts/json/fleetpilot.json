@@ -12,10 +12,7 @@
   "documentation": "https://github.com/ChristianHandy/FleetPilot/blob/main/docs/user-guide.md",
   "website": "https://github.com/ChristianHandy/FleetPilot",
   "repository": "https://github.com/ChristianHandy/FleetPilot",
-  "platforms": [
-    "pve"
-  ],
-  "logo": "https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/static/fleetpilot-logo.svg",
+  "logo": "https://cdn.jsdelivr.net/gh/ChristianHandy/FleetPilot@main/static/fleetpilot-logo.svg",
   "description": "Self-hosted operations dashboard for home labs and small companies: server updates, SMART disk health, routers (FRITZ!Box, OpenWrt, OPNsense, pfSense, MikroTik), Proxmox VMs, TrueNAS/Unraid storage, backup servers and fans, managed over SSH and APIs without agents.",
   "install_methods": [
     {
@@ -37,19 +34,15 @@
   },
   "notes": [
     {
-      "text": "The admin password is generated on first start: `cat /opt/fleetpilot/data/initial_admin_password`. Change it after signing in and delete that file.",
+      "text": "Open https://<container-ip> and accept the self-signed certificate once. Sign in as admin; the password is DASHBOARD_PASSWORD in /opt/fleetpilot/.env. Change it after the first sign-in under My Profile and set up two-factor sign-in.",
       "type": "info"
     },
     {
-      "text": "FleetPilot uses a self-signed certificate. Open https://<container-ip> and accept the certificate once.",
+      "text": "FleetPilot manages other machines over SSH with the key /root/.ssh/id_ed25519.pub inside the container. Add that key to each server's authorized_keys, or use Manage Hosts → Install Key. To manage the Proxmox node itself, add the node as a host the same way.",
       "type": "info"
     },
     {
-      "text": "FleetPilot signs in to the servers it manages with the key in /root/.ssh/id_ed25519.pub. Add that key to the servers, or use Manage Hosts → Install Key.",
-      "type": "info"
-    },
-    {
-      "text": "Update FleetPilot with the update command of this script in the Proxmox shell. The in-app 'FleetPilot update' page needs a git checkout and does not apply to this container.",
+      "text": "Update FleetPilot with this script's update function. The in-app 'FleetPilot update' page expects a git checkout and does not apply to this container.",
       "type": "warning"
     }
   ]
