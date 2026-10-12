@@ -72,6 +72,14 @@
       </div>
     </div>
 
+    {% if release_install %}
+    <div class="alert alert-info" role="status">
+      <strong>This FleetPilot was installed from a release</strong> (for example with the community-scripts.org Proxmox script), not from git,
+      so it cannot update itself here. Update it with the tool that installed it: in the Proxmox shell, open the container
+      (<code>pct enter &lt;ID&gt;</code>) and run the same install command again; it detects the installation and updates it.
+      Your data and settings are kept.
+    </div>
+    {% else %}
     <div class="btn-group">
       <button class="btn btn-primary" id="startBtn" onclick="startUpdate()">
         Pull &amp; Update FleetPilot
@@ -83,6 +91,7 @@
         Clear Log
       </button>
     </div>
+    {% endif %}
   </div>
 
   <div id="runningControls" style="{% if not running %}display:none;{% endif %}">

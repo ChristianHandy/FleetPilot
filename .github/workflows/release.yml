@@ -1,0 +1,68 @@
+name: Release
+
+# Publishes a GitHub release for every version tag (v1.2.3). Installers that
+# follow releases (community-scripts.org, fetch_and_deploy_gh_release) only see a
+# new version once a release exists; a tag alone is not enough.
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Check the tag matches fleetpilot_version.py
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="$(python -c 'import fleetpilot_version as v; print(v.TAG)')"
+          if [ "$version" != "$TAG" ]; then
+            echo "::error::Tag $TAG does not match fleetpilot_version.py ($version)"
+            exit 1
+          fi
+
+      - name: SBOM of the packages a fresh install receives
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          python -m venv /tmp/fp
+          /tmp/fp/bin/pip install --quiet -r requirements.txt
+          /tmp/fp/bin/pip freeze --all > /tmp/frozen.txt
+          pip install --quiet cyclonedx-bom
+          cyclonedx-py requirements /tmp/frozen.txt --of JSON -o "fleetpilot-${TAG#v}-sbom.cdx.json"
+
+      - name: Release notes from CHANGELOG.md
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          awk -v v="${TAG#v}" '
+            $0 ~ "^## \\[" v "\\]" { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          printf '\n---\nInstall or update: see the [installation guide](https://github.com/%s/blob/%s/docs/installation.md).\n' \
+            "$GITHUB_REPOSITORY" "$TAG" >> notes.md
+
+      - name: Publish the release (never replaces an existing one)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; leaving it as it is."
+            exit 0
+          fi
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --latest \
+            --title "FleetPilot $TAG" --notes-file notes.md "fleetpilot-${TAG#v}-sbom.cdx.json"
