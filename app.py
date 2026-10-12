@@ -1052,6 +1052,10 @@ def get_local_public_key():
     Return the local public key string. Generate a new keypair if needed.
     """
     ssh_dir = os.path.expanduser("~/.ssh")
+    ed25519_pub = os.path.join(ssh_dir, "id_ed25519.pub")
+    if os.path.exists(ed25519_pub):          # created by install.sh
+        with open(ed25519_pub, "r") as f:
+            return f.read().strip()
     pub_path = os.path.join(ssh_dir, "id_rsa.pub")
     priv_path = os.path.join(ssh_dir, "id_rsa")
 
@@ -3510,6 +3514,9 @@ def _handle_server_error(exc):
     return _error_response(500)
 
 
+_HSTS_ENABLED = os.environ.get('FLEETPILOT_HSTS', 'true').strip().lower() not in ('0', 'false', 'no', 'off')
+
+
 @app.after_request
 def add_security_headers(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
@@ -3539,7 +3546,9 @@ def add_security_headers(response):
     else:
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     # Only set HSTS header for HTTPS connections
-    if request.is_secure:
+    # HSTS only with a trusted certificate: browsers refuse to bypass certificate warnings
+    # for HSTS hosts, so the installer turns it off while the certificate is self-signed.
+    if request.is_secure and _HSTS_ENABLED:
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     return response
 
