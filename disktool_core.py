@@ -4,8 +4,7 @@ from pathlib import Path
 
 # Globale Pfade und Variablen
 DB_FILE = None  # set by init_db(data_dir); see _migrate_legacy_db()
-UPLOAD_DIR = Path(__file__).parent / 'uploads'
-UPLOAD_DIR.mkdir(exist_ok=True)
+UPLOAD_DIR = Path(__file__).parent / 'uploads'  # moved below the data dir by init_db()
 auto_enabled = False
 AUTO_SKIP_DEVICE = 'mmcblk0'  # z.B. Systemlaufwerk, das bei Auto-Sync ignoriert wird
 
@@ -63,10 +62,11 @@ def _migrate_legacy_db(new_path):
 
 def init_db(data_dir=None):
     """Initialisiert die SQLite-Datenbank und erforderliche Tabellen, falls noch nicht vorhanden."""
-    global DB_FILE
+    global DB_FILE, UPLOAD_DIR
     if data_dir:
         DB_FILE = str(Path(data_dir) / "disktool_core.db")
         _migrate_legacy_db(DB_FILE)
+        UPLOAD_DIR = Path(data_dir) / 'exports'
     elif DB_FILE is None:
         DB_FILE = str(Path(__file__).with_suffix('.db'))
 
@@ -527,6 +527,7 @@ def get_dashboard_data():
 
 def export_smart_data():
     """Exportiert die SMART-Historie in eine CSV-Datei im uploads/ Ordner und gibt den Dateipfad zurück."""
+    UPLOAD_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
     path = UPLOAD_DIR / 'smart.csv'
     with get_db() as db, open(path, 'w', newline='') as f:
         writer = csv.writer(f)

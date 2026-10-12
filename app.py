@@ -2874,9 +2874,9 @@ def upload_host_image(name):
     ext = pathlib.Path(f.filename).suffix.lower()
     if ext not in allowed_ext:
         return jsonify({"ok": False, "error": f"File type {ext} not allowed"}), 400
-    # Save to static/host_images/
-    img_dir = os.path.join(_APP_DIR, "static", "host_images")
-    os.makedirs(img_dir, exist_ok=True)
+    # Saved in the data directory: the code directory is read-only for the service.
+    img_dir = os.path.join(DATA_DIR, "host_images")
+    os.makedirs(img_dir, mode=0o700, exist_ok=True)
     safe_name = "".join(c for c in name if c.isalnum() or c in "_-")
     if not safe_name:
         return jsonify({"ok": False, "error": "Invalid host name"}), 400
@@ -2887,11 +2887,27 @@ def upload_host_image(name):
     real_filepath = os.path.realpath(filepath)
     if not real_filepath.startswith(real_img_dir + os.sep):
         return jsonify({"ok": False, "error": "Invalid path"}), 400
+    for other in allowed_ext - {ext}:          # one image per host
+        stale = os.path.join(real_img_dir, safe_name + other)
+        if os.path.exists(stale):
+            os.remove(stale)
     f.save(real_filepath)
-    # Update host record
-    hosts[name]["custom_image"] = f"/static/host_images/{filename}"
+    url = url_for("host_image", filename=filename)
+    hosts[name]["custom_image"] = url
     save_hosts(hosts)
-    return jsonify({"ok": True, "image_url": f"/static/host_images/{filename}"}), 200
+    return jsonify({"ok": True, "image_url": url}), 200
+
+
+@app.route("/hosts/images/<filename>")
+@login_required
+def host_image(filename):
+    """Serve an uploaded host image from the data directory."""
+    from flask import send_from_directory
+    resp = send_from_directory(os.path.join(DATA_DIR, "host_images"), filename, max_age=3600)
+    # Uploaded SVGs may contain script: never let one run as a page.
+    resp.headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    return resp
 
 
 @app.route("/hosts/scan_ip_changes")
@@ -3529,7 +3545,8 @@ def add_security_headers(response):
     response.headers['Cross-Origin-Resource-Policy'] = 'same-origin'
     # Every asset is served by FleetPilot itself (static/vendor), so nothing may load from
     # other origins. Inline scripts/styles are still used by templates; eval is not.
-    response.headers['Content-Security-Policy'] = (
+    # A route that set its own, stricter policy (uploaded images) keeps it.
+    response.headers.setdefault('Content-Security-Policy', (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline'; "
         "style-src 'self' 'unsafe-inline'; "
@@ -3537,7 +3554,7 @@ def add_security_headers(response):
         "img-src 'self' data:; "
         "connect-src 'self'; "
         "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
-    )
+    ))
     # Cache-Control for static assets
     if request.path.startswith('/static/'):
         response.headers['Cache-Control'] = 'public, max-age=86400, immutable'
@@ -4324,6 +4341,10 @@ def plugin_install_remote(plugin_id):
             return redirect("/plugins")
         if os.path.exists(dest):
             flash(f"Plugin '{plugin_id}' is already installed.", "warning")
+            return redirect("/plugins")
+        if not os.access(os.path.dirname(dest), os.W_OK):
+            flash("The plugin folder is read-only for FleetPilot (the normal, safer setup). "
+                  f"Copy {plugin_id}.py into the addons folder on the server as root, then restart FleetPilot.", "warning")
             return redirect("/plugins")
         with open(dest, "w", encoding="utf-8") as fh:
             fh.write(code)
