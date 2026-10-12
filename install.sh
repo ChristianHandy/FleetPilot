@@ -69,7 +69,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 PACKAGES=(python3 python3-venv python3-dev build-essential libffi-dev libssl-dev git curl ca-certificates
           openssh-client sudo iproute2 iputils-ping smartmontools e2fsprogs xfsprogs dosfstools util-linux)
-[[ "$FP_HTTPS" == "yes" ]] && PACKAGES+=(nginx openssl)
+if [[ "$FP_HTTPS" == "yes" ]]; then PACKAGES+=(nginx openssl); fi
 apt-get install -y -qq --no-install-recommends "${PACKAGES[@]}" >/dev/null
 ok "Base packages installed"
 if [[ "$FP_EXTRAS" == "yes" ]]; then
@@ -145,7 +145,8 @@ ENV_FILE="$INSTALL_DIR/.env"
 touch "$ENV_FILE"; chown root:"$FP_USER" "$ENV_FILE"; chmod 0640 "$ENV_FILE"
 set_env() {   # set_env KEY VALUE [force]
     if grep -q "^$1=" "$ENV_FILE"; then
-        [[ "${3:-}" == "force" ]] && sed -i "s|^$1=.*|$1=$2|" "$ENV_FILE"
+        # An if, not '&&': under set -e a false test would end the script on updates.
+        if [[ "${3:-}" == "force" ]]; then sed -i "s|^$1=.*|$1=$2|" "$ENV_FILE"; fi
     else
         echo "$1=$2" >> "$ENV_FILE"
     fi
@@ -246,7 +247,7 @@ ok "FleetPilot is running"
 sed -i '/^DASHBOARD_PASSWORD=/d' "$ENV_FILE"
 
 URL="http://${HOST_IP}:${APP_PORT}"
-[[ "$FP_HTTPS" == "yes" ]] && URL="https://${HOST_IP}"
+if [[ "$FP_HTTPS" == "yes" ]]; then URL="https://${HOST_IP}"; fi
 {
     echo "FleetPilot $(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "URL:       $URL"
@@ -260,7 +261,7 @@ echo ""
 echo -e "${GREEN}${BOLD}  FleetPilot is installed.${NC}"
 echo ""
 echo -e "  Open:      ${BOLD}$URL${NC}"
-[[ "$FP_HTTPS" == "yes" ]] && echo "             (the browser warns about the self-signed certificate once; accept it or install your own)"
+if [[ "$FP_HTTPS" == "yes" ]]; then echo "             (the browser warns about the self-signed certificate once; accept it or install your own)"; fi
 echo "  User:      admin"
 if [[ -n "$NEW_PASSWORD" ]]; then
     echo -e "  Password:  ${BOLD}$NEW_PASSWORD${NC}   (change it under My Profile, and set up 2FA)"

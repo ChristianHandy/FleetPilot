@@ -99,7 +99,7 @@ if [[ "${FP_DEFAULTS:-0}" != "1" && -t 0 ]]; then
   Network ${CT_BRIDGE}, ${CT_IP} · HTTPS ${FP_HTTPS}" 14 70 || ADVANCED=yes
     else
         read -rp "Use default settings (ID $CT_ID, $CT_CORES cores, $CT_RAM MB, $CT_DISK GB, $CT_IP)? [Y/n] " a
-        [[ "${a,,}" == n* ]] && ADVANCED=yes
+        if [[ "${a,,}" == n* ]]; then ADVANCED=yes; fi
     fi
 fi
 if [[ "$ADVANCED" == "yes" ]]; then
@@ -112,7 +112,7 @@ if [[ "$ADVANCED" == "yes" ]]; then
     ask CT_BRIDGE "Network bridge"
     ask CT_VLAN "VLAN tag (empty for none)"
     ask CT_IP "IPv4: dhcp, or address with prefix such as 192.168.1.50/24"
-    [[ "$CT_IP" != "dhcp" ]] && ask CT_GW "Gateway (for example 192.168.1.1)"
+    if [[ "$CT_IP" != "dhcp" ]]; then ask CT_GW "Gateway (for example 192.168.1.1)"; fi
     ask FP_HTTPS "HTTPS with a self-signed certificate (yes/no)"
 fi
 
@@ -149,7 +149,7 @@ ok "Template: $TEMPLATE"
 # ── Container ────────────────────────────────────────────────────────────────
 NET="name=eth0,bridge=$CT_BRIDGE"
 if [[ "$CT_IP" == "dhcp" ]]; then NET+=",ip=dhcp"; else NET+=",ip=$CT_IP,gw=$CT_GW"; fi
-[[ -n "$CT_VLAN" ]] && NET+=",tag=$CT_VLAN"
+if [[ -n "$CT_VLAN" ]]; then NET+=",tag=$CT_VLAN"; fi
 CREATE_ARGS=(
     "$CT_ID" "$CT_TEMPLATE_STORAGE:vztmpl/$TEMPLATE"
     --hostname "$CT_HOSTNAME" --cores "$CT_CORES" --memory "$CT_RAM" --swap 512
@@ -157,7 +157,7 @@ CREATE_ARGS=(
     --unprivileged 1 --features nesting=1 --onboot 1 --ostype debian
     --tags fleetpilot --description "FleetPilot · https://github.com/ChristianHandy/FleetPilot"
 )
-[[ -n "$CT_SSH_KEY" ]] && CREATE_ARGS+=(--ssh-public-keys "$CT_SSH_KEY")
+if [[ -n "$CT_SSH_KEY" ]]; then CREATE_ARGS+=(--ssh-public-keys "$CT_SSH_KEY"); fi
 msg "Creating container $CT_ID ($CT_HOSTNAME)…"
 pct create "${CREATE_ARGS[@]}" >/dev/null || die "pct create failed."
 ok "Container $CT_ID created"
@@ -189,7 +189,7 @@ Update: run the helper script with 'update ${CT_ID}' on the host." >/dev/null
 header
 echo -e "${GREEN}${BOLD}  FleetPilot is ready in container ${CT_ID}.${NC}\n"
 echo -e "  Open:       ${BOLD}${URL}${NC}"
-[[ "$FP_HTTPS" == "yes" ]] && echo "              (accept the self-signed certificate once, or install your own later)"
+if [[ "$FP_HTTPS" == "yes" ]]; then echo "              (accept the self-signed certificate once, or install your own later)"; fi
 echo -e "  User:       admin"
 echo -e "  Password:   ${BOLD}${PASS}${NC}   ← change it after signing in, then set up 2FA"
 echo ""
