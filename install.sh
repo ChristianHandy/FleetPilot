@@ -75,6 +75,9 @@ ok "Base packages installed"
 if [[ "$FP_EXTRAS" == "yes" ]]; then
     apt-get install -y -qq --no-install-recommends lm-sensors fancontrol ipmitool libhidapi-hidraw0 \
         libhidapi-libusb0 >/dev/null 2>&1 || warn "Some optional hardware tools are not available on this system."
+    # USB fan controllers; FleetPilot runs these with the system Python, not its own venv.
+    apt-get install -y -qq --no-install-recommends liquidctl python3-hid >/dev/null 2>&1 \
+        || warn "liquidctl/python3-hid are not available here; USB fan controllers will not work."
     ok "Optional hardware tools installed (fans, IPMI, USB-HID)"
 fi
 
@@ -97,9 +100,8 @@ fi
 ok "Code at $INSTALL_DIR ($(git -C "$INSTALL_DIR" rev-parse --short HEAD))"
 
 python3 -m venv "$INSTALL_DIR/venv"
-"$INSTALL_DIR/venv/bin/pip" install --quiet --disable-pip-version-check --upgrade pip wheel
-"$INSTALL_DIR/venv/bin/pip" install --quiet --disable-pip-version-check -r "$INSTALL_DIR/requirements.txt"
-[[ "$FP_EXTRAS" == "yes" ]] && { "$INSTALL_DIR/venv/bin/pip" install --quiet hid liquidctl 2>/dev/null || true; }
+# Exact versions with hashes: every install gets the tested packages, and pip refuses anything altered.
+"$INSTALL_DIR/venv/bin/pip" install --quiet --disable-pip-version-check --require-hashes -r "$INSTALL_DIR/requirements-lock.txt"
 ok "Python packages installed"
 
 # Code is owned by root; only data, logs and the SSH key belong to the service.

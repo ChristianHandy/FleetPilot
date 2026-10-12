@@ -26,8 +26,7 @@ jobs:
           cache: pip
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt pytest pip-audit bandit ruff
+          pip install --require-hashes -r requirements-lock.txt -r requirements-dev-lock.txt
       - name: Lint for crashes (undefined or shadowed names)
         run: ruff check --select F821,F811,F823,F632,F601,F707,E9 --exclude FleetPilotCS,FleetPilotAndroid .
       - name: Run tests
@@ -37,6 +36,6 @@ jobs:
           mkdir -p "$FLEETPILOT_DATA_DIR"
           python -m pytest -q
       - name: Check dependencies for known vulnerabilities
-        run: pip-audit -r requirements.txt
+        run: pip-audit --require-hashes --disable-pip -r requirements-lock.txt
       - name: Bandit (high severity fails the build)
         run: bandit -q -r . -x ./FleetPilotCS,./FleetPilotAndroid,./hw_monitor/hw_stress_test.py,./test_*.py --severity-level high

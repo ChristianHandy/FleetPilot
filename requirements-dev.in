@@ -1,0 +1,6 @@
+# Tools for tests, linting, audits and the release SBOM (CI only).
+pytest
+pip-audit
+bandit
+ruff
+cyclonedx-bom

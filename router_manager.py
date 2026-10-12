@@ -833,7 +833,10 @@ def _safe_xml(text: str):
     if "<!DOCTYPE" in text or "<!ENTITY" in text:
         raise ValueError("Refusing XML with a document type definition.")
     # With DTDs refused there is no entity expansion, and expat never fetches external resources.
-    return ET.fromstring(text)  # nosec B314
+    try:
+        return ET.fromstring(text)  # nosec B314
+    except ET.ParseError:
+        raise ValueError("The device sent a response that is not valid XML.") from None
 
 
 def soap_body(action: str, service: str, arguments: Optional[Dict[str, str]] = None) -> str:

@@ -82,7 +82,7 @@ git -C "$APP_DIR" -c core.hooksPath=/dev/null reset --hard HEAD
 git -C "$APP_DIR" -c core.hooksPath=/dev/null pull --ff-only "$REMOTE_NAME" "$BRANCH_NAME"
 
 if [ -x "$VENV_PIP" ] && [ -f "$APP_DIR/requirements.txt" ]; then
-    "$VENV_PIP" install --disable-pip-version-check --no-input -q -r "$APP_DIR/requirements.txt"
+    "$VENV_PIP" install --disable-pip-version-check --no-input -q --require-hashes -r "$APP_DIR/requirements-lock.txt"
 fi
 
 echo "FleetPilot code update completed successfully."
