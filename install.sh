@@ -159,6 +159,9 @@ NEW_PASSWORD=""
 if [[ ! -f "$INSTALL_DIR/data/users.db" ]] && ! grep -q "^DASHBOARD_PASSWORD=" "$ENV_FILE"; then
     NEW_PASSWORD="${FP_ADMIN_PASSWORD:-$(python3 -c 'import secrets; print(secrets.token_urlsafe(15))')}"
     set_env DASHBOARD_PASSWORD "$NEW_PASSWORD"
+elif grep -q "^DASHBOARD_PASSWORD=" "$ENV_FILE"; then
+    # An earlier run stopped before the first sign-in data was saved: show that password again.
+    NEW_PASSWORD="$(grep -m1 "^DASHBOARD_PASSWORD=" "$ENV_FILE" | cut -d= -f2-)"
 fi
 if [[ "$FP_HTTPS" == "yes" ]]; then
     # Behind nginx: trust its X-Forwarded-* headers, cookies only over HTTPS.

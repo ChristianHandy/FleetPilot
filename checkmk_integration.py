@@ -260,9 +260,8 @@ def check_fleetpilot_service() -> list[str]:
     lines.append(_fmt_line(0, "FleetPilot Service", "running=1;1;1;0;1", "FleetPilot is running"))
 
     # Check data directory
-    data_dir = Path("/opt/fleetpilot")
-    if not data_dir.exists():
-        data_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+    data_dir = Path(os.environ.get("FLEETPILOT_DATA_DIR")
+                    or os.path.join(os.path.dirname(os.path.abspath(__file__)), "data"))
 
     hosts_file = data_dir / "hosts.json"
     if hosts_file.exists():

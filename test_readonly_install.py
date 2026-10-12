@@ -70,3 +70,15 @@ def test_host_image_is_stored_in_data_dir_and_served_sandboxed(monkeypatch):
     served = client.get(url)
     assert served.status_code == 200 and "sandbox" in served.headers["Content-Security-Policy"]
     assert fp.app.test_client().get(url).status_code in (302, 401)      # login required
+
+
+def test_smart_collection_reads_hosts_from_data_dir(tmp_path, monkeypatch):
+    import json
+    import smart_manager
+    (tmp_path / "hosts.json").write_text(json.dumps({"nas": {"host": "192.0.2.77", "user": "root"}}))
+    monkeypatch.setenv("FLEETPILOT_DATA_DIR", str(tmp_path))
+    seen = []
+    monkeypatch.setattr(smart_manager, "collect_ssh_host_disks",
+                        lambda **kw: seen.append((kw["host_name"], kw["key_path"])) or [])
+    smart_manager.collect_all_ssh_hosts()
+    assert seen == [("nas", None)]       # None: the default key (id_ed25519 first) is picked later
