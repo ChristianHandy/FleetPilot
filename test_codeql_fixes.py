@@ -106,3 +106,24 @@ def test_smart_import_temperature_without_backtracking():
     d.import_smart_data(Upload("194 Temperature_Celsius 0x0022 036 052 000 Old_age Always - 36 (Min/Max 18/52)\n"), device="tempdev")
     with d.get_db() as db:
         assert db.execute("SELECT temp FROM smart_history WHERE device='tempdev' ORDER BY id DESC").fetchone()[0] == 36
+
+
+def test_duplicati_signs_in_with_the_real_login_api(monkeypatch):
+    import backup_controller as bc
+    sent = {}
+
+    class Response:
+        ok = True
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {"AccessToken": "token-123"}
+
+    def post(url, json=None, **kwargs):
+        sent.update(url=url, body=json)
+        return Response()
+    monkeypatch.setattr(bc.requests, "post", post)
+    token = bc._duplicati_auth({"protocol": "https", "host": "nas", "port": 8200, "password": "pw-1"})
+    assert token == "token-123"
+    assert sent == {"url": "https://nas:8200/api/v1/auth/login", "body": {"Password": "pw-1", "RememberMe": False}}

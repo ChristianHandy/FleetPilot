@@ -580,33 +580,19 @@ def _poll_pbs(srv: Dict) -> Dict:
 # ── Duplicati ─────────────────────────────────────────────────────────────────
 
 def _duplicati_auth(srv: Dict) -> Optional[str]:
-    """Get a Duplicati auth token. Returns token string or None."""
+    """Sign in to Duplicati 2.1+ and return an access token, or None."""
     base = f"{srv['protocol']}://{srv['host']}:{srv['port']}"
     password = srv.get("password", "")
     if not password:
         return None
     try:
-        # Get nonce
-        r = requests.get(f"{base}/api/v1/auth/issignin", timeout=10, verify=True)
-        if not r.ok:
-            return None
-        nonce_data = r.json()
-        nonce = nonce_data.get("Nonce", "")
-        salt = nonce_data.get("Salt", "")
-        # The server's login protocol defines this salted SHA-256 challenge-response;
-        # FleetPilot cannot choose a different hash. The password itself is never stored this way.
-        import hashlib, base64
-        salted = base64.b64decode(salt) + password.encode()
-        pwd_hash = base64.b64encode(hashlib.sha256(salted).digest()).decode()
-        nonce_bytes = base64.b64decode(nonce)
-        nonced = nonce_bytes + base64.b64decode(pwd_hash)
-        final_hash = base64.b64encode(hashlib.sha256(nonced).digest()).decode()
-        # Sign in
-        r2 = requests.post(f"{base}/api/v1/auth/signin",
-                           json={"Password": final_hash},
-                           timeout=10, verify=True)
-        if r2.ok:
-            return r2.json().get("Token")
+        # Duplicati checks the password itself; use HTTPS for servers outside this host.
+        r = requests.post(f"{base}/api/v1/auth/login",
+                          json={"Password": password, "RememberMe": False},
+                          timeout=10, verify=True)
+        if r.ok:
+            return r.json().get("AccessToken")
+        logger.debug("Duplicati sign-in refused: HTTP %s", r.status_code)
     except Exception as e:
         logger.debug(f"Duplicati auth error: {e}")
     return None
