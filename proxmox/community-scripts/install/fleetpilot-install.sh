@@ -16,7 +16,6 @@ update_os
 msg_info "Installing Dependencies"
 $STD apt install -y \
   nginx \
-  openssh-client \
   smartmontools
 msg_ok "Installed Dependencies"
 
@@ -37,6 +36,7 @@ cat <<EOT >/opt/fleetpilot/.env
 SECRET_KEY=$(openssl rand -hex 32)
 FLEETPILOT_DATA_DIR=/opt/fleetpilot/data
 DASHBOARD_USERNAME=admin
+DASHBOARD_PASSWORD=$(random_password)
 GUNICORN_BIND=127.0.0.1:5000
 FLEETPILOT_PRODUCTION=true
 FLEETPILOT_TRUST_PROXY=true
