@@ -33,6 +33,11 @@ errorlog    = "-"
 loglevel    = "warning"        # reduce log noise in production
 access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s %(D)sµs'
 
+# ── Control socket ────────────────────────────────────────────────────────────
+# gunicorn 24+ opens a control socket, by default in the working directory when no
+# runtime dir exists; FleetPilot does not use it and its code directory is read-only.
+control_socket_disable = True
+
 # ── Process naming ────────────────────────────────────────────────────────────
 proc_name   = "fleetpilot"
 default_proc_name = "fleetpilot"

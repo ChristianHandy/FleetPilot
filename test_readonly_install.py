@@ -33,8 +33,9 @@ def test_app_starts_with_read_only_code_directory(tmp_path):
     os.chmod(code / "logs", 0o755)   # the installer gives the service data/ and logs/ only
     env = dict(os.environ, FLEETPILOT_DATA_DIR=str(data), PYTHONDONTWRITEBYTECODE="1",
                FLEETPILOT_ROUTER_POLL_MINUTES="0")
-    script = ("import app, disktool_core as d\n"
+    script = ("import app, disktool_core as d, version_manager as v\n"
               "assert app.app.test_client().get('/healthz').status_code == 200\n"
+              "v.save_version_data({'checked': True})\n"
               "print(d.export_smart_data())\n")
     try:
         result = subprocess.run([sys.executable, "-c", script], cwd=code, env=env,
