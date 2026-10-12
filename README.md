@@ -1,19 +1,28 @@
 <div align="center">
 
-<img src="docs/screenshots/dashboard.png" alt="FleetPilot Dashboard" width="100%">
+<img src="static/fleetpilot-logo.svg" alt="" width="88">
 
 # FleetPilot
 
-**The self-hosted fleet management dashboard for homelabs and small IT teams.**
+**One self-hosted dashboard for your homelab: servers, Proxmox, routers, disks and backups.**
 
-Manage Linux & Windows servers, VMs, storage systems, and disks — all from one responsive dark-mode web UI.
+Updates for Linux and Windows machines, SMART disk health, FRITZ!Box / OpenWrt / OPNsense routers, Proxmox VMs, TrueNAS and Unraid, backup servers and fans. Agentless over SSH and APIs, with 2FA, audit trail and a one-command Proxmox install.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](https://python.org)
-[![Flask](https://img.shields.io/badge/Flask-3.x-green)](https://flask.palletsprojects.com)
-[![Self-Hosted](https://img.shields.io/badge/Self--Hosted-✓-brightgreen)](https://github.com/ChristianHandy/FleetPilot)
+[![Release](https://img.shields.io/github/v/release/ChristianHandy/FleetPilot)](https://github.com/ChristianHandy/FleetPilot/releases/latest)
+[![Tests](https://github.com/ChristianHandy/FleetPilot/actions/workflows/tests.yml/badge.svg)](https://github.com/ChristianHandy/FleetPilot/actions/workflows/tests.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/ChristianHandy/FleetPilot/badge)](https://scorecard.dev/viewer/?uri=github.com/ChristianHandy/FleetPilot)
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue)](https://python.org)
 
-[Features](#features) · [Screenshots](#screenshots) · [Quick Start](#quick-start) · [User Guides](#user-guides) · [Security](#security)
+<img src="docs/screenshots/routers.png" alt="FleetPilot routers page: FRITZ!Box, repeater, OpenWrt and OPNsense with status, firmware, uptime and connected devices" width="100%">
+
+[Install](#quick-start) · [Features](#features) · [Screenshots](#screenshots) · [User guide](docs/user-guide.md) · [Security](SECURITY.md)
+
+**Proxmox VE, in the node's Shell:**
+
+```bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/proxmox/fleetpilot-lxc.sh)"
+```
 
 </div>
 
@@ -52,34 +61,20 @@ It combines remote update management, disk health monitoring, VM controller inte
 
 ## Screenshots
 
+Demo data; every page also has a light theme and works on phones.
+
 <table>
 <tr>
-<td width="50%">
-
-**Customizable Dashboard**
-<img src="docs/screenshots/dashboard.png" alt="Dashboard" width="100%">
-
-</td>
-<td width="50%">
-
-**Host Management**
-<img src="docs/screenshots/hosts.png" alt="Hosts" width="100%">
-
-</td>
+<td width="50%"><b>Home</b><br><img src="docs/screenshots/home.png" alt="Home page with service map and server states"></td>
+<td width="50%"><b>SMART disk health</b><br><img src="docs/screenshots/smart.png" alt="SMART dashboard with one disk warning about reallocated sectors"></td>
 </tr>
 <tr>
-<td width="50%">
-
-**VM Controllers (Proxmox)**
-<img src="docs/screenshots/vm.png" alt="VM Controllers" width="100%">
-
-</td>
-<td width="50%">
-
-**SMART Disk Health**
-<img src="docs/screenshots/smart.png" alt="SMART" width="100%">
-
-</td>
+<td width="50%"><b>FRITZ!Box details</b><br><img src="docs/screenshots/router-detail.png" alt="FRITZ!Box detail page with uptime, updates and connected devices"></td>
+<td width="50%"><b>Security center</b><br><img src="docs/screenshots/security.png" alt="Security center checks such as HTTPS, 2FA for admins and backups"></td>
+</tr>
+<tr>
+<td width="50%"><b>Accessibility settings</b><br><img src="docs/screenshots/accessibility.png" alt="Accessibility settings: text size, contrast, readable font, easy language"></td>
+<td width="50%"><b>On a phone</b><br><img src="docs/screenshots/mobile.png" alt="FleetPilot home page on a phone" width="60%"></td>
 </tr>
 </table>
 
@@ -172,9 +167,15 @@ Pull requests are welcome. For major changes, please open an issue first to disc
 
 ---
 
+## Support the project
+
+If FleetPilot is useful to you, a ⭐ on GitHub helps other people find it, and helps it reach the 600 stars that [community-scripts.org](https://community-scripts.org) asks for before listing an app. Bug reports and ideas are welcome in [Issues](https://github.com/ChristianHandy/FleetPilot/issues).
+
+---
+
 ## License
 
-[MIT](LICENSE) — free to use, modify, and self-host.
+[GNU General Public License v3.0](LICENSE): free to use, study, change and share; changed versions you distribute must stay under the GPL.
 
 ---
 

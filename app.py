@@ -1,5 +1,5 @@
 import runtime_env  # must stay first: loads .env and SECRET_KEY before other modules
-from flask import Flask, render_template, redirect, session, request, flash, jsonify, send_file, url_for, make_response, abort, g
+from flask import Flask, has_request_context, render_template, redirect, session, request, flash, jsonify, send_file, url_for, make_response, abort, g
 from markupsafe import escape as html_escape
 import re, time as _time
 from collections import defaultdict
@@ -776,7 +776,7 @@ def proxy_add_proxmox_routes():
                 'enabled': True,
             })
         _apply_proxy_routes_or_rollback(previous)
-        route_urls = ', '.join(f"https://192.168.1.100:{item['public_port']}/" for item in chosen)
+        route_urls = ', '.join(f"https://{_public_host()}:{item['public_port']}/" for item in chosen)
         flash(f'Applied {len(chosen)} dedicated Proxmox TLS route(s): {route_urls}', 'success')
     except (ValueError, RuntimeError) as error:
         proxy_manager.restore_routes(previous)
@@ -808,7 +808,7 @@ def proxy_add_unraid_route():
             'enabled': True,
         })
         _apply_proxy_routes_or_rollback(previous)
-        flash('Applied the dedicated Unraid TLS route: https://192.168.1.100:8200/', 'success')
+        flash(f'Applied the dedicated Unraid TLS route: https://{_public_host()}:8200/', 'success')
     except (ValueError, RuntimeError) as error:
         proxy_manager.restore_routes(previous)
         proxy_manager.apply()
@@ -2022,10 +2022,23 @@ def _invalidate_service_map_cache():
             cache_invalidate(cache_key)
 
 
+def _public_host():
+    """Host name or address the visitor used to reach FleetPilot (for links to published routes)."""
+    host = _urlparse(request.host_url).hostname or 'localhost'
+    return f'[{host}]' if ':' in host else host
+
+
+@app.context_processor
+def _inject_public_host():
+    """Templates show published routes under the address the visitor used."""
+    return {'public_host': _public_host() if has_request_context() else 'localhost'}
+
+
 def _build_service_map(hosts, routes):
     """Join configured proxy routes with managed hosts and cached direct health probes."""
     route_signature = json.dumps(routes, sort_keys=True, separators=(',', ':'))
-    cache_key = f'service_map:{route_signature}'
+    public_host = _public_host()
+    cache_key = f'service_map:{public_host}:{route_signature}'
     cached = cache_get(cache_key)
     if cached is not None:
         return cached
@@ -2037,13 +2050,13 @@ def _build_service_map(hosts, routes):
     services = [{
         'name': 'FleetPilot',
         'path_prefix': '/',
-        'public_url': 'http://192.168.1.100/',
+        'public_url': request.host_url,
         'route_type': 'fleetpilot',
-        'backend': 'Raspberry Pi · Nginx 127.0.0.1:8080',
+        'backend': 'This FleetPilot server',
         'target_host': 'fleetpilot',
         'enabled': True,
         'status': 'healthy',
-        'status_detail': 'This page is being served through the Raspberry Pi ingress.',
+        'status_detail': 'You are using it right now.',
         'default': True,
     }]
     for route in routes:
@@ -2054,8 +2067,8 @@ def _build_service_map(hosts, routes):
             backend = f"{target_name} · {backend}"
         route_type = route.get('route_type', 'http_path')
         is_dedicated_tls = route_type in {'proxmox_tls', 'unraid_tls'}
-        public_url = (f"https://192.168.1.100:{route.get('public_port')}/" if is_dedicated_tls
-                      else f"http://192.168.1.100{route.get('path_prefix', '')}")
+        public_url = (f"https://{public_host}:{route.get('public_port')}/" if is_dedicated_tls
+                      else f"{request.scheme}://{public_host}{route.get('path_prefix', '')}")
         item = {
             'name': route.get('name', 'Unnamed service'),
             'path_prefix': ('Dedicated TLS port ' + str(route.get('public_port')) if is_dedicated_tls else route.get('path_prefix', '')),
