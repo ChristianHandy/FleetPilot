@@ -2889,8 +2889,11 @@ def upload_host_image(name):
         return jsonify({"ok": False, "error": "Invalid path"}), 400
     for other in allowed_ext - {ext}:          # one image per host
         stale = os.path.join(real_img_dir, safe_name + other)
-        if os.path.exists(stale):
-            os.remove(stale)
+        real_stale = os.path.realpath(stale)
+        if not real_stale.startswith(real_img_dir + os.sep):
+            continue
+        if os.path.exists(real_stale):
+            os.remove(real_stale)
     f.save(real_filepath)
     url = url_for("host_image", filename=filename)
     hosts[name]["custom_image"] = url
