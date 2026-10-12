@@ -87,38 +87,43 @@ It combines remote update management, disk health monitoring, VM controller inte
 
 ## Quick Start
 
-### Requirements
+### Proxmox VE (one command)
 
-- Python 3.8+
-- Linux (recommended) or Windows
-- `smartmontools`, `parted`, `e2fsprogs` for disk features (optional)
-
-### Installation
+In the **Shell** of your Proxmox node:
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/ChristianHandy/FleetPilot.git
-cd FleetPilot
-
-# 2. Create and activate a virtual environment
-python3 -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# 3. Install dependencies
-pip install -r requirements.txt
-
-# 4. Configure environment
-cp .env.example .env
-# Edit .env: set SECRET_KEY, DASHBOARD_USERNAME, DASHBOARD_PASSWORD
-
-# 5. Run
-python3 app.py
-# For disk management features: sudo -E python3 app.py
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/proxmox/fleetpilot-lxc.sh)"
 ```
 
-Open `http://localhost:5000` in your browser and log in.
+This creates an unprivileged Debian container, installs FleetPilot with HTTPS and prints the address and admin password. Update it later with the same command followed by `-- update <container ID>`.
 
-> **Production deployment:** Use Gunicorn behind Nginx/Traefik with TLS. See the [Security](#security) section.
+### Debian, Ubuntu or Raspberry Pi OS
+
+As root:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/install.sh | bash
+```
+
+Then open `https://<server-ip>`, accept the self-signed certificate once and sign in as `admin` with the password the installer shows.
+
+The **[installation guide](docs/installation.md)** ([Deutsch](docs/de/installation.md)) covers all options, unattended installs, your own certificate, updates, backups, high-security settings and troubleshooting.
+
+### Development
+
+```bash
+git clone https://github.com/ChristianHandy/FleetPilot.git
+```
+
+```bash
+cd FleetPilot && python3 -m venv venv && venv/bin/pip install -r requirements.txt
+```
+
+```bash
+cp .env.example .env && venv/bin/python app.py
+```
+
+This serves `http://localhost:5000` for development only; use one of the installers above for real use.
 
 ---
 
@@ -138,73 +143,18 @@ Available widgets: Quick Stats, Fleet Overview, VM Controllers, Storage Controll
 
 ## User Guides
 
-Official user guides with screenshots are available in 5 languages under [`docs/user-guides/`](docs/user-guides/):
+| | English | Deutsch |
+|---|---|---|
+| Installation | [docs/installation.md](docs/installation.md) · [PDF](docs/user-guides/FleetPilot_Installation_EN.pdf) | [docs/de/installation.md](docs/de/installation.md) · [PDF](docs/user-guides/FleetPilot_Installation_DE.pdf) |
+| User guide (all features) | [docs/user-guide.md](docs/user-guide.md) · [PDF](docs/user-guides/FleetPilot_User_Guide_EN.pdf) | [docs/de/benutzerhandbuch.md](docs/de/benutzerhandbuch.md) · [PDF](docs/user-guides/FleetPilot_Handbuch_DE.pdf) |
 
-| Language | Download |
-|---|---|
-| English | [FleetPilot_User_Guide_EN.pdf](docs/user-guides/FleetPilot_User_Guide_EN.pdf) |
-| Deutsch | [FleetPilot_Handbuch_DE.pdf](docs/user-guides/FleetPilot_Handbuch_DE.pdf) |
-| Français | [FleetPilot_Guide_Utilisateur_FR.pdf](docs/user-guides/FleetPilot_Guide_Utilisateur_FR.pdf) |
-| Español | [FleetPilot_Manual_Usuario_ES.pdf](docs/user-guides/FleetPilot_Manual_Usuario_ES.pdf) |
-| Italiano | [FleetPilot_Manuale_Utente_IT.pdf](docs/user-guides/FleetPilot_Manuale_Utente_IT.pdf) |
-
----
-
-## Architecture
-
-FleetPilot is a Python/Flask application with a SQLite backend. It requires no external database server or cloud service.
-
-```
-FleetPilot/
-├── app.py                  # Main Flask application & all routes
-├── vm_controller.py        # Proxmox/VM integration (with retry backoff)
-├── user_management.py      # RBAC, users, dashboard layout persistence
-├── storage_controller.py   # Storage system integration
-├── smart_manager.py        # SMART disk health monitoring
-├── checkmk_integration.py  # CheckMK monitoring integration
-├── disktool_core.py        # Disk formatting & validation
-├── templates/              # Jinja2 HTML templates
-├── static/                 # CSS, JS, assets
-├── addons/                 # Plugin system
-└── docs/
-    ├── user-guides/        # Multilingual PDF user guides
-    └── screenshots/        # UI screenshots
-```
-
----
-
-## Security
-
-FleetPilot manages critical infrastructure. Before deploying:
-
-- **Always use HTTPS/TLS** — deploy behind Nginx/Traefik/Caddy with a valid certificate
-- **Restrict network access** — management VLAN or VPN only, never expose to the public internet
-- **Set strong credentials** — generate a secure `SECRET_KEY` with `openssl rand -hex 32`
-- **Use Gunicorn** in production, not the Flask dev server
-- **Limit sudo scope** — grant `sudo` only for specific disk utilities (`smartctl`, `mkfs.*`, `wipefs`)
-
-See [SECURITY.md](SECURITY.md) for the full hardening guide.
-
----
-
-## Managing Hosts
-
-Hosts are stored in `hosts.json`. The web UI at `/hosts` lets you add, edit, and delete hosts without touching the file directly.
-
-```json
-{
-  "my-server": { "host": "192.168.1.50", "user": "ubuntu", "mac": "00:11:22:33:44:55" },
-  "windows-pc": { "host": "192.168.1.60", "user": "Administrator" }
-}
-```
-
-**DHCP support:** Store the MAC address and use "Scan for IP Changes" to automatically update host IPs when they change.
+Older guides (version 1.0) in French, Spanish and Italian are in [`docs/user-guides/`](docs/user-guides/).
 
 ---
 
 ## Plugin System
 
-Extend FleetPilot with custom disk tools and integrations via the addon system. Install plugins from the web UI at `/disks/pluginmanager/` or create your own — see [PLUGIN_REPOSITORY.md](PLUGIN_REPOSITORY.md).
+Extend FleetPilot with custom disk tools and integrations via the addon system. Browse plugins under **System → Plugins** and add one by copying its file into `/opt/fleetpilot/addons`, or create your own — see [PLUGIN_REPOSITORY.md](PLUGIN_REPOSITORY.md).
 
 ---
 

@@ -8,6 +8,12 @@ Alle bemerkenswerten Änderungen an FleetPilot werden in diesem Dokument festgeh
 
 ### Added
 
+- **One-command install on Proxmox VE**: `proxmox/fleetpilot-lxc.sh` creates an unprivileged Debian 13 container (default or advanced settings, static IP, VLAN, SSH key) and installs FleetPilot with HTTPS; `-- update <ID>` updates it. Tested on Proxmox VE 9.2. Files for submission to community-scripts.org are in `proxmox/community-scripts/`.
+- **Unified installer** `install.sh` for Debian 12/13, Ubuntu 22.04/24.04 and Raspberry Pi OS: read-only code directory, `fleetpilot` service user, its own Ed25519 SSH key, root helpers behind one narrow sudo rule, nginx with a self-signed certificate on 443, unattended options, safe re-runs as updates. `install-debian.sh` and `install_raspberry_pi.sh` now call it.
+- **New documentation**: installation guide and a user guide covering every feature, in English and German, with PDFs (`docs/installation.md`, `docs/user-guide.md`, `docs/de/`).
+- `reset-password.sh` rewritten: finds the user database in the data directory, `--generate`, `--list`, signs out open sessions, never puts the password on a command line.
+- HW Monitor is now in the menu (Hardware → HW Monitor); the German menu is fully translated.
+
 - **AVM FRITZ!Box and FRITZ!Repeater** via TR-064: model, FRITZ!OS version, uptime, internet line (status, external IP, line speed), Wi-Fi networks with client counts, all devices, the Mesh overview, FRITZ!OS update check, encrypted FRITZ! export backup and restart. **Repeaters and access points** of any brand can be added for an availability check; every device has a role (router, repeater, access point).
 - Tables that scroll sideways on small screens can be reached and scrolled with the keyboard on every page.
 - **Routers** (Servers → Routers): OpenWrt, OPNsense (REST API), pfSense, VyOS, DD-WRT/FreshTomato, MikroTik RouterOS and IPFire/Linux routers. Shows status, firmware, uptime, memory, interfaces and DHCP clients; update checks (OpenWrt opkg/apk, OPNsense, pfSense, RouterOS), encrypted configuration backups, restart with name confirmation, offline/online and update notifications, Prometheus metrics and `GET /api/routers`. See `docs/routers.md`.
@@ -38,6 +44,9 @@ Alle bemerkenswerten Änderungen an FleetPilot werden in diesem Dokument festgeh
 
 ### Fixed
 
+- Found by the first real Proxmox install: FleetPilot no longer writes into its program directory (SMART CSV exports, host pictures, version check, gunicorn control socket); SMART collection read demo hosts from the program directory instead of the configured hosts; the repository no longer ships demo `hosts.json`/`history.json`; installer re-runs no longer stop at "Writing settings".
+- Security (CodeQL): RouterOS and SMART parsers no longer use regular expressions that could backtrack on crafted input; router backup file names are checked to stay inside the backup folder; SSH and smartctl errors no longer return raw exception text.
+- Uploaded host pictures are served from the data directory with a sandboxing Content-Security-Policy, so an uploaded SVG cannot run script.
 - HW Monitor never imported servers from hosts.json (it expected a list); it now does, and stores SSH passwords encrypted like every other module (existing plain-text passwords are encrypted at start).
 
 ### Security

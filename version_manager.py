@@ -17,7 +17,10 @@ from fleetpilot_version import TAG
 # Get logger for this module
 logger = logging.getLogger(__name__)
 
-VERSION_CHECK_FILE = "version_check.json"
+# In the data directory: the code directory is read-only for the service.
+VERSION_CHECK_FILE = os.path.join(
+    os.environ.get("FLEETPILOT_DATA_DIR") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "data"),
+    "version_check.json")
 GITHUB_REPO = "ChristianHandy/fleetpilot"
 GITHUB_API_BASE = "https://api.github.com"
 

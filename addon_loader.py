@@ -103,8 +103,11 @@ class AddonManager:
             # Embedded HTML template (legacy disk-tool style)
             if "html" in meta:
                 html_path = Path(template_target) / f"{modname}.html"
-                with open(html_path, "w", encoding="utf-8") as f:
-                    f.write(textwrap.dedent(meta["html"]).strip())
+                html = textwrap.dedent(meta["html"]).strip()
+                # Only write when it changed: the code directory is read-only
+                # for the service in a normal install.
+                if not html_path.exists() or html_path.read_text(encoding="utf-8") != html:
+                    html_path.write_text(html, encoding="utf-8")
                 def _make_btn(pname):
                     return lambda dev: (
                         f'<a class="btn btn-sm btn-outline-secondary" '

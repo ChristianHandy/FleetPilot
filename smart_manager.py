@@ -13,11 +13,14 @@ Features:
   - Unified disk registry: local + remote disks in one table
 """
 
+import os
 import re
 import json
 import sqlite3
 import shutil
 import logging
+
+import safe_errors
 import subprocess
 import threading
 import time
@@ -353,7 +356,7 @@ def _run_smartctl(device: str) -> str:
     except FileNotFoundError:
         return "smartctl not found"
     except Exception as exc:
-        return str(exc)
+        return safe_errors.public_error(exc, "smartctl")
 
 
 def collect_local_disk(device: str) -> Optional[Dict]:
@@ -521,10 +524,12 @@ def collect_ssh_host_disks(host_name: str, host_ip: str, user: str,
         elif password:
             connect_kwargs["password"] = password
         else:
-            # Try default key
-            default_key = Path.home() / ".ssh" / "id_rsa"
-            if default_key.exists():
-                connect_kwargs["key_filename"] = str(default_key)
+            # The installer creates id_ed25519; older setups used id_rsa.
+            for name in ("id_ed25519", "id_rsa"):
+                default_key = Path.home() / ".ssh" / name
+                if default_key.exists():
+                    connect_kwargs["key_filename"] = str(default_key)
+                    break
         ssh = ssh_helper.create_client(**connect_kwargs)
     except Exception as exc:
         logger.warning("[smart_manager] SSH connect failed for %s (%s): %s", host_name, host_ip, exc)
@@ -605,7 +610,8 @@ def collect_all_ssh_hosts() -> List[Dict]:
     results = []
     try:
         import json as _json
-        hosts_file = Path(__file__).parent / "hosts.json"
+        data_dir = os.environ.get("FLEETPILOT_DATA_DIR") or str(Path(__file__).parent / "data")
+        hosts_file = Path(data_dir) / "hosts.json"
         if not hosts_file.exists():
             return results
         with open(hosts_file) as f:
@@ -617,7 +623,7 @@ def collect_all_ssh_hosts() -> List[Dict]:
             # Skip localhost
             if ip in ("localhost", "127.0.0.1", "::1", ""):
                 continue
-            key_path = h.get("ssh_key") or str(Path.home() / ".ssh" / "id_rsa")
+            key_path = h.get("ssh_key") or None
             try:
                 r = collect_ssh_host_disks(
                     host_name=name, host_ip=ip, user=user,

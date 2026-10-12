@@ -37,3 +37,7 @@ data/
 # .NET build output
 FleetPilotCS/bin/
 FleetPilotCS/obj/
+
+# Runtime data lives in data/ (FLEETPILOT_DATA_DIR); never commit it
+/hosts.json
+/history.json

@@ -145,7 +145,7 @@ def _ssh_run(host: str, port: int, username: str, password: str,
         rc = stdout.channel.recv_exit_status()
         return rc, out, err
     except Exception as e:
-        return 1, "", str(e)
+        return 1, "", safe_errors.public_error(e, "The SSH command")
     finally:
         if client:
             client.close()

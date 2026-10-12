@@ -79,3 +79,30 @@ def test_checkmk_unknown_host_does_not_echo_input(monkeypatch):
     with fp.app.test_client() as c:
         r = c.get('/api/checkmk/host/<script>alert(1)</script>')
     assert r.status_code == 404 and b'<script>alert(1)' not in r.data
+
+
+def test_routeros_terse_parser_is_linear_and_unchanged():
+    import time
+    import router_manager as rm
+    rows = rm.parse_routeros_terse(" 0 R name=ether1 type=ether mtu=1500\n 1 X D name=wlan1 disabled=yes\nFlags: X - disabled\n")
+    assert rows == [{"name": "ether1", "type": "ether", "mtu": "1500", "_flags": "R"},
+                    {"name": "wlan1", "disabled": "yes", "_flags": "X D"}]
+    started = time.perf_counter()
+    rm.parse_routeros_terse("0 -=" + "-=" * 50000 + " !")
+    assert time.perf_counter() - started < 1
+
+
+def test_smart_import_temperature_without_backtracking():
+    import io
+    import time
+    import disktool_core as d
+
+    class Upload:
+        def __init__(self, text):
+            self.stream = io.BytesIO(text.encode())
+    started = time.perf_counter()
+    d.import_smart_data(Upload("Temperature_Celsius" * 100000), device="redos")
+    assert time.perf_counter() - started < 2
+    d.import_smart_data(Upload("194 Temperature_Celsius 0x0022 036 052 000 Old_age Always - 36 (Min/Max 18/52)\n"), device="tempdev")
+    with d.get_db() as db:
+        assert db.execute("SELECT temp FROM smart_history WHERE device='tempdev' ORDER BY id DESC").fetchone()[0] == 36
