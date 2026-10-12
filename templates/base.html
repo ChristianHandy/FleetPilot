@@ -194,6 +194,7 @@
       {{ group('grp-hw', 'Hardware') }}
       <div class="sidebar-nav-group" id="grp-hw">
         {{ nav('/hw_overview', 'Hardware overview', 'cpu', path.startswith('/hw_overview')) }}
+        {{ nav('/hw', 'HW Monitor', 'chart', path == '/hw' or path.startswith('/hw/')) }}
         {{ nav('/smart', 'SMART health', 'activity', path.startswith('/smart')) }}
         {{ nav('/storage/workspace', 'Storage & disks', 'hard-drive', path.startswith('/storage/workspace') or path.startswith('/disks')) }}
         {{ nav('/fans', 'Fans & cooling', 'fan', path.startswith('/fans') or path.startswith('/commander')) }}

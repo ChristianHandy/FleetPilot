@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="FleetPilot">
+  <rect width="128" height="128" rx="28" fill="#12355b"/>
+  <g fill="none" stroke="#5fb3ff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="22" y="30" width="46" height="16" rx="4"/>
+    <rect x="22" y="56" width="46" height="16" rx="4"/>
+    <rect x="22" y="82" width="46" height="16" rx="4"/>
+  </g>
+  <g fill="#5fb3ff">
+    <circle cx="32" cy="38" r="3.5"/>
+    <circle cx="32" cy="64" r="3.5"/>
+    <circle cx="32" cy="90" r="3.5"/>
+  </g>
+  <path d="M80 92 L106 64 L80 36 L88 64 Z" fill="#ffffff"/>
+</svg>

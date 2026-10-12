@@ -5,6 +5,29 @@
 
 TRANSLATIONS = {
     "de": {
+        # Sidebar
+        'Routers': 'Router',
+        'Server update': 'Server aktualisieren',
+        'Hardware overview': 'Hardware-Übersicht',
+        'HW Monitor': 'HW-Monitor',
+        'SMART health': 'SMART-Zustand',
+        'Storage & disks': 'Speicher & Festplatten',
+        'Fans & cooling': 'Lüfter & Kühlung',
+        'VM controllers': 'VM-Controller',
+        'Storage controllers': 'Speicher-Controller',
+        'Backup servers': 'Backup-Server',
+        'Scheduled shutdown': 'Geplantes Herunterfahren',
+        'System monitor': 'Systemmonitor',
+        'FleetPilot update': 'FleetPilot-Update',
+        'Proxy services': 'Proxy-Dienste',
+        'Production status': 'Produktionsstatus',
+        'Security center': 'Sicherheitscenter',
+        'Notifications': 'Benachrichtigungen',
+        'Audit trail': 'Audit-Protokoll',
+        'Sign-in & security': 'Anmeldung & Sicherheit',
+        'Accessibility': 'Barrierefreiheit',
+        'Servers': 'Server',
+        'Virtualisation': 'Virtualisierung',
         # ── German / Deutsch ──────────────────────────────────────────────
         # Navigation & Sidebar
         'Account': 'Konto',
@@ -25,8 +48,8 @@ TRANSLATIONS = {
         'Settings': 'Einstellungen',
         'Toggle menu': 'Menü umschalten',
         'Toggle theme': 'Design umschalten',
-        'Update Dashboard': 'Dashboard aktualisieren',
-        'Update Settings': 'Einstellungen aktualisieren',
+        'Update Dashboard': 'Update-Übersicht',
+        'Update Settings': 'Update-Einstellungen',
         'User Management': 'Benutzerverwaltung',
 
         # Login & Auth
