@@ -541,8 +541,14 @@ def import_smart_data(file_storage, device='UNKNOWN'):
     """Importiert einen SMART-Bericht aus einer hochgeladenen Datei in die smart_history Tabelle."""
     # Read the upload in memory; its filename is never used as a path.
     text = file_storage.stream.read(2 * 1024 * 1024).decode('utf-8', errors='replace')
-    m = re.search(r'Temperature_Celsius.*\s(\d+)', text)
-    temp = int(m.group(1)) if m else None
+    # Last number on the first Temperature_Celsius line (the raw value). Plain string
+    # work per line: a regex spanning the line could backtrack badly on crafted input.
+    temp = None
+    for line in text.splitlines():
+        if 'Temperature_Celsius' in line:
+            numbers = [t for t in line.split('Temperature_Celsius', 1)[1].split() if t.isdigit()]
+            temp = int(numbers[-1]) if numbers else None
+            break
     health = 'BAD' if 'FAILING_NOW' in text else 'GOOD'
     with get_db() as db:
         db.execute("INSERT INTO smart_history(device, serial, temp, health) VALUES (?, ?, ?, ?)",

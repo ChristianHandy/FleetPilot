@@ -19,6 +19,8 @@ import json
 import sqlite3
 import shutil
 import logging
+
+import safe_errors
 import subprocess
 import threading
 import time
@@ -354,7 +356,7 @@ def _run_smartctl(device: str) -> str:
     except FileNotFoundError:
         return "smartctl not found"
     except Exception as exc:
-        return str(exc)
+        return safe_errors.public_error(exc, "smartctl")
 
 
 def collect_local_disk(device: str) -> Optional[Dict]:

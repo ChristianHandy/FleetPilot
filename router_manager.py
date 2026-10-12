@@ -438,14 +438,30 @@ def parse_routeros_kv(text: str) -> Dict[str, str]:
     return values
 
 
+_TERSE_KEY = re.compile(r"[a-z0-9.-]+")
+
+
 def parse_routeros_terse(text: str) -> List[Dict[str, str]]:
     """RouterOS 'print terse': ' 0 R name=ether1 type=ether ...' per line."""
     rows = []
     for line in (text or "").replace("\r", "").splitlines():
-        m = re.match(r"\s*\d+\s+([A-Z ]*?)\s*((?:[a-z0-9.-]+=\S*\s*)+)$", line)
-        if m:
-            row = dict(re.findall(r"([a-z0-9.-]+)=(\S*)", m.group(2)))
-            row["_flags"] = m.group(1).strip()
+        # Tokens instead of one nested regex, which could backtrack exponentially.
+        tokens = line.split()
+        if len(tokens) < 2 or not tokens[0].isdigit():
+            continue
+        flags, pairs = [], []
+        for token in tokens[1:]:
+            key, eq, value = token.partition("=")
+            if eq and _TERSE_KEY.fullmatch(key):
+                pairs.append((key, value))
+            elif not pairs and token.isalpha() and token.isupper():
+                flags.append(token)
+            else:
+                pairs = []
+                break
+        if pairs:
+            row = dict(pairs)
+            row["_flags"] = " ".join(flags)
             rows.append(row)
     return rows
 
@@ -1076,8 +1092,12 @@ def backup(router_id: int) -> str:
         raise RuntimeError("The router returned an empty backup.")
     if len(data) > MAX_BACKUP:
         raise RuntimeError("The backup is larger than FleetPilot accepts.")
-    name = f'r{router_id}-{datetime.now().strftime("%Y%m%d-%H%M%S")}.{ext}.enc'
-    path = os.path.join(_backup_dir(), name)
+    # The name comes from the database record and a timestamp only, and must stay inside the folder.
+    name = f'r{int(router["id"])}-{datetime.now().strftime("%Y%m%d-%H%M%S")}.{ext}.enc'
+    folder = os.path.realpath(_backup_dir())
+    path = os.path.realpath(os.path.join(folder, name))
+    if not _BACKUP_RE.match(name) or os.path.dirname(path) != folder:
+        raise ValueError("Invalid backup name.")
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w") as fh:
         fh.write(_box.encrypt(base64.b64encode(data).decode()))
