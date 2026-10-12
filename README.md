@@ -16,7 +16,7 @@ Updates for Linux and Windows machines, SMART disk health, FRITZ!Box / OpenWrt /
 
 <img src="docs/screenshots/routers.png" alt="FleetPilot routers page: FRITZ!Box, repeater, OpenWrt and OPNsense with status, firmware, uptime and connected devices" width="100%">
 
-[Install](#quick-start) · [Features](#features) · [Screenshots](#screenshots) · [User guide](docs/user-guide.md) · [Security](SECURITY.md)
+**[▶ Try the live demo](https://christianhandy.github.io/FleetPilot/)** · [Install](#quick-start) · [Features](#features) · [Screenshots](#screenshots) · [User guide](docs/user-guide.md) · [Security](SECURITY.md)
 
 **Proxmox VE, in the node's Shell:**
 
@@ -61,7 +61,7 @@ It combines remote update management, disk health monitoring, VM controller inte
 
 ## Screenshots
 
-Demo data; every page also has a light theme and works on phones.
+Demo data; every page also has a light theme and works on phones. Click through all pages in the **[live demo](https://christianhandy.github.io/FleetPilot/)**.
 
 <table>
 <tr>
