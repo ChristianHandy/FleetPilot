@@ -283,4 +283,4 @@ The key path must be accessible from *within the Home Assistant container*. Stor
 
 ## License
 
-MIT – see `LICENSE`
+GPL-3.0, like the rest of FleetPilot – see the repository's `LICENSE`.

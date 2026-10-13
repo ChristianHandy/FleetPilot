@@ -259,7 +259,7 @@
   <div class="widget-controls"><button class="widget-ctrl-btn widget-ctrl-hide" title="{{ _('Hide') }}" aria-label="{{ _('Hide') }}" onclick="hideWidget('service_hub')">&#x2715;</button></div>
   <section class="service-hub">
     <div class="service-hub-hero">
-      <div><h2>Services &amp; Server Map</h2><p>This is the live map for <code>http://192.168.1.100/</code>: every configured proxy path, its destination server, direct health status, and every registered infrastructure host. FleetPilot itself is the default service at <code>/</code>.</p></div>
+      <div><h2>Services &amp; Server Map</h2><p>This is the live map for <code>{{ request.scheme }}://{{ public_host }}/</code>: every configured proxy path, its destination server, direct health status, and every registered infrastructure host. FleetPilot itself is the default service at <code>/</code>.</p></div>
       <div class="hub-kpis"><div class="hub-kpi"><strong>{{ service_map|length }}</strong><span>Service routes</span></div><div class="hub-kpi"><strong>{{ manageability.manageable }}</strong><span>Manageable hosts</span></div><div class="hub-kpi"><strong>{{ server_service_map|length }}</strong><span>Registered servers</span></div></div>
     </div>
     <div class="hub-body">

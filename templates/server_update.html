@@ -275,7 +275,7 @@ function rebootServer() {
     document.getElementById('sudoPassword').focus();
     return;
   }
-  if (!confirm({{ ('' ~ (_("Are you sure you want to reboot this server? FleetPilot will be unavailable for 1-2 minutes.")) ~ '')|tojson|forceescape }})) return;
+  if (!confirm({{ _("Are you sure you want to reboot this server? FleetPilot will be unavailable for 1-2 minutes.")|tojson }})) return;
 
   document.getElementById('rebootBtn').disabled = true;
   document.getElementById('rebootBtn').textContent = '{{ _("Rebooting…") }}';
