@@ -714,19 +714,21 @@ def collect_proxmox_disks(ep_id: int, node: str):
         import vm_controller as vc
         disks = vc.get_proxmox_disks(ep_id, node)
         for d in disks:
-            dev_name = d.get("dev", d.get("devpath", "")).lstrip("/dev/")
+            # The Proxmox API names the device "devpath" (/dev/sda).
+            dev_path = d.get("dev") or d.get("devpath", "")
+            dev_name = dev_path.removeprefix("/dev/")
             if not dev_name:
                 continue
             disk_id = register_disk(
                 source="proxmox",
-                device=dev_name,
+                device=f"{node}:{dev_name}",   # nodes of a cluster all have an sda
                 serial=d.get("serial"),
                 model=d.get("model"),
                 size_gb=round(d.get("size", 0) / 1e9, 1) if d.get("size") else None,
                 source_id=str(ep_id)
             )
             # Try to get SMART data from Proxmox API
-            smart_data = vc.get_proxmox_disk_smart(ep_id, node, d.get("dev", ""))
+            smart_data = vc.get_proxmox_disk_smart(ep_id, node, dev_path)
             attrs_raw = smart_data.get("attributes", [])
             parsed = {
                 "overall_status": smart_data.get("health", "UNKNOWN"),

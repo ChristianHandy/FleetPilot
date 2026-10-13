@@ -18,6 +18,8 @@ Updates for Linux and Windows machines, SMART disk health, FRITZ!Box / OpenWrt /
 
 **[▶ Try the live demo](https://christianhandy.github.io/FleetPilot/)** · [Install](#quick-start) · [Features](#features) · [Screenshots](#screenshots) · [User guide](docs/user-guide.md) · [Security](SECURITY.md)
 
+> **Test it before you install it.** The live demo is the real FleetPilot, running in your browser (WebAssembly) against an emulated homelab: Proxmox nodes, TrueNAS, a backup server, Linux and Windows machines, a FRITZ!Box, OpenWrt and OPNsense. Updates, Wake-on-LAN, VMs, fans, SMART alerts and router checks all work, and nothing leaves your browser.
+
 **Proxmox VE, in the node's Shell:**
 
 ```bash
@@ -61,7 +63,7 @@ It combines remote update management, disk health monitoring, VM controller inte
 
 ## Screenshots
 
-Demo data; every page also has a light theme and works on phones. Click through all pages in the **[live demo](https://christianhandy.github.io/FleetPilot/)**.
+Demo data; every page also has a light theme and works on phones. Try all of it in the **[live demo](https://christianhandy.github.io/FleetPilot/)** (or the lighter [static tour](https://christianhandy.github.io/FleetPilot/tour/)).
 
 <table>
 <tr>

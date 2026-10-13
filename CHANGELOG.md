@@ -4,6 +4,17 @@ Alle bemerkenswerten Änderungen an FleetPilot werden in diesem Dokument festgeh
 
 ## [Unreleased]
 
+### Added
+
+- **Live demo you can try before installing** (https://christianhandy.github.io/FleetPilot/): the real FleetPilot runs in the browser with Pyodide against an emulated homelab of Proxmox nodes, TrueNAS, Proxmox Backup Server, Linux and Windows machines, FRITZ!Box/Repeater, OpenWrt and OPNsense. Updates, Wake-on-LAN, VM power, fan control, SMART alerts and router checks all work; a "Virtual lab" panel switches devices off, fails disks or publishes updates. The previous static demo is now the lighter tour at `/tour/`. See `demo/README.md`.
+
+### Fixed
+
+- SMART data from Proxmox nodes was never read: FleetPilot asked the API for an empty disk name instead of the `devpath` Proxmox reports.
+- In a Proxmox cluster, disks with the same name on different nodes (every node's `sda`) overwrote each other in the SMART registry; they are now stored as `node:sda`.
+- Fan controllers (lm-sensors) showed the sensor limits (`temp1_max`, `temp1_crit`) as extra temperature readings; only measured values are shown now.
+- HW Monitor showed German labels ("Netz", "CPU Last") in the English interface.
+
 ## [1.7.0] — 2026-10-09
 
 ### Added

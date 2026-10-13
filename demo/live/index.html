@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FleetPilot Live Demo</title>
+<meta name="description" content="Try FleetPilot in your browser: the real app runs in this tab against an emulated homelab of servers, disks, Proxmox, NAS and routers. Nothing to install.">
+<meta property="og:title" content="FleetPilot Live Demo">
+<meta property="og:description" content="The real FleetPilot, running in your browser against an emulated homelab.">
+<meta property="og:image" content="assets/social-preview.png">
+<link rel="icon" href="assets/fleetpilot-logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/bootstrap-icons/bootstrap-icons.min.css">
+<link rel="stylesheet" href="shell.css">
+</head>
+<body>
+<header class="bar">
+  <a class="brand" href="https://github.com/ChristianHandy/FleetPilot" aria-label="FleetPilot on GitHub">
+    <img src="assets/fleetpilot-logo.svg" alt="" width="26" height="26"><span>FleetPilot</span>
+  </a>
+  <span class="badge">Live demo</span>
+  <span class="hint" id="bar-hint">Runs in your browser · emulated homelab</span>
+  <nav class="actions">
+    <button type="button" id="lab-toggle" class="btn" aria-expanded="false" aria-controls="lab" disabled>
+      <i class="bi bi-hdd-rack" aria-hidden="true"></i><span>Virtual lab</span><span class="count" id="lab-count" hidden></span>
+    </button>
+    <button type="button" id="restart" class="btn ghost" title="Start over with a fresh lab">
+      <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i><span>Start over</span>
+    </button>
+    <a class="btn primary" href="https://github.com/ChristianHandy/FleetPilot#quick-start">
+      <i class="bi bi-download" aria-hidden="true"></i><span>Install</span>
+    </a>
+  </nav>
+</header>
+
+<main class="stage">
+  <iframe id="app" title="FleetPilot" hidden></iframe>
+
+  <section class="loader" id="loader" aria-live="polite">
+    <div class="card">
+      <img src="assets/fleetpilot-logo.svg" alt="" width="56" height="56">
+      <h1>Starting your own FleetPilot</h1>
+      <p class="lead">The real FleetPilot runs right here in this tab, with an emulated homelab: Proxmox nodes,
+        a TrueNAS box, a backup server, Linux and Windows machines, a FRITZ!Box, OpenWrt and OPNsense.
+        Click anything: updates, Wake-on-LAN, VMs, fans and router checks all work. Nothing leaves your browser.</p>
+      <ol class="steps" id="steps">
+        <li data-step="1">Python runtime (WebAssembly)</li>
+        <li data-step="2">Libraries</li>
+        <li data-step="3">FleetPilot</li>
+        <li data-step="4">Virtual lab</li>
+      </ol>
+      <div class="progress" aria-hidden="true"><span id="bar"></span></div>
+      <p class="small" id="loader-note">About 20 MB the first time, then cached. Takes 5–20 seconds.</p>
+      <p class="small error" id="loader-error" hidden></p>
+      <p class="small">Slow connection or old browser? <a href="tour/">Take the quick static tour</a> instead.</p>
+    </div>
+  </section>
+
+  <aside class="lab" id="lab" hidden aria-label="Virtual lab">
+    <div class="lab-head">
+      <h2><i class="bi bi-hdd-rack" aria-hidden="true"></i> Virtual lab</h2>
+      <button type="button" class="icon" id="lab-close" aria-label="Close the virtual lab"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" data-tab="devices">Devices</button>
+      <button role="tab" aria-selected="false" data-tab="activity">Activity</button>
+      <button role="tab" aria-selected="false" data-tab="outbox">Outbox <span class="count" id="outbox-count" hidden></span></button>
+    </div>
+    <div class="panel" data-panel="devices">
+      <details class="try" open>
+        <summary>Things to try</summary>
+        <ol>
+          <li><b>Hosts</b>: update <i>docker-01</i> and watch the apt output.</li>
+          <li><b>Hosts</b>: <i>lab-01</i> is off. Wake it with Wake-on-LAN.</li>
+          <li>Below: <i>Let a disk fail</i> on <i>nas</i>, then open <b>SMART</b> and the <b>Outbox</b> tab.</li>
+          <li><b>VMs</b>: start <i>k3s-node</i>, or shut down <i>jellyfin</i>.</li>
+          <li>Below: publish a FRITZ!OS update, then <b>Routers → FRITZ!Box → Check for updates</b>.</li>
+          <li><b>Fans</b>: change a fan's speed and watch RPM and temperature follow.</li>
+        </ol>
+        <p class="small" id="creds"></p>
+      </details>
+      <ul class="devices" id="devices"></ul>
+    </div>
+    <div class="panel" data-panel="activity" hidden>
+      <p class="small">What FleetPilot just did on the emulated network: SSH commands, API calls, power events.</p>
+      <label class="small check"><input type="checkbox" id="show-bg"> Show background polling (every few seconds)</label>
+      <ol class="log" id="log"></ol>
+    </div>
+    <div class="panel" data-panel="outbox" hidden>
+      <p class="small">Alerts FleetPilot sent by e-mail and ntfy. In the demo they stay here.</p>
+      <ol class="outbox" id="outbox"></ol>
+    </div>
+  </aside>
+</main>
+
+<noscript><p class="noscript">The live demo needs JavaScript. <a href="tour/">Open the static tour</a>.</p></noscript>
+<script src="shell.js"></script>
+</body>
+</html>
