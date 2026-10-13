@@ -1,6 +1,6 @@
 # Changelog
 
-Alle bemerkenswerten Änderungen an FleetPilot werden in diesem Dokument festgehalten. Die Versionsnummern folgen dem Prinzip der semantischen Versionierung.
+All notable changes to FleetPilot are recorded here. Version numbers follow [semantic versioning](https://semver.org).
 
 ## [Unreleased]
 

@@ -26,12 +26,12 @@ We aim to acknowledge all security reports within **48 hours** and to release a 
 
 ## Supported Versions
 
-FleetPilot follows a rolling release model. Security fixes are applied exclusively to the latest version. We strongly recommend always running the most recent commit from the `main` branch.
+Security fixes go into `main` and are published in the next release. Always run the latest release; the Proxmox helper and `install.sh` update to it.
 
 | Version | Security Updates |
 |---|---|
-| Latest (`main`) | :white_check_mark: Supported |
-| Any prior release | :x: Not supported |
+| Latest release and `main` | :white_check_mark: Supported |
+| Older releases | :x: Not supported, please update |
 
 ---
 
@@ -42,7 +42,7 @@ FleetPilot implements the following security controls by default:
 | Control | Implementation |
 |---|---|
 | **No hardcoded credentials** | All secrets are loaded from environment variables at runtime |
-| **Password hashing** | User passwords are hashed using `werkzeug.security` (PBKDF2-HMAC-SHA256) |
+| **Password hashing** | User passwords are hashed with salted scrypt (`werkzeug.security`); with `FLEETPILOT_FIPS=true`, PBKDF2-HMAC-SHA256 with 600,000 iterations |
 | **Secure session keys** | `SECRET_KEY` is generated via `secrets.token_hex(32)` if not explicitly set |
 | **SQL injection prevention** | All database queries use parameterized execution |
 | **Command injection prevention** | Device names, plugin identifiers, and filesystem types are strictly validated against allowlists before being passed to system commands |
