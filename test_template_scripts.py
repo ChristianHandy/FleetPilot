@@ -2,6 +2,7 @@
 that silently breaks every button on the page."""
 import re
 import time
+from html.parser import HTMLParser
 
 import account_security
 import app as fp
@@ -15,6 +16,35 @@ PAGES = ["/index", "/hosts", "/scanner", "/routers", "/dashboard", "/hw_overview
          "/server_update"]
 # An escaped quote where a JavaScript value begins, as in confirm(&#34;... : the signature of
 # |tojson|forceescape or plain {{ }} output inside a script. HTML built in JS strings may contain entities.
+
+
+class _Scripts(HTMLParser):
+    """Collect the raw text of every <script> element, as the browser sees it."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=False)
+        self.scripts, self._inside = [], False
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "script":
+            self._inside = True
+            self.scripts.append("")
+
+    def handle_endtag(self, tag):
+        if tag == "script":
+            self._inside = False
+
+    def handle_data(self, data):
+        if self._inside:
+            self.scripts[-1] += data
+
+
+def _scripts(html):
+    parser = _Scripts()
+    parser.feed(html)
+    return parser.scripts
+
+
 ENTITY = re.compile(r"(?:[(=,:]|\breturn)\s*&(#34|#39|quot|apos);")
 
 
@@ -29,7 +59,7 @@ def test_no_html_entities_inside_scripts():
     broken = []
     for path in PAGES:
         html = client.get(path).get_data(as_text=True)
-        for script in re.findall(r"<script\b[^>]*>(.*?)</script>", html, re.S):
+        for script in _scripts(html):
             for m in ENTITY.finditer(script):
                 broken.append(f"{path}: …{script[max(0, m.start() - 40):m.end() + 20]}…")
     assert not broken, "\n".join(broken[:10])
