@@ -3,22 +3,39 @@ name: Release
 # Publishes a GitHub release for every version tag (v1.2.3). Installers that
 # follow releases (community-scripts.org, fetch_and_deploy_gh_release) only see a
 # new version once a release exists; a tag alone is not enough.
+#
+# Every release carries:
+#   fleetpilot-X.Y.Z.tar.gz                 the source as installed (git archive of the tag)
+#   fleetpilot-X.Y.Z-sbom.cdx.json          CycloneDX SBOM of the locked dependencies
+#   SHA256SUMS                              checksums of both
+#   *.sigstore.json / *.intoto.jsonl        signed SLSA build provenance (Sigstore, keyless)
+# Verify with:  gh attestation verify fleetpilot-X.Y.Z.tar.gz --repo ChristianHandy/FleetPilot
+#
+# The release is assembled as a draft and published at the end, because releases
+# are immutable once published (repository setting).
 on:
   push:
     tags: ["v[0-9]+.[0-9]+.[0-9]+"]
 
-permissions:
-  contents: read
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   release:
+    name: Build, attest and publish
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write       # create the release and upload its files
+      id-token: write       # keyless Sigstore signing of the provenance
+      attestations: write   # store the provenance in the repository's attestations
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
@@ -33,15 +50,51 @@ jobs:
             exit 1
           fi
 
-      - name: SBOM of the packages an install receives
+      - name: Stop if the release exists
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; leaving it as it is."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Source archive, SBOM and checksums
+        if: steps.existing.outputs.skip != 'true'
         env:
           TAG: ${{ github.ref_name }}
         run: |
+          v="${TAG#v}"
+          git archive --format=tar.gz --prefix="fleetpilot-$v/" -o "fleetpilot-$v.tar.gz" "$TAG"
           # install.sh installs exactly requirements-lock.txt, so the SBOM describes that file.
           pip install --quiet --require-hashes -r requirements-lock.txt -r requirements-dev-lock.txt
-          cyclonedx-py requirements requirements-lock.txt --of JSON -o "fleetpilot-${TAG#v}-sbom.cdx.json"
+          cyclonedx-py requirements requirements-lock.txt --of JSON -o "fleetpilot-$v-sbom.cdx.json"
+          sha256sum "fleetpilot-$v.tar.gz" "fleetpilot-$v-sbom.cdx.json" > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Signed build provenance
+        id: attest
+        if: steps.existing.outputs.skip != 'true'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: SHA256SUMS
+
+      - name: Provenance files for the release
+        if: steps.existing.outputs.skip != 'true'
+        env:
+          TAG: ${{ github.ref_name }}
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          v="${TAG#v}"
+          cp "$BUNDLE" "fleetpilot-$v.sigstore.json"
+          # The DSSE envelope with the in-toto SLSA provenance, as JSON Lines.
+          python -c 'import json, sys; print(json.dumps(json.load(open(sys.argv[1]))["dsseEnvelope"], separators=(",", ":")))' \
+            "$BUNDLE" > "fleetpilot-$v.intoto.jsonl"
 
       - name: Release notes from CHANGELOG.md
+        if: steps.existing.outputs.skip != 'true'
         env:
           TAG: ${{ github.ref_name }}
         run: |
@@ -50,17 +103,21 @@ jobs:
             on && /^## \[/ { exit }
             on { print }
           ' CHANGELOG.md > notes.md
-          printf '\n---\nInstall or update: see the [installation guide](https://github.com/%s/blob/%s/docs/installation.md).\n' \
-            "$GITHUB_REPOSITORY" "$TAG" >> notes.md
+          {
+            printf '\n---\nInstall or update: see the [installation guide](https://github.com/%s/blob/%s/docs/installation.md).\n' \
+              "$GITHUB_REPOSITORY" "$TAG"
+            printf '\nVerify a download: `gh attestation verify fleetpilot-%s.tar.gz --repo %s`\n' "${TAG#v}" "$GITHUB_REPOSITORY"
+          } >> notes.md
 
-      - name: Publish the release (never replaces an existing one)
+      - name: Publish the release
+        if: steps.existing.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $TAG already exists; leaving it as it is."
-            exit 0
-          fi
-          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --latest \
-            --title "FleetPilot $TAG" --notes-file notes.md "fleetpilot-${TAG#v}-sbom.cdx.json"
+          v="${TAG#v}"
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft \
+            --title "FleetPilot $TAG" --notes-file notes.md \
+            "fleetpilot-$v.tar.gz" "fleetpilot-$v-sbom.cdx.json" SHA256SUMS \
+            "fleetpilot-$v.sigstore.json" "fleetpilot-$v.intoto.jsonl"
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest

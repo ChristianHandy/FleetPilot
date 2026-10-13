@@ -35,6 +35,21 @@ Security fixes go into `main` and are published in the next release. Always run 
 
 ---
 
+## Verifying a Release
+
+Each release (from v1.7.1 on) carries the source archive, a CycloneDX SBOM, `SHA256SUMS`, and SLSA build provenance signed through Sigstore by the release workflow. Nobody holds a private key for it; the signature proves that GitHub Actions built the file from this repository's tag.
+
+```bash
+gh attestation verify fleetpilot-X.Y.Z.tar.gz --repo ChristianHandy/FleetPilot
+sha256sum -c SHA256SUMS
+```
+
+Tags are signed with the maintainer's OpenPGP key `F73DEF204C54E71D` (`git tag -v vX.Y.Z`). Older releases that carry a `SHA256SUMS.asc` are signed with the same key (`gpg --verify SHA256SUMS.asc SHA256SUMS`).
+
+The measures that protect the code, the build and the releases are listed under [Security and supply chain](README.md#security-and-supply-chain).
+
+---
+
 ## Security Architecture
 
 FleetPilot implements the following security controls by default:

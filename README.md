@@ -62,6 +62,24 @@ It combines remote update management, disk health monitoring, VM controller inte
 
 ---
 
+## Security and supply chain
+
+FleetPilot holds SSH keys and admin access to your machines, so the project is built and released with the same care it asks of you. Checked continuously by [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/ChristianHandy/FleetPilot).
+
+| Area | What is in place |
+|---|---|
+| **Code analysis** | CodeQL (security-extended queries) for the Python code and the GitHub workflows, Bandit, a linter, and ~200 tests on Python 3.11–3.13 for every change |
+| **Fuzzing** | The parsers for router, disk and SOAP output are fuzzed with Atheris: ClusterFuzzLite on every pull request, plus a weekly long run |
+| **Dependencies** | Every dependency is locked with hashes (`pip install --require-hashes`) and checked with pip-audit; pull requests that add a vulnerable dependency are blocked (dependency review); Dependabot security updates, and version updates only after a 5-day cooldown |
+| **CI/CD** | Every action pinned to a full commit SHA and only allowed publishers (GitHub, Google ClusterFuzzLite, OpenSSF Scorecard, zizmor), both enforced by repository settings; least-privilege tokens per job; no stored credentials; workflows audited by [zizmor](https://docs.zizmor.sh); pull requests from outside contributors need approval before CI runs |
+| **Branch** | `main` is protected: changes only through pull requests with passing tests and CodeQL, no force-push or deletion, rules apply to admins too |
+| **Releases** | GPG-signed tags; each release carries the source archive, a CycloneDX SBOM, `SHA256SUMS` and Sigstore-signed SLSA build provenance: `gh attestation verify fleetpilot-X.Y.Z.tar.gz --repo ChristianHandy/FleetPilot` |
+| **Secrets** | Secret scanning with push protection; no credentials in the repository |
+| **Reporting** | Private vulnerability reporting, see [SECURITY.md](SECURITY.md) |
+| **The app itself** | Read-only install, unprivileged service user, 2FA and passkeys, audit trail, CVE scan of your servers; see [SECURITY.md](SECURITY.md#security-architecture) |
+
+---
+
 ## Screenshots
 
 Demo data; every page also has a light theme and works on phones. Try all of it in the **[live demo](https://christianhandy.github.io/FleetPilot/)** (or the lighter [static tour](https://christianhandy.github.io/FleetPilot/tour/)).

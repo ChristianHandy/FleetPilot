@@ -10,11 +10,14 @@ on:
       - "requirements-lock.txt"
   workflow_dispatch:
 
-permissions: read-all
+permissions: {}
 
 jobs:
   pr-fuzzing:
+    name: pr-fuzzing
     runs-on: ubuntu-latest
+    permissions:
+      contents: read          # check out the code to build the fuzzers
     concurrency:
       group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
       cancel-in-progress: true

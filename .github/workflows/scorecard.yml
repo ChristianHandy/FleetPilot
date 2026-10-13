@@ -1,21 +1,26 @@
-# OpenSSF Scorecard: supply-chain security checks, published to the
-# GitHub Security tab and to https://scorecard.dev
 name: Scorecard
 
+# OpenSSF Scorecard supply-chain checks; results go to code scanning and the badge.
 on:
   branch_protection_rule:
   schedule:
-    - cron: '27 3 * * 1'
+    - cron: "27 3 * * 1"
   push:
     branches: [main]
 
-permissions: read-all
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   analysis:
     name: Scorecard analysis
     runs-on: ubuntu-latest
     permissions:
+      contents: read           # check out the code
+      actions: read            # read the workflows (Token-Permissions, Dangerous-Workflow)
       security-events: write   # upload results to code scanning
       id-token: write          # publish results and enable the badge
     steps:
@@ -27,6 +32,9 @@ jobs:
           results_file: results.sarif
           results_format: sarif
           publish_results: true
+          # An optional read-only fine-grained token lets Scorecard read the branch rules
+          # (the workflow token cannot); without the secret the default token is used.
+          repo_token: ${{ secrets.SCORECARD_TOKEN || github.token }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: scorecard-results
