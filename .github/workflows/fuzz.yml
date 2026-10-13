@@ -2,8 +2,8 @@ name: Fuzz
 
 # Fuzzes the parsers that read router, disk and SOAP output (fuzz/). A crash or
 # an input that takes longer than one second fails the run and is uploaded.
+# Pull requests are fuzzed by ClusterFuzzLite (cflite_pr.yml).
 on:
-  pull_request:
   push:
     branches: [main]
   schedule:
