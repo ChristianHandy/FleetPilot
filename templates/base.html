@@ -188,6 +188,7 @@
         {{ nav('/scanner', 'Network Scanner', 'search', path == '/scanner') }}
         {{ nav('/routers', 'Routers', 'network', path.startswith('/routers')) }}
         {{ nav('/dashboard', 'Update Dashboard', 'refresh', path.startswith('/dashboard')) }}
+        {{ nav('/vulnerabilities', 'Vulnerabilities', 'alert', path.startswith('/vulnerabilities')) }}
         {% if admin %}{{ nav('/server_update', 'Server update', 'arrow-up', path.startswith('/server_update')) }}{% endif %}
       </div>
 

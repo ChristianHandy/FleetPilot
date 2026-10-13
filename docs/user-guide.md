@@ -125,6 +125,24 @@ Updates for all managed hosts in one place: Debian/Ubuntu (`apt`), Fedora/RHEL (
 - **Update History** lists every run with its result and duration.
 - **Automatic Updates** runs updates on a schedule (see [Update Settings](#update-settings)).
 
+### Vulnerabilities
+
+Known security vulnerabilities (CVEs) in the software on your machines, sorted by severity, with the version that fixes each one.
+
+- **What is checked:**
+  - **Linux servers:** FleetPilot reads the installed packages over SSH (`dpkg`, `apk` or `rpm`) and looks them up in the distribution's security data on [OSV.dev](https://osv.dev). This covers Debian, Ubuntu, Raspberry Pi OS, Proxmox VE and Backup Server, TrueNAS SCALE, Alpine, Rocky Linux and AlmaLinux.
+  - **Docker containers** on those servers: FleetPilot scans their images with [Trivy](https://trivy.dev), if Trivy is installed on the server.
+  - **pfSense and OPNsense:** their own `pkg audit`.
+  - **FleetPilot itself:** its Python packages and the machine it runs on.
+  - **Not covered:** Windows, FRITZ!OS and OpenWrt publish no package-level data. They are listed as "Not covered", with what to do instead.
+- **Reading the results:**
+  - **Scan now** (operators and admins) scans everything in the background; **Rescan** scans one target.
+  - The list shows high and critical findings that have a fix by default. Change the filters to see everything, including vulnerabilities the distribution has not fixed yet.
+  - Most findings go away after an update. Run it from Hosts or [Update Dashboard](#update-dashboard), then rescan.
+- **Daily scans and alerts:** admins can turn on a daily scan. When a scan finds new high or critical vulnerabilities that have a fix, FleetPilot notifies every channel subscribed to "New vulnerabilities" ([Notifications](#notifications)). The first scan of a target is the baseline and sends no alert.
+- **Privacy:** only package names and versions are sent to OSV.dev, never addresses, host names or other data. In offline mode (`FLEETPILOT_OFFLINE=true`) nothing is sent. `FLEETPILOT_OSV_URL` points FleetPilot at your own mirror of the OSV API instead.
+- **Elsewhere:** results are also available as `GET /api/vulnerabilities` and as `fleetpilot_vulnerabilities*` metrics on `/metrics`, and the [Security center](#security-center) flags critical vulnerabilities that have a fix waiting.
+
 ### Server update
 
 (Admins) Updates the operating system packages of the machine FleetPilot runs on. **Check for Updates Only** lists pending packages; **Start Update** installs them with live output; **Reboot Server** restarts the machine.

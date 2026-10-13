@@ -36,7 +36,7 @@ def call(method, path, form=None, accept="text/html"):
 
 pages = {}
 for path in ["/index", "/hosts", "/routers", "/routers/1", "/smart", "/vm/1", "/storage/1", "/backup/1", "/fans/1",
-             "/hw", "/hw_overview", "/scanner", "/monitor", "/system/proxy", "/system/security"]:
+             "/hw", "/hw_overview", "/scanner", "/monitor", "/system/proxy", "/system/security", "/vulnerabilities"]:
     status, _, text, plain = call("GET", path)
     pages[path] = [status, plain]
 out["status"] = {p: v[0] for p, v in pages.items()}
@@ -57,6 +57,8 @@ boot.tick()
 out["outbox"] = [m["subject"] for m in net.lab.outbox]
 call("POST", "/fans/1/set_fan", {"channel": "pwm1", "mode": "fixed", "speed": "20"}, "application/json")
 out["pwm"] = net.lab.find("pve-01").pwm["pwm1"]
+import vuln_scanner
+out["vuln_targets"] = {t["name"]: t["status"] for t in vuln_scanner.get_targets()}
 print("RESULT " + json.dumps(out))
 '''
 
@@ -78,3 +80,6 @@ def test_demo_lab_runs_fleetpilot_against_emulated_devices():
     assert out["vm_start"] is True
     assert any("nas:sda" in subject for subject in out["outbox"]), out["outbox"]
     assert out["pwm"] == 51
+    targets = out["vuln_targets"]
+    assert targets["docker-01"] == "ok" and targets["reverse-proxy on docker-01"] == "ok"
+    assert targets["win-desk"] == "unsupported" and targets["OPNsense"] == "ok"

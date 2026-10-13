@@ -5,6 +5,7 @@
 Writes the demo page (demo/live/*), FleetPilot's source and the lab as one zip, and
 the pure-Python dependencies as wheels, downloaded with the hashes pinned in
 requirements-lock.txt. Compiled packages (cryptography, bcrypt, ...) come from Pyodide.
+The lab's vulnerability data is a fresh snapshot of OSV.dev for its package versions.
 """
 import hashlib
 import io
@@ -84,6 +85,14 @@ def main():
     shutil.copy(os.path.join(REPO, "static", "fleetpilot-logo.svg"), assets)
     shutil.copy(os.path.join(REPO, "docs", "screenshots", "home.png"), os.path.join(assets, "social-preview.png"))
 
+    snapshot = os.path.join(LIVE, "lab", "osv-snapshot.json")
+    try:                         # real OSV.dev records for the lab's package versions (see lab/osv.py)
+        sys.path.insert(0, LIVE)
+        from lab import osv
+        print("OSV snapshot: %d package versions with vulnerabilities, %d records" % osv.build_snapshot(snapshot))
+    except Exception as exc:
+        print(f"OSV snapshot not refreshed ({exc}); the demo's vulnerability scan "
+              + ("uses the existing one." if os.path.exists(snapshot) else "finds nothing."))
     data = app_zip()
     zip_name = f"fleetpilot-{hashlib.sha256(data).hexdigest()[:12]}.zip"
     with open(os.path.join(OUT, "lab", zip_name), "wb") as fh:

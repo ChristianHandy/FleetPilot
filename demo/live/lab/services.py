@@ -542,6 +542,14 @@ class OpnSense(Device):
                              "upgrade_packages": [{"name": n, "current_version": o, "new_version": v}
                                                   for n, o, v in self.pending]})
             return _raw({"status": "none", "status_msg": "There are no updates available on the selected mirror."})
+        if path == "/api/core/firmware/audit" and method == "POST":
+            return _raw({"status": "ok", "msg_uuid": secrets.token_hex(8)})
+        if path == "/api/core/firmware/upgradestatus":
+            return _raw({"status": "done", "log": "***GOT REQUEST TO AUDIT SECURITY***\n"
+                                                  "Currently running OPNsense " + self.version + "\n"
+                                                  "vulnxml file up-to-date\n"
+                                                  "0 problem(s) in 0 installed package(s) found.\n"
+                                                  "***DONE***\n"})
         if path == "/api/core/backup/download/this":
             return 200, "application/xml", (f'<?xml version="1.0"?>\n<opnsense><version>{self.version}</version>'
                                             f"<system><hostname>{self.name}</hostname></system></opnsense>\n")

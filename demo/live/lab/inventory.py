@@ -3,11 +3,11 @@ from .machines import Device, Disk, Machine
 from .net import lab
 from .services import BackupServer, Fritz, Guest, OpenWrt, OpnSense, ProxmoxCluster, ProxmoxNode, TrueNas
 
-DEBIAN_UPDATES = [("openssl", "3.5.1-1", "3.5.4-1"), ("curl", "8.14.1-2", "8.14.1-2+deb13u1"),
+DEBIAN_UPDATES = [("openssl", "3.5.1-1", "3.5.4-1~deb13u2"), ("curl", "8.14.1-2", "8.14.1-2+deb13u2"),
                   ("docker-ce", "5:28.4.0-1~debian.13~trixie", "5:28.5.1-1~debian.13~trixie"),
                   ("containerd.io", "1.7.27-1", "1.7.28-1"), ("tzdata", "2025b-4", "2025c-1")]
-UBUNTU_UPDATES = [("nginx", "1.24.0-2ubuntu7.4", "1.24.0-2ubuntu7.5"),
-                  ("libssl3t64", "3.0.13-0ubuntu3.5", "3.0.13-0ubuntu3.6"),
+UBUNTU_UPDATES = [("nginx", "1.24.0-2ubuntu7.1", "1.24.0-2ubuntu7.5"),
+                  ("openssl", "3.0.13-0ubuntu3.4", "3.0.13-0ubuntu3.6"),
                   ("linux-image-6.8.0-85-generic", "6.8.0-85.85", "6.8.0-87.88")]
 WINGET_UPDATES = [("Mozilla Firefox", "143.0.4", "144.0"), ("7-Zip", "24.09", "25.01"),
                   ("Microsoft PowerToys", "0.94.2", "0.95.0")]
@@ -55,9 +55,11 @@ def build():
                            Disk("sdd", "TOSHIBA MG08ACA16TE", "Z1F0A004", 16000, temp=35, poh=14287),
                            Disk("nvme0n1", "KINGSTON SNV2S250G", "50026B7686A1", 250, temp=39, poh=14300,
                                 nvme=True)]))
-    lab.add(Machine("docker-01", "192.0.2.30", "bc:24:11:30:00:30", os="debian", cores=4, ram_mb=8192,
-                    base_load=18, virt="kvm", board=("QEMU", "Standard PC (Q35 + ICH9, 2009)"),
-                    disks=[], updates=DEBIAN_UPDATES, label="docker-01"))
+    docker = lab.add(Machine("docker-01", "192.0.2.30", "bc:24:11:30:00:30", os="debian", cores=4, ram_mb=8192,
+                             base_load=18, virt="kvm", board=("QEMU", "Standard PC (Q35 + ICH9, 2009)"),
+                             disks=[], updates=DEBIAN_UPDATES, label="docker-01"))
+    docker.containers = [("reverse-proxy", "nginx:1.27.0"), ("nextcloud", "nextcloud:29.0.4-apache")]
+    docker.trivy = True
     lab.add(Machine("web-01", "192.0.2.31", "52:54:00:31:00:31", os="ubuntu", cores=2, ram_mb=4096, base_load=8,
                     virt="kvm", kernel="6.8.0-85-generic", board=("Hetzner", "vServer"), fans=0,
                     updates=UBUNTU_UPDATES))
@@ -65,8 +67,8 @@ def build():
                     cpu="Cortex-A76", kernel="6.12.34+rpt-rpi-2712", board=("Raspberry Pi", "Pi 5 Model B Rev 1.0"),
                     fans=1, disks=[Disk("nvme0n1", "Samsung SSD 990 EVO 1TB", "S7GCNU0X50053", 1000, temp=42,
                                         poh=3021, nvme=True)],
-                    updates=[("pihole-ftl", "6.2.3", "6.3"), ("raspi-firmware", "1:1.20250430-4",
-                                                              "1:1.20250915-1")], ports=(22, 80, 53)))
+                    updates=[("pihole-ftl", "6.2.3", "6.3"), ("openssh", "1:9.2p1-2+deb12u3",
+                                                              "1:9.2p1-2+deb12u7")], ports=(22, 80, 53)))
     lab.add(BackupServer("backup", "192.0.2.40", "a8:a1:59:40:00:40", cores=4, ram_mb=16384, base_load=5,
                          cpu="Intel(R) Xeon(R) E-2224 CPU @ 3.40GHz",
                          clients=[("vm", "100"), ("vm", "101"), ("ct", "102"), ("ct", "105"), ("ct", "106"),

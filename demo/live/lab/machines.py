@@ -201,6 +201,40 @@ OS_RELEASE = {
 }
 
 
+# Installed source packages (what `dpkg-query -W -f='${source:Package} ${source:Version}'` lists), already
+# patched. Machines with pending updates run the older versions in their update list until they are updated.
+PACKAGES = {
+    "debian": {"openssl": "3.5.4-1~deb13u2", "curl": "8.14.1-2+deb13u2", "openssh": "1:10.0p1-7+deb13u1",
+               "glibc": "2.41-12+deb13u1", "systemd": "257.9-1~deb13u1", "sudo": "1.9.16p2-3+deb13u1",
+               "bash": "5.2.37-2", "tzdata": "2025c-0+deb13u1", "python3.13": "3.13.5-2+deb13u1",
+               "sqlite3": "3.46.1-7", "zlib": "1:1.3.dfsg+really1.3.1-1", "git": "1:2.47.3-0+deb13u1",
+               "coreutils": "9.7-3", "gnupg2": "2.4.7-21"},
+    "raspbian": {"openssl": "3.0.17-1~deb12u2", "curl": "7.88.1-10+deb12u14", "openssh": "1:9.2p1-2+deb12u7",
+                 "glibc": "2.36-9+deb12u13", "systemd": "252.39-1~deb12u1", "sudo": "1.9.13p3-1+deb12u2",
+                 "bash": "5.2.15-2", "tzdata": "2025b-0+deb12u1", "python3.11": "3.11.2-6+deb12u6",
+                 "sqlite3": "3.40.1-2+deb12u2", "zlib": "1:1.2.13.dfsg-1", "git": "1:2.39.5-0+deb12u2"},
+    "ubuntu": {"openssl": "3.0.13-0ubuntu3.6", "curl": "8.5.0-2ubuntu10.6", "openssh": "1:9.6p1-3ubuntu13.14",
+               "glibc": "2.39-0ubuntu8.6", "systemd": "255.4-1ubuntu8.11", "sudo": "1.9.15p5-3ubuntu5.24.04.1",
+               "bash": "5.2.21-2ubuntu4", "tzdata": "2025b-0ubuntu0.24.04.1", "python3.12": "3.12.3-1ubuntu0.8",
+               "sqlite3": "3.45.1-1ubuntu2.5", "nginx": "1.24.0-2ubuntu7.5", "zlib": "1:1.3.dfsg-3.1ubuntu2.1",
+               "git": "1:2.43.0-1ubuntu7.3"},
+}
+# Older, vulnerable versions used by "Release updates" in the lab panel.
+OLDER = {
+    "debian": {"openssl": "3.5.1-1", "curl": "8.14.1-2", "openssh": "1:10.0p1-7", "glibc": "2.41-12",
+               "sudo": "1.9.16p2-3", "python3.13": "3.13.5-2"},
+    "raspbian": {"openssl": "3.0.15-1~deb12u1", "openssh": "1:9.2p1-2+deb12u3", "glibc": "2.36-9+deb12u7"},
+    "ubuntu": {"openssl": "3.0.13-0ubuntu3.4", "nginx": "1.24.0-2ubuntu7.1", "openssh": "1:9.6p1-3ubuntu13.5"},
+}
+# Container images (Debian 12 based) and the packages inside them, for the emulated `trivy image`.
+IMAGES = {
+    "nginx:1.27.0": {"openssl": "3.0.11-1~deb12u2", "curl": "7.88.1-10+deb12u5", "glibc": "2.36-9+deb12u4",
+                     "zlib": "1:1.2.13.dfsg-1", "nginx": "1.27.0-1~bookworm"},
+    "nextcloud:29.0.4-apache": {"openssl": "3.0.13-1~deb12u1", "curl": "7.88.1-10+deb12u6",
+                                "glibc": "2.36-9+deb12u7", "apache2": "2.4.61-1~deb12u1", "libxml2": "2.9.14+dfsg-1.3~deb12u1"},
+}
+
+
 class Machine(Device):
     """A Linux server (or, with os='windows', a Windows PC reached through OpenSSH)."""
     kind = "server"
@@ -222,6 +256,25 @@ class Machine(Device):
         self.installed_packages = 1400 + self.rand.randint(0, 300)
         self.ram_base = 0.25 + self.rand.random() * 0.35
         self.authorized_keys = []
+        self.packages = dict(PACKAGES.get(os, {}))
+        self._use_latest()
+        for pkg, installed, _ in self.updates:
+            if pkg in self.packages:
+                self.packages[pkg] = installed
+        self.containers = []          # (name, image); the images' packages are in IMAGES
+        self.trivy = False
+
+    def _use_latest(self):
+        """Up-to-date packages run the newest fixed version known to the demo's OSV snapshot."""
+        from . import osv
+        eco = osv.ECOSYSTEMS.get(self.os)
+        if not eco:
+            return
+        for pkg, version in list(self.packages.items()):
+            newest = osv.latest(eco, pkg)
+            if newest and osv.compare_versions(newest, version) > 0:
+                self.packages[pkg] = newest
+        self.updates = [(p, old, self.packages.get(p, new)) for p, old, new in self.updates]
 
     # ── Live values ──
     def _wave(self, period, phase=0.0):
@@ -295,14 +348,16 @@ class Machine(Device):
         return True
 
     def release_updates(self):
-        pool = [("openssl", "3.5.1-1", "3.5.4-1"), ("linux-image-amd64", "6.12.48-1", "6.12.57-1"),
-                ("curl", "8.14.1-2", "8.14.1-2+deb13u1"), ("systemd", "257.8-1", "257.9-1"),
-                ("tzdata", "2025b-4", "2025c-1"), ("openssh-server", "1:10.0p1-7", "1:10.0p1-7+deb13u1"),
-                ("libc6", "2.41-12", "2.41-12+deb13u1"), ("python3.13", "3.13.5-2", "3.13.5-2+deb13u1")]
+        """New package versions with security fixes appear for this machine."""
+        older = OLDER.get(self.os, {})
         have = {u[0] for u in self.updates}
-        new = [u for u in pool if u[0] not in have][: self.rand.randint(2, 4)]
+        candidates = [p for p in older if p not in have and p in self.packages]
+        self.rand.shuffle(candidates)
+        new = [(p, older[p], self.packages[p]) for p in candidates[:self.rand.randint(2, 3)]]
+        for pkg, installed, _ in new:
+            self.packages[pkg] = installed
         self.updates += new
-        self._log("lab", f"{self.label}: {len(new)} new package updates published")
+        self._log("lab", f"{self.label}: {len(new)} security updates published ({', '.join(p for p, _, _ in new)})")
 
     # ── Shell ──
     def shell(self, command, stdin="", user="root"):
@@ -324,6 +379,11 @@ class Machine(Device):
             return 0, "windows\n" if windows else "", ""
         if windows:
             return self._windows(cmd)
+        if "@@fp:pkg" in cmd and "dpkg-query" in cmd:
+            return 0, self._inventory(), ""
+        m = re.match(r"trivy image .*?'?([\w./:-]+)'? 2>/dev/null$", cmd)
+        if m and self.trivy:
+            return 0, json.dumps(self._trivy(m.group(1))), ""
         if cmd.startswith("python3 -c") and "cpu_pct()" in cmd:
             up = int(self.uptime())
             h, m = up // 3600, (up % 3600) // 60
@@ -420,6 +480,36 @@ class Machine(Device):
             "whoami": "root\n", "id -u": "0\n", "nproc": f"{self.cores}\n",
         }
         return table.get(cmd)
+
+    def _inventory(self):
+        out = self._os_release() + "@@fp:pkg\n"
+        if self.packages:
+            out += "dpkg\n" + "".join(f"{p}\t{v}\n" for p, v in sorted(self.packages.items()))
+        out += "@@fp:docker\n" + "".join(f"{n}\t{i}\n" for n, i in self.containers)
+        return out + "@@fp:trivy\n" + ("/usr/bin/trivy\n" if self.trivy else "")
+
+    def _trivy(self, image):
+        """A Trivy report built from the OSV records the lab knows for the image's packages."""
+        from . import osv
+        vulns = []
+        for pkg, version in sorted(IMAGES.get(image, {}).items()):
+            for record in osv.lookup("Debian:12", pkg, version):
+                fixed = ""
+                for affected in record.get("affected") or []:
+                    if (affected.get("package") or {}).get("ecosystem") == "Debian:12":
+                        for rng in affected.get("ranges") or []:
+                            fixed = next((e["fixed"] for e in rng.get("events", []) if e.get("fixed")), fixed)
+                score, level = osv.score_and_level(record, pkg)
+                cve = next((a for a in [record["id"]] + record.get("aliases", []) + record.get("upstream", [])
+                            if a.startswith("CVE-")), record["id"])
+                vulns.append({"VulnerabilityID": cve, "PkgName": pkg, "InstalledVersion": version,
+                              "FixedVersion": fixed, "Severity": level.upper(),
+                              "Title": (record.get("summary") or record.get("details") or "")[:200],
+                              "CVSS": {"nvd": {"V3Score": score}} if score else {},
+                              "PublishedDate": record.get("published", "")})
+        return {"SchemaVersion": 2, "ArtifactName": image,
+                "Results": [{"Target": f"{image} (debian 12)", "Class": "os-pkgs", "Type": "debian",
+                             "Vulnerabilities": vulns}]}
 
     def _helper(self, name, args):
         if name == "proxy-apply" and args[:1] == ["status"]:
@@ -527,6 +617,9 @@ class Machine(Device):
                       ":: Starting full system upgrade..."]
             lines += [f"upgrading {p}..." for p, _, _ in self.updates] or [" there is nothing to do"]
         count = len(self.updates)
+        for pkg, _, candidate in self.updates:
+            if pkg in self.packages:
+                self.packages[pkg] = candidate
         self.updates = []
         self._log("update", f"{self.label}: {count} packages upgraded")
         return 0, "\n".join(lines) + "\n", ""

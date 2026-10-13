@@ -77,7 +77,7 @@ class Lab:
     def http(self, method, url, headers, body):
         parts = urllib.parse.urlsplit(url)
         port = parts.port or (443 if parts.scheme == "https" else 80)
-        if parts.hostname in ("api.github.com", "github.com", "raw.githubusercontent.com", "ntfy.sh",
+        if parts.hostname in ("api.github.com", "github.com", "raw.githubusercontent.com", "ntfy.sh", "api.osv.dev",
                               "discord.com", "hooks.slack.com", "api.pushover.net"):
             return self._internet(method, parts, headers, body)
         device = self.find(parts.hostname)
@@ -96,6 +96,11 @@ class Lab:
     def _internet(self, method, parts, headers, body):
         """Notification services and GitHub: messages land in the lab's outbox."""
         host = parts.hostname
+        if host == "api.osv.dev":
+            from . import osv
+            status, ctype, payload = osv.answer(method, parts.path, body)
+            self.log("OSV.dev", "http", f"{method} {parts.path} → {status}", quiet=parts.path.startswith("/v1/vulns/"))
+            return (status, {"Content-Type": ctype}, payload.encode())
         if method == "POST":
             text = (body or b"").decode(errors="replace")
             title = headers.get("Title") or headers.get("X-Title") or host

@@ -37,7 +37,7 @@ def start(origin="https://demo.local", prefix="", data_dir=None):
     os.makedirs(os.path.join(home, ".ssh"), exist_ok=True)
     os.environ.update(
         HOME=home, FLEETPILOT_DATA_DIR=data_dir, DASHBOARD_USERNAME=USERNAME, DASHBOARD_PASSWORD=PASSWORD,
-        SECRET_KEY=secrets.token_hex(32), FLEETPILOT_OFFLINE="true", FLEETPILOT_ROUTER_POLL_MINUTES="0",
+        SECRET_KEY=secrets.token_hex(32), FLEETPILOT_OFFLINE="false", FLEETPILOT_ROUTER_POLL_MINUTES="0",
         FLEETPILOT_AUTO_BACKUP="false", FLEETPILOT_DEMO="true")
     runtime.install()
     inventory.build()
