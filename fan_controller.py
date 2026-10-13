@@ -496,9 +496,10 @@ def _fetch_lm_sensors(dev: Dict) -> Dict:
                     if not isinstance(feature_data, dict):
                         continue
                     for key, val in feature_data.items():
-                        if not isinstance(val, (int, float)):
+                        # Only *_input values are readings; *_max, *_crit, *_min are limits.
+                        if not isinstance(val, (int, float)) or not key.lower().endswith("_input"):
                             continue
-                        if "temp" in key.lower() or "input" in key.lower() and "temp" in feature_name.lower():
+                        if key.lower().startswith("temp"):
                             result["temperatures"].append({
                                 "label": f"{chip_name} / {feature_name}",
                                 "value": round(float(val), 1),

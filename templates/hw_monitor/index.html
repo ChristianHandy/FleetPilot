@@ -235,11 +235,11 @@ function renderCard(s) {
     <div class="card-head"><div class="card-head-left"><h2>${s.name}</h2><div class="ip-row"><span class="ip">${s.ip}</span>${s.uptime_s?`<span class="uptime">&#x2191; ${fmtUp(s.uptime_s)}</span>`:''}</div></div>${statusBadge(s)}</div>
     <div class="card-body">${s.reachable?`<div class="metrics-grid">
       <div class="metric"><span class="m-label">CPU Temp</span><span class="m-val ${tc(s.cpu_temp)}">${fmt(s.cpu_temp,'°C')}</span><div class="m-bar"><div class="m-fill" style="width:${s.cpu_temp?Math.min(100,s.cpu_temp):0}%;background:${s.cpu_temp>=90?'#e46a63':s.cpu_temp>=80?'#d8a645':'#4fb383'}"></div></div></div>
-      <div class="metric"><span class="m-label">CPU Last</span><span class="m-val m-blue">${fmt(s.cpu_pct,'%')}</span><div class="m-bar"><div class="m-fill" style="width:${cpuPct}%;background:${barColor(cpuPct)}"></div></div></div>
+      <div class="metric"><span class="m-label">CPU load</span><span class="m-val m-blue">${fmt(s.cpu_pct,'%')}</span><div class="m-bar"><div class="m-fill" style="width:${cpuPct}%;background:${barColor(cpuPct)}"></div></div></div>
       <div class="metric"><span class="m-label">RAM</span><span class="m-val m-muted">${s.ram_used_mb?`${(s.ram_used_mb/1024).toFixed(1)}/${(s.ram_total_mb/1024).toFixed(1)} GB`:'—'}</span><div class="m-bar"><div class="m-fill" style="width:${ramPct}%;background:${barColor(ramPct)}"></div></div></div>
       <div class="metric"><span class="m-label">GPU Temp</span><span class="m-val ${tc(s.gpu_temp)}">${fmt(s.gpu_temp,'°C')}${s.gpu_on_bus===0?' <span style="color:#e46a63"></span>':''}</span></div>
-      <div class="metric"><span class="m-label">Netz &#x2193;</span><span class="m-val m-cyan">${fmtKB(s.net_rx_kbps)}</span></div>
-      <div class="metric"><span class="m-label">Netz &#x2191;</span><span class="m-val m-purple">${fmtKB(s.net_tx_kbps)}</span></div>
+      <div class="metric"><span class="m-label">Net &#x2193;</span><span class="m-val m-cyan">${fmtKB(s.net_rx_kbps)}</span></div>
+      <div class="metric"><span class="m-label">Net &#x2191;</span><span class="m-val m-purple">${fmtKB(s.net_tx_kbps)}</span></div>
       <div class="metric"><span class="m-label">Disk R</span><span class="m-val m-orange">${fmtKB(s.disk_read_kbps)}</span></div>
       <div class="metric"><span class="m-label">Disk W</span><span class="m-val m-yellow">${fmtKB(s.disk_write_kbps)}</span></div>
     </div>${fansHtml?`<div class="card-divider"></div><div class="fans-row">${fansHtml}</div>`:''}${stressHtml}`:offlineHtml}${errorHtml}</div>

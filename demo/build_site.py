@@ -1,6 +1,6 @@
 """Render the static, clickable FleetPilot demo for GitHub Pages.
 
-    python demo/build_site.py            # writes demo/site/
+    python demo/build_site.py [OUT]      # writes OUT (default demo/site/tour/)
 
 Pages are rendered by the real app in demo mode (see seed.py); links between them are
 rewritten to the static files, the few API reads are answered from captured data, and
@@ -18,7 +18,8 @@ from seed import fp, REPO  # noqa: E402  (seeds the example data)
 import account_security  # noqa: E402
 import user_management  # noqa: E402
 
-SITE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "site")
+SITE = (os.path.abspath(sys.argv[1]) if len(sys.argv) > 1
+        else os.path.join(os.path.dirname(os.path.abspath(__file__)), "site", "tour"))
 shutil.rmtree(SITE, ignore_errors=True)
 os.makedirs(SITE)
 
@@ -99,11 +100,11 @@ with open(os.path.join(SITE, "demo.js"), "w") as fh:
   window.fetch = function (url, opts) {
     var method = ((opts && opts.method) || 'GET').toUpperCase();
     var path = String(url).split('?')[0];
-    if (method !== 'GET') { note('Demo: changes are not saved. Install FleetPilot to try this for real.'); }
+    if (method !== 'GET') { note('The static tour cannot do this. The live demo can: open it from the bar above.'); }
     var data = (window.FP_DEMO_API || {})[path];
     return Promise.resolve(new Response(JSON.stringify(data || {ok: true}), {status: 200, headers: {'Content-Type': 'application/json'}}));
   };
-  document.addEventListener('submit', function (e) { e.preventDefault(); note('Demo: changes are not saved. Install FleetPilot to try this for real.'); }, true);
+  document.addEventListener('submit', function (e) { e.preventDefault(); note('The static tour cannot do this. The live demo can: open it from the bar above.'); }, true);
   document.addEventListener('click', function (e) {
     var a = e.target.closest && e.target.closest('a[href="#demo-unavailable"]');
     if (a) { e.preventDefault(); note('This page is not part of the static demo.'); }
@@ -111,9 +112,9 @@ with open(os.path.join(SITE, "demo.js"), "w") as fh:
   document.addEventListener('DOMContentLoaded', function () {
     var bar = document.createElement('div');
     bar.id = 'fp-demo-bar';
-    bar.innerHTML = 'Live demo with example data: nothing here is real and nothing is saved. ' +
-      '<a href="https://github.com/ChristianHandy/FleetPilot#quick-start">Install FleetPilot</a> · ' +
-      '<a href="https://github.com/ChristianHandy/FleetPilot">GitHub</a>';
+    bar.innerHTML = 'Static tour with example data: buttons do nothing here. ' +
+      '<a href="../">Try the live demo</a>, where they work · ' +
+      '<a href="https://github.com/ChristianHandy/FleetPilot#quick-start">Install FleetPilot</a>';
     document.body.insertBefore(bar, document.body.firstChild);
   });
 })();
