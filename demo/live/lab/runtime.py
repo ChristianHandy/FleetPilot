@@ -23,7 +23,7 @@ from . import net
 
 # Endless loops (pollers, schedulers). The lab's tick does their work instead.
 ENDLESS = {"_poll_loop", "_poll_all", "_polling_loop", "_poll_worker", "loop", "_sync_loop",
-           "_scheduler_loop", "auto_mode_worker", "version_check_worker", "_main_loop"}
+           "_scheduler_loop", "auto_mode_worker", "version_check_worker", "_main_loop", "_schedule_loop"}
 _pending = []
 
 

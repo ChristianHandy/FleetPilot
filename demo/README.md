@@ -26,6 +26,7 @@ sw.js (service worker): every request below app/<lab-id>/ goes to the page above
 - **`demo/live/lab/seed.py`** configures FleetPilot the way a user would: hosts, routers, Proxmox, TrueNAS, the backup server, fans, ntfy and e-mail.
   - Everything shown afterwards is read from the emulated devices by FleetPilot's own code.
   - E-mails and ntfy messages land in the lab's **Outbox**, and Wake-on-LAN magic packets wake the machine with that MAC.
+- **`demo/live/lab/osv.py`** handles the vulnerability scan. At build time it asks the real OSV.dev about exactly the package versions in the lab and ships those records, and the lab answers FleetPilot's OSV requests from them. The CVEs shown are therefore real, with no request leaving the browser.
 - **The "Virtual lab" panel** lets visitors switch devices off, let a disk fail, publish updates or put a CPU under load, then watch FleetPilot react.
 - **Dependencies:** pure-Python packages are downloaded with the hashes from `requirements-lock.txt`. Compiled ones (cryptography, bcrypt, ...) come from the Pyodide distribution (jsDelivr, pinned version).
 

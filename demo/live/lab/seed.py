@@ -76,7 +76,7 @@ def configure(fp):
         fan_controller.add_device(name, "lm_sensors", ip)
 
     notify.add_channel("Phone (ntfy)", "ntfy", "https://ntfy.sh/fleetpilot-demo",
-                       ["smart", "security", "backup", "router"], "info")
+                       ["smart", "security", "backup", "router", "vulnerability"], "info")
     email = email_config.load_email_settings()
     email.update(email_enabled=True, smtp_server="mail.lab.example", smtp_port=587, sender_email="fleetpilot@lab.example",
                  recipient_emails=["admin@lab.example"], smtp_username="fleetpilot", smtp_password="demo-password")
@@ -94,6 +94,10 @@ def configure(fp):
 
     smart_round()
     _history()
+
+    import vuln_scanner                        # a first CVE scan, as if the owner had clicked "Scan now"
+    vuln_scanner.set_setting("auto_scan", "1")
+    vuln_scanner.scan_all(fp.load_hosts(), router_manager.list_routers())
 
 
 def smart_round():

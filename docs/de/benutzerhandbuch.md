@@ -127,6 +127,24 @@ Updates für alle verwalteten Hosts an einer Stelle: Debian/Ubuntu (`apt`), Fedo
 - **Update History** listet jeden Lauf mit Ergebnis und Dauer.
 - **Automatic Updates** führt Updates nach Zeitplan aus (siehe [Update-Einstellungen](#update-einstellungen)).
 
+### Schwachstellen
+
+Bekannte Sicherheitslücken (CVEs) in der Software Ihrer Rechner, nach Schwere sortiert, jeweils mit der Version, die sie behebt.
+
+- **Was geprüft wird:**
+  - **Linux-Server:** FleetPilot liest die installierten Pakete per SSH (`dpkg`, `apk` oder `rpm`) und sucht sie in den Sicherheitsdaten der Distribution auf [OSV.dev](https://osv.dev). Das deckt Debian, Ubuntu, Raspberry Pi OS, Proxmox VE und Backup Server, TrueNAS SCALE, Alpine, Rocky Linux und AlmaLinux ab.
+  - **Docker-Container** auf diesen Servern: FleetPilot prüft ihre Images mit [Trivy](https://trivy.dev), wenn Trivy auf dem Server installiert ist.
+  - **pfSense und OPNsense:** über ihr eigenes `pkg audit`.
+  - **FleetPilot selbst:** seine Python-Pakete und der Rechner, auf dem es läuft.
+  - **Nicht abgedeckt:** Windows, FRITZ!OS und OpenWrt veröffentlichen keine Daten je Paket. Sie stehen als „Not covered" in der Liste, mit einem Hinweis, was stattdessen zu tun ist.
+- **Ergebnisse lesen:**
+  - **Scan now** (Operatoren und Administratoren) prüft alles im Hintergrund; **Rescan** prüft ein einzelnes Ziel.
+  - Die Liste zeigt standardmäßig hohe und kritische Funde, für die es eine Korrektur gibt. Mit den Filtern sehen Sie alle, auch Lücken, die die Distribution noch nicht behoben hat.
+  - Die meisten Funde verschwinden nach einem Update. Starten Sie es unter Hosts oder in der [Update-Übersicht](#update-übersicht) und prüfen Sie danach erneut.
+- **Tägliche Prüfung und Meldungen:** Administratoren können eine tägliche Prüfung einschalten. Findet eine Prüfung neue hohe oder kritische Lücken mit Korrektur, benachrichtigt FleetPilot jeden Kanal, der „New vulnerabilities" abonniert hat ([Benachrichtigungen](#benachrichtigungen)). Die erste Prüfung eines Ziels gilt als Ausgangsstand und löst keine Meldung aus.
+- **Datenschutz:** An OSV.dev gehen nur Paketnamen und Versionen, nie Adressen, Hostnamen oder andere Daten. Im Offline-Modus (`FLEETPILOT_OFFLINE=true`) wird nichts gesendet. Mit `FLEETPILOT_OSV_URL` nutzt FleetPilot stattdessen einen eigenen Spiegel der OSV-API.
+- **An anderer Stelle:** Die Ergebnisse gibt es auch als `GET /api/vulnerabilities` und als Metriken `fleetpilot_vulnerabilities*` unter `/metrics`. Das [Sicherheitscenter](#sicherheitscenter) meldet kritische Lücken, deren Korrektur noch nicht installiert ist.
+
 ### Server aktualisieren
 
 (Administratoren) Aktualisiert die Betriebssystempakete des Rechners, auf dem FleetPilot läuft. **Nur nach Updates suchen** listet ausstehende Pakete; **Update starten** installiert sie mit Live-Ausgabe; **Reboot Server** startet den Rechner neu.

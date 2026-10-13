@@ -49,6 +49,7 @@ TRANSLATIONS = {
         'Toggle menu': 'Menü umschalten',
         'Toggle theme': 'Design umschalten',
         'Update Dashboard': 'Update-Übersicht',
+        'Vulnerabilities': 'Schwachstellen',
         'Update Settings': 'Update-Einstellungen',
         'User Management': 'Benutzerverwaltung',
 
@@ -764,6 +765,7 @@ TRANSLATIONS = {
         'Toggle menu': 'Basculer le menu',
         'Toggle theme': 'Basculer le thème',
         'Update Dashboard': 'Mettre à jour le tableau de bord',
+        'Vulnerabilities': 'Vulnérabilités',
         'Update Settings': 'Paramètres de mise à jour',
         'User Management': 'Gestion des utilisateurs',
 
@@ -1434,6 +1436,7 @@ TRANSLATIONS = {
         'Toggle menu': 'Alternar menú',
         'Toggle theme': 'Alternar tema',
         'Update Dashboard': 'Actualizar Panel',
+        'Vulnerabilities': 'Vulnerabilidades',
         'Update Settings': 'Configuración de Actualización',
         'User Management': 'Gestión de Usuarios',
 
@@ -2104,6 +2107,7 @@ TRANSLATIONS = {
         'Toggle menu': 'Menu wisselen',
         'Toggle theme': 'Thema wisselen',
         'Update Dashboard': 'Dashboard bijwerken',
+        'Vulnerabilities': 'Kwetsbaarheden',
         'Update Settings': 'Update-instellingen',
         'User Management': 'Gebruikersbeheer',
 

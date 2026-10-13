@@ -43,7 +43,8 @@ def _age_seconds(timestamp):
         return None
 
 
-def render(release, hosts, smart_manager, system_monitor, disktool_core=None, router_manager=None):
+def render(release, hosts, smart_manager, system_monitor, disktool_core=None, router_manager=None,
+           vuln_scanner=None):
     """Return the metrics page as Prometheus text format."""
     w = _Writer()
     w.metric("fleetpilot_info", "gauge", "FleetPilot build information.", 1,
@@ -115,5 +116,21 @@ def render(release, hosts, smart_manager, system_monitor, disktool_core=None, ro
                              st["updates"].get("count", 0), **labels)
         except Exception:
             w.metric("fleetpilot_scrape_error", "gauge", "A collector failed during this scrape.", 1, collector="routers")
+
+    # Vulnerabilities (results of the last CVE scan; scraping never starts one)
+    if vuln_scanner is not None:
+        try:
+            for t in vuln_scanner.get_targets():
+                for severity in vuln_scanner.SEVERITIES:
+                    w.metric("fleetpilot_vulnerabilities", "gauge", "Known vulnerabilities by target and severity.",
+                             t["counts"].get(severity, 0), target=t["name"], kind=t["kind"], severity=severity)
+                w.metric("fleetpilot_vulnerabilities_fixable", "gauge", "Vulnerabilities with a fixed version.",
+                         t["fixable"], target=t["name"], kind=t["kind"])
+                w.metric("fleetpilot_vulnerability_scan_age_seconds", "gauge", "Seconds since the target was scanned.",
+                         round(time.time() - t["scanned_at"]) if t["scanned_at"] else None,
+                         target=t["name"], kind=t["kind"])
+        except Exception:
+            w.metric("fleetpilot_scrape_error", "gauge", "A collector failed during this scrape.", 1,
+                     collector="vulnerabilities")
 
     return w.text()

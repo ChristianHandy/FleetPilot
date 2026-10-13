@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% from "_macros.html" import stat_tile %}
+{% block title %}Vulnerabilities{% endblock %}
+{% block page_subtitle %}Known security vulnerabilities (CVEs) in the software on your servers, containers, firewalls and FleetPilot itself.{% endblock %}
+{% block page_actions %}
+  {% if can_operate and allowed %}
+  <form method="post" action="{{ url_for('vulnerabilities_scan') }}" class="d-inline-block m-0" id="scan-all">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-primary btn-sm" {% if progress.running %}disabled{% endif %}>{{ icon('search') }} Scan now</button>
+  </form>
+  {% endif %}
+{% endblock %}
+{% block head %}
+<style>
+.sev { text-transform: capitalize; min-width: 4.8rem; display: inline-block; text-align: center; }
+.sev-critical { background: var(--tint-red); color: var(--accent-red); font-weight: 700; }
+.sev-high { background: var(--tint-amber); color: var(--accent-amber); font-weight: 700; }
+.sev-medium { background: var(--tint-blue); color: var(--accent-blue); }
+.sev-low, .sev-unknown { background: var(--tint-gray); color: var(--text-secondary); }
+.vuln-filters { display: flex; flex-wrap: wrap; gap: .75rem; align-items: end; }
+.vuln-filters .form-control, .vuln-filters .form-select { min-width: 10rem; }
+.vuln-summary { max-width: 34rem; }
+.vuln-summary span { display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.vuln-id { white-space: nowrap; }
+.fix-arrow { white-space: nowrap; }
+.scan-progress { display: flex; align-items: center; gap: .75rem; }
+.check-row { display: flex; align-items: center; gap: .5rem; min-height: 28px; margin: 0; }
+.check-row input { width: 18px; height: 18px; }
+</style>
+{% endblock %}
+{% block content %}
+
+{% if not allowed %}
+<div class="alert alert-warning" role="alert">{{ why }} Set <code>FLEETPILOT_OSV_URL</code> to use a local mirror of the OSV API.</div>
+{% endif %}
+
+<div class="card-v4 mb-3" id="scan-progress" role="status" aria-live="polite" {% if not progress.running %}hidden{% endif %}>
+  <div class="card-v4-body scan-progress">
+    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+    <span>Scanning <strong id="scan-current">{{ progress.current or '…' }}</strong>
+      (<span id="scan-done">{{ progress.done or 0 }}</span> of <span id="scan-total">{{ progress.total or 0 }}</span>). The page reloads when the scan is done.</span>
+  </div>
+</div>
+
+<div class="stat-grid-v4 mb-3">
+  {{ stat_tile(summary.critical_fixable, 'Critical, fix available', 'alert', 'red' if summary.critical_fixable else '') }}
+  {{ stat_tile(summary.fixable, 'With a fix available', 'download', 'amber' if summary.fixable else 'green') }}
+  {{ stat_tile(summary.high, 'High severity', 'shield', 'amber' if summary.high else '') }}
+  {{ stat_tile(summary.total, 'Known vulnerabilities', 'file-text') }}
+  {{ stat_tile(summary.scanned, 'Targets scanned', 'server', 'blue', note=('Last scan ' ~ (summary.last_scan|fp_ts)) if summary.last_scan else 'Not scanned yet') }}
+</div>
+
+<section class="card-v4 mb-3" aria-labelledby="findings-title">
+  <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="findings-title">Vulnerabilities</h2>
+    <span class="text-muted small"><span id="vuln-shown">{{ findings|length }}</span> shown</span></div>
+  {% if findings %}
+  <div class="card-v4-body">
+    <div class="vuln-filters" role="search" aria-label="Filter vulnerabilities">
+      <div><label class="form-label small" for="f-sev">Severity</label>
+        <select class="form-select form-select-sm" id="f-sev">
+          <option value="all">All</option>
+          <option value="critical">Critical</option>
+          <option value="high" selected>High and above</option>
+          <option value="medium">Medium and above</option>
+        </select></div>
+      <div><label class="form-label small" for="f-target">Where</label>
+        <select class="form-select form-select-sm" id="f-target">
+          <option value="">Everywhere</option>
+          {% for t in targets if t.total %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+        </select></div>
+      <div><label class="form-label small" for="f-q">Search</label>
+        <input class="form-control form-control-sm" id="f-q" type="search" placeholder="CVE, package, text" spellcheck="false"></div>
+      <label class="check-row small"><input type="checkbox" id="f-fix" checked> Only with a fix available</label>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table" id="vuln-table">
+      <thead><tr><th>Severity</th><th>Vulnerability</th><th>Package</th><th>Affected</th><th>Description</th></tr></thead>
+      <tbody>
+      {% for f in findings[:3000] %}
+        <tr data-sev="{{ f.severity }}" data-fixed="{{ 1 if f.fixed else 0 }}"
+            data-targets="{{ f.targets|map(attribute='id')|join(' ') }}"
+            data-text="{{ (f.vuln_id ~ ' ' ~ f.aliases|join(' ') ~ ' ' ~ f.package ~ ' ' ~ f.summary)|lower }}">
+          <td><span class="badge sev sev-{{ f.severity }}">{{ f.severity }}</span>
+            {% if f.score %}<div class="text-muted small num">CVSS {{ '%.1f'|format(f.score) }}</div>{% endif %}</td>
+          <td class="vuln-id"><a href="https://osv.dev/vulnerability/{{ f.vuln_id|urlencode }}" rel="noopener noreferrer" target="_blank">{{ f.aliases[0] if f.aliases else f.vuln_id }}</a>
+            {% if f.aliases and f.aliases[0] != f.vuln_id %}<div class="text-muted small">{{ f.vuln_id }}</div>{% endif %}</td>
+          <td><code>{{ f.package }}</code>
+            <div class="small fix-arrow">{{ f.installed }}
+              {% if f.fixed %} → <span class="text-success">{{ f.fixed }}</span>{% else %}<span class="text-muted"> · no fix yet</span>{% endif %}</div></td>
+          <td>{% for t in f.targets %}<div class="small">{{ t.name }}</div>{% endfor %}</td>
+          <td class="vuln-summary small"><span title="{{ f.summary }}">{{ f.summary or '—' }}</span></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="empty-state" id="vuln-none" hidden>No vulnerabilities match these filters.</div>
+  {% if findings|length > 3000 %}<div class="card-v4-body text-muted small">The first 3000 of {{ findings|length }} are listed; the JSON API has all of them.</div>{% endif %}
+  {% elif summary.scanned %}
+  <div class="empty-state">No known vulnerabilities in the scanned software.</div>
+  {% else %}
+  <div class="empty-state">Not scanned yet.{% if can_operate and allowed %} Click <strong>Scan now</strong>.{% endif %}</div>
+  {% endif %}
+</section>
+
+<section class="card-v4 mb-3" aria-labelledby="targets-title">
+  <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="targets-title">What was scanned</h2></div>
+  {% if targets %}
+  <div class="table-responsive">
+    <table class="table">
+      <thead><tr><th>Target</th><th>System</th><th class="text-end">Packages</th><th>Findings</th><th>Last scan</th><th><span class="visually-hidden">Actions</span></th></tr></thead>
+      <tbody>
+      {% for t in targets %}
+        <tr>
+          <td><strong>{{ t.name }}</strong>
+            <div class="text-muted small">{{ {'fleetpilot': 'FleetPilot', 'server': 'Server', 'container': 'Container', 'router': 'Firewall / router'}.get(t.kind, t.kind) }}{% if t.address %} · <code>{{ t.address }}</code>{% endif %}</div></td>
+          <td>{{ t.system or '—' }}{% if t.ecosystem %}<div class="text-muted small">{{ t.ecosystem }}</div>{% endif %}</td>
+          <td class="text-end num">{{ t.packages or '—' }}</td>
+          <td>
+            {% if t.status == 'ok' %}
+              {% if t.total %}
+                {% for sev in ['critical', 'high', 'medium', 'low', 'unknown'] if t.counts.get(sev) %}<span class="badge sev sev-{{ sev }} me-1">{{ t.counts[sev] }} {{ sev }}</span>{% endfor %}
+                <div class="text-muted small">{{ t.fixable }} with a fix</div>
+              {% else %}<span class="badge badge-green">None known</span>{% endif %}
+            {% elif t.status == 'unsupported' %}<span class="badge badge-gray">Not covered</span><div class="text-muted small">{{ t.message }}</div>
+            {% else %}<span class="badge badge-red">Scan failed</span><div class="text-muted small">{{ t.message }}</div>{% endif %}
+          </td>
+          <td class="small">{{ t.scanned_at|fp_ts }}{% if t.duration %}<div class="text-muted">{{ t.duration }} s</div>{% endif %}</td>
+          <td class="text-end text-nowrap">
+            {% if can_operate and allowed and t.kind != 'container' %}
+            <form method="post" action="{{ url_for('vulnerabilities_scan') }}" class="d-inline-block m-0">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="target" value="{{ t.id }}">
+              <button type="submit" class="btn btn-sm" {% if progress.running %}disabled{% endif %} aria-label="Scan {{ t.name }} again">Rescan</button>
+            </form>
+            {% endif %}
+            {% if t.kind == 'server' and t.fixable and can_operate %}<a class="btn btn-sm" href="{{ url_for('manage_hosts') }}">Update</a>{% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">Nothing scanned yet.</div>
+  {% endif %}
+</section>
+
+<section class="card-v4" aria-labelledby="how-title">
+  <div class="card-v4-header"><h2 class="card-v4-header-title h6 m-0" id="how-title">How the scan works</h2></div>
+  <div class="card-v4-body">
+    <ul class="mb-3">
+      <li><strong>Servers</strong> (Debian, Ubuntu, Raspberry Pi OS, Proxmox VE and Backup Server, TrueNAS SCALE, Alpine, Rocky Linux, AlmaLinux): FleetPilot reads the list of installed packages over SSH and looks it up in the distribution's security data on <a href="https://osv.dev" rel="noopener noreferrer" target="_blank">OSV.dev</a>. A fix is available when the distribution has published a fixed package; install it with an update from Hosts.</li>
+      <li><strong>Docker containers</strong> on those servers: their images are scanned with <a href="https://trivy.dev" rel="noopener noreferrer" target="_blank">Trivy</a> if it is installed on the server.</li>
+      <li><strong>pfSense and OPNsense</strong>: their own <code>pkg audit</code>.</li>
+      <li><strong>FleetPilot</strong>: its Python packages and the machine it runs on.</li>
+      <li>Windows, FRITZ!OS and OpenWrt have no package-level vulnerability data; keep them updated from Hosts and Routers.</li>
+    </ul>
+    <p class="text-muted small mb-3">Only package names and versions are sent to {{ osv_api }}; no addresses, host names or other data. In offline mode nothing is sent.</p>
+    {% if is_admin %}
+    <form method="post" action="{{ url_for('vulnerabilities_settings') }}" class="d-flex flex-wrap gap-3 align-items-center m-0">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="check-row"><input type="checkbox" name="auto_scan" value="1" {% if settings.auto_scan %}checked{% endif %} {% if not allowed %}disabled{% endif %}> Scan everything once a day and notify about new high and critical vulnerabilities that have a fix</label>
+      <button type="submit" class="btn btn-sm" {% if not allowed %}disabled{% endif %}>Save</button>
+      <a class="small" href="{{ url_for('system_notifications') }}">Notification channels</a>
+    </form>
+    {% endif %}
+  </div>
+</section>
+
+<script>
+(function () {
+  const rows = Array.from(document.querySelectorAll('#vuln-table tbody tr'));
+  const order = { critical: 0, high: 1, medium: 2, low: 3, unknown: 4 };
+  const sev = document.getElementById('f-sev'), target = document.getElementById('f-target');
+  const q = document.getElementById('f-q'), fix = document.getElementById('f-fix');
+  function apply() {
+    if (!sev) return;
+    const limit = { all: 9, critical: 0, high: 1, medium: 2 }[sev.value];
+    const text = q.value.trim().toLowerCase();
+    let shown = 0;
+    rows.forEach((r) => {
+      const ok = order[r.dataset.sev] <= limit
+        && (!fix.checked || r.dataset.fixed === '1')
+        && (!target.value || r.dataset.targets.split(' ').includes(target.value))
+        && (!text || r.dataset.text.includes(text));
+      r.hidden = !ok;
+      if (ok) shown++;
+    });
+    document.getElementById('vuln-shown').textContent = shown;
+    document.getElementById('vuln-none').hidden = shown > 0;
+  }
+  [sev, target, fix].forEach((el) => el && el.addEventListener('change', apply));
+  if (q) q.addEventListener('input', apply);
+  apply();
+
+  const box = document.getElementById('scan-progress');
+  function poll() {
+    fetch('/api/vulnerabilities/progress', { headers: { Accept: 'application/json' } })
+      .then((r) => r.json()).then((p) => {
+        if (!p.running) { location.reload(); return; }
+        box.hidden = false;
+        document.getElementById('scan-current').textContent = p.current || '…';
+        document.getElementById('scan-done').textContent = p.done || 0;
+        document.getElementById('scan-total').textContent = p.total || 0;
+        setTimeout(poll, 2000);
+      }).catch(() => setTimeout(poll, 5000));
+  }
+  if (!box.hidden) setTimeout(poll, 2000);
+  document.querySelectorAll('form[action$="/vulnerabilities/scan"]').forEach((form) => form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    fetch(form.action, { method: 'POST', body: new FormData(form), headers: { Accept: 'application/json' } })
+      .then((r) => r.json()).then((res) => {
+        if (res.ok) { box.hidden = false; document.querySelectorAll('form[action$="/vulnerabilities/scan"] button').forEach((b) => { b.disabled = true; }); setTimeout(poll, 1000); }
+        else alert(res.message);
+      });
+  }));
+})();
+</script>
+{% endblock %}

@@ -40,6 +40,7 @@ import system_monitor
 import corsair_commander
 import backup_controller as _bc
 import hw_monitor as _hw
+import vuln_scanner
 try:
     import server_registry as _registry
     _REGISTRY_AVAILABLE = True
@@ -417,6 +418,8 @@ with app.app_context():
     storage_controller.init_db(DATA_DIR)
     router_manager.init_db(DATA_DIR)
     router_manager.start_poller()
+    vuln_scanner.init_db(DATA_DIR)
+    vuln_scanner.start_schedule(lambda: load_hosts(), router_manager.list_routers)
     smart_manager.init_db(DATA_DIR)
     smart_manager.start_polling()
     system_monitor.init_db(DATA_DIR)
@@ -1839,6 +1842,21 @@ def _security_checks():
         f'Sent to {len(channels)} notification channel{"s" if len(channels) != 1 else ""}.' if channels else
         'Lockouts and other security events are only visible in the audit trail. Add a notification channel.',
         url_for('system_notifications'))
+
+    vulns = vuln_scanner.summary()
+    if not vulns['last_scan']:
+        add('Vulnerability scan', 'info', 'The servers have not been checked for known vulnerabilities (CVEs) yet.',
+            url_for('vulnerabilities'))
+    elif vulns['critical_fixable']:
+        add('Vulnerability scan', 'bad', f'{vulns["critical_fixable"]} critical vulnerabilities have a fix waiting. '
+            'Install the updates.', url_for('vulnerabilities'))
+    elif _time.time() - vulns['last_scan'] > 7 * 86400:
+        add('Vulnerability scan', 'warn', 'The last vulnerability scan is more than a week old.',
+            url_for('vulnerabilities'))
+    else:
+        add('Vulnerability scan', 'ok' if not vulns['fixable'] else 'warn',
+            'No vulnerabilities with an available fix.' if not vulns['fixable'] else
+            f'{vulns["fixable"]} vulnerabilities have a fix waiting (none critical).', url_for('vulnerabilities'))
     return checks
 
 
@@ -4943,6 +4961,62 @@ def _router_or_404(router_id):
     return router
 
 
+# ── Vulnerabilities (CVE scan) ───────────────────────────────────────────────
+
+@app.route('/vulnerabilities')
+@login_required
+def vulnerabilities():
+    allowed, why = vuln_scanner.enabled()
+    return render_template('vulnerabilities.html', summary=vuln_scanner.summary(),
+                           targets=vuln_scanner.get_targets(), findings=vuln_scanner.get_findings(),
+                           settings=vuln_scanner.get_settings(), progress=vuln_scanner.progress(),
+                           allowed=allowed, why=why, osv_api=vuln_scanner.OSV_API,
+                           can_operate=current_user_has_role('operator', 'admin'),
+                           is_admin=current_user_has_role('admin'))
+
+
+@app.route('/vulnerabilities/scan', methods=['POST'])
+@operator_required
+def vulnerabilities_scan():
+    allowed, why = vuln_scanner.enabled()
+    target = (request.form.get('target') or '').strip()[:200] or None
+    if not allowed:
+        started, message = False, why
+    else:
+        started = vuln_scanner.start_scan(load_hosts(), router_manager.list_routers(), only=target)
+        message = 'Scan started.' if started else 'A scan is already running.'
+        if started:
+            _audit('vulnerability_scan', target or 'all')
+    if _wants_json():
+        return jsonify({'ok': started, 'message': message}), 200 if started else 409
+    flash(message, 'success' if started else 'warning')
+    return redirect(url_for('vulnerabilities'))
+
+
+@app.route('/vulnerabilities/settings', methods=['POST'])
+@admin_required
+def vulnerabilities_settings():
+    auto = request.form.get('auto_scan') == '1'
+    vuln_scanner.set_setting('auto_scan', '1' if auto else '0')
+    _audit('vulnerability_settings', 'auto_scan=' + ('on' if auto else 'off'))
+    flash('Daily scan turned ' + ('on.' if auto else 'off.'))
+    return redirect(url_for('vulnerabilities'))
+
+
+@app.route('/api/vulnerabilities/progress')
+@login_required
+def api_vulnerabilities_progress():
+    return jsonify(vuln_scanner.progress())
+
+
+@app.route('/api/vulnerabilities')
+@login_required
+def api_vulnerabilities():
+    """Summary, scanned targets and findings (grouped by CVE and package) as JSON."""
+    return jsonify({'summary': vuln_scanner.summary(), 'targets': vuln_scanner.get_targets(),
+                    'findings': vuln_scanner.get_findings()})
+
+
 @app.route('/routers')
 @login_required
 def routers_index():
@@ -5108,7 +5182,7 @@ def prometheus_metrics():
         return "Unauthorized\n", 401, {"Content-Type": "text/plain; charset=utf-8",
                                        "WWW-Authenticate": 'Bearer realm="fleetpilot"'}
     body = metrics.render(fleetpilot_version.release_metadata(), load_hosts(),
-                          smart_manager, system_monitor, disktool_core, router_manager)
+                          smart_manager, system_monitor, disktool_core, router_manager, vuln_scanner)
     return body, 200, {"Content-Type": "text/plain; version=0.0.4; charset=utf-8"}
 
 

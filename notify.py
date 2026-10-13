@@ -39,6 +39,7 @@ EVENTS = {
     'security': 'Security events (lockouts, new admins, settings changes)',
     'backup': 'FleetPilot backups and restores',
     'router': 'Routers going offline or online, and router updates',
+    'vulnerability': 'New vulnerabilities (CVEs) with a fix, high and critical',
 }
 LEVELS = ('info', 'warning', 'critical')
 TIMEOUT = 6
