@@ -6,6 +6,8 @@ Alle bemerkenswerten Änderungen an FleetPilot werden in diesem Dokument festgeh
 
 ### Added
 
+- Pull requests are fuzzed with ClusterFuzzLite (`.clusterfuzzlite/`, Atheris), focused on the changed code.
+
 - **Vulnerability scan** (Servers → Vulnerabilities): known CVEs in the installed packages of every Linux server (Debian, Ubuntu, Raspberry Pi OS, Proxmox VE/Backup Server, TrueNAS SCALE, Alpine, Rocky Linux, AlmaLinux) from OSV.dev, Docker container images through Trivy when it is installed, pfSense/OPNsense `pkg audit`, and FleetPilot's own Python packages and server. Shows severity (CVSS), the fixing version and where each vulnerability is; filters; scan one target or all; optional daily scan with notifications about new high/critical findings that have a fix; `GET /api/vulnerabilities`, Prometheus metrics and a Security center check. Only package names and versions are sent to OSV.dev; nothing in offline mode; `FLEETPILOT_OSV_URL` for a mirror.
 
 - **Live demo you can try before installing** (https://christianhandy.github.io/FleetPilot/): the real FleetPilot runs in the browser with Pyodide against an emulated homelab of Proxmox nodes, TrueNAS, Proxmox Backup Server, Linux and Windows machines, FRITZ!Box/Repeater, OpenWrt and OPNsense. Updates, Wake-on-LAN, VM power, fan control, SMART alerts and router checks all work; a "Virtual lab" panel switches devices off, fails disks or publishes updates. The previous static demo is now the lighter tour at `/tour/`. See `demo/README.md`.
