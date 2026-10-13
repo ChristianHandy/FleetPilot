@@ -41,3 +41,7 @@ FleetPilotCS/obj/
 # Runtime data lives in data/ (FLEETPILOT_DATA_DIR); never commit it
 /hosts.json
 /history.json
+
+# Fuzzer scratch data
+/fuzz/.data/
+/fuzz-out/

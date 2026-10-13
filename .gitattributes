@@ -9,6 +9,7 @@
 /test_*.py export-ignore
 /conftest.py export-ignore
 /demo export-ignore
+/fuzz export-ignore
 
 *.sh text eol=lf
 scripts/* text eol=lf

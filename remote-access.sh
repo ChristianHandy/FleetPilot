@@ -175,17 +175,17 @@ NGROK_PID=$!
 
 # Wait up to 15 seconds for tunnel URL
 TUNNEL_URL=""
-for i in $(seq 1 15); do
+for _ in $(seq 1 15); do
     sleep 1
-    TUNNEL_URL=$(curl -s http://127.0.0.1:4040/api/tunnels 2>/dev/null \
-        | python3 -c "
-import sys, json
+    # ngrok's local API lists the tunnel once it is up.
+    TUNNEL_URL=$(python3 -c "
+import json, urllib.request
 try:
-    data = json.load(sys.stdin)
-    tunnels = data.get('tunnels', [])
+    with urllib.request.urlopen('http://127.0.0.1:4040/api/tunnels', timeout=2) as response:
+        tunnels = json.load(response).get('tunnels', [])
     if tunnels:
         print(tunnels[0]['public_url'])
-except:
+except Exception:
     pass
 " 2>/dev/null || true)
     if [[ -n "$TUNNEL_URL" ]]; then

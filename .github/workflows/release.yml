@@ -33,15 +33,13 @@ jobs:
             exit 1
           fi
 
-      - name: SBOM of the packages a fresh install receives
+      - name: SBOM of the packages an install receives
         env:
           TAG: ${{ github.ref_name }}
         run: |
-          python -m venv /tmp/fp
-          /tmp/fp/bin/pip install --quiet -r requirements.txt
-          /tmp/fp/bin/pip freeze --all > /tmp/frozen.txt
-          pip install --quiet cyclonedx-bom
-          cyclonedx-py requirements /tmp/frozen.txt --of JSON -o "fleetpilot-${TAG#v}-sbom.cdx.json"
+          # install.sh installs exactly requirements-lock.txt, so the SBOM describes that file.
+          pip install --quiet --require-hashes -r requirements-lock.txt -r requirements-dev-lock.txt
+          cyclonedx-py requirements requirements-lock.txt --of JSON -o "fleetpilot-${TAG#v}-sbom.cdx.json"
 
       - name: Release notes from CHANGELOG.md
         env:

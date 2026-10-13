@@ -1,0 +1,44 @@
+name: Fuzz
+
+# Fuzzes the parsers that read router, disk and SOAP output (fuzz/). A crash or
+# an input that takes longer than one second fails the run and is uploaded.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 3 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  parsers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install
+        run: pip install --require-hashes -r requirements-lock.txt -r requirements-fuzz-lock.txt
+      - name: Fuzz the parsers
+        env:
+          # Longer on the weekly run, short on pull requests.
+          SECONDS_TO_RUN: ${{ github.event_name == 'schedule' && '1800' || '120' }}
+        run: |
+          mkdir -p fuzz-out/corpus
+          cd fuzz-out
+          python ../fuzz/fuzz_parsers.py corpus -max_total_time="$SECONDS_TO_RUN" -print_final_stats=1
+      - name: Keep the failing input
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-findings
+          path: |
+            fuzz-out/crash-*
+            fuzz-out/timeout-*
+            fuzz-out/slow-unit-*

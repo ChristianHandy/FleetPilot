@@ -19,7 +19,13 @@
 set -euo pipefail
 
 FP_RAW="${FP_RAW:-https://raw.githubusercontent.com/ChristianHandy/FleetPilot}"
+FP_REPO="${FP_REPO:-https://github.com/ChristianHandy/FleetPilot.git}"
 FP_BRANCH="${FP_BRANCH:-main}"
+# Runs inside the container, where FP_BRANCH and FP_REPO arrive through env: clone that
+# branch and run its install.sh, which installs or updates /opt/fleetpilot.
+# shellcheck disable=SC2016  # expanded inside the container, not here
+RUN_INSTALLER='rm -rf /root/fleetpilot-src && git clone -q --depth 1 --branch "$FP_BRANCH" "$FP_REPO" /root/fleetpilot-src && bash /root/fleetpilot-src/install.sh; rc=$?; rm -rf /root/fleetpilot-src; exit $rc'
+
 FP_HTTPS="${FP_HTTPS:-yes}"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
@@ -52,8 +58,8 @@ if [[ "${1:-}" == "update" ]]; then
     pct status "$CT_ID" >/dev/null 2>&1 || die "Container $CT_ID does not exist."
     pct exec "$CT_ID" -- test -d /opt/fleetpilot/.git || die "Container $CT_ID has no FleetPilot installation."
     msg "Updating FleetPilot in container $CT_ID…"
-    pct exec "$CT_ID" -- env FP_NONINTERACTIVE=1 FP_BRANCH="$FP_BRANCH" bash -c \
-        "curl -fsSL '$FP_RAW/$FP_BRANCH/install.sh' | bash" || die "Update failed. Look inside: pct enter $CT_ID"
+    pct exec "$CT_ID" -- env FP_NONINTERACTIVE=1 FP_BRANCH="$FP_BRANCH" FP_REPO="$FP_REPO" bash -c "$RUN_INSTALLER" \
+        || die "Update failed. Look inside: pct enter $CT_ID"
     ok "FleetPilot in container $CT_ID is up to date."
     exit 0
 fi
@@ -174,9 +180,9 @@ ok "Network ready"
 
 # ── FleetPilot ───────────────────────────────────────────────────────────────
 msg "Installing FleetPilot inside the container (takes a few minutes)…"
-pct exec "$CT_ID" -- bash -c "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq curl ca-certificates >/dev/null"
-pct exec "$CT_ID" -- env FP_NONINTERACTIVE=1 FP_HTTPS="$FP_HTTPS" FP_BRANCH="$FP_BRANCH" bash -c \
-    "curl -fsSL '$FP_RAW/$FP_BRANCH/install.sh' | bash" || die "Installation failed. Look inside: pct enter $CT_ID"
+pct exec "$CT_ID" -- bash -c "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git ca-certificates >/dev/null"
+pct exec "$CT_ID" -- env FP_NONINTERACTIVE=1 FP_HTTPS="$FP_HTTPS" FP_BRANCH="$FP_BRANCH" FP_REPO="$FP_REPO" bash -c "$RUN_INSTALLER" \
+    || die "Installation failed. Look inside: pct enter $CT_ID"
 
 CREDS="$(pct exec "$CT_ID" -- cat /root/fleetpilot-credentials.txt)"
 URL="$(sed -n 's/^URL: *//p' <<<"$CREDS")"
