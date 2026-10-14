@@ -70,7 +70,7 @@ FleetPilot holds SSH keys and admin access to your machines, so the project is b
 |---|---|
 | **Code analysis** | CodeQL (security-extended queries) for the Python code and the GitHub workflows, Bandit, a linter, and ~200 tests on Python 3.11–3.13 for every change |
 | **Fuzzing** | The parsers for router, disk and SOAP output are fuzzed with Atheris: ClusterFuzzLite on every pull request, plus a weekly long run |
-| **Dependencies** | Every dependency is locked with hashes (`pip install --require-hashes`) and checked with pip-audit; pull requests that add a vulnerable dependency are blocked (dependency review); Dependabot security updates, and version updates only after a 5-day cooldown |
+| **Dependencies** | Every dependency is locked with hashes (`pip install --require-hashes`) and checked with pip-audit; pull requests that add a vulnerable dependency are blocked (dependency review); Dependabot security updates, and version updates only after a 7-day cooldown |
 | **CI/CD** | Every action pinned to a full commit SHA and only allowed publishers (GitHub, Google ClusterFuzzLite, OpenSSF Scorecard, zizmor), both enforced by repository settings; least-privilege tokens per job; no stored credentials; workflows audited by [zizmor](https://docs.zizmor.sh); pull requests from outside contributors need approval before CI runs |
 | **Branch** | `main` is protected: changes only through pull requests with passing tests and CodeQL, no force-push or deletion, rules apply to admins too |
 | **Releases** | GPG-signed tags; each release carries the source archive, a CycloneDX SBOM, `SHA256SUMS` and Sigstore-signed SLSA build provenance: `gh attestation verify fleetpilot-X.Y.Z.tar.gz --repo ChristianHandy/FleetPilot` |

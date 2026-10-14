@@ -13,7 +13,7 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
   - Concurrency limits for every workflow.
   - CodeQL with the security-extended queries, now also for the workflows themselves.
   - A zizmor audit of all workflows.
-  - Dependabot groups, a 5-day cooldown, and updates for the fuzzing image.
+  - Dependabot groups, a 7-day cooldown, and updates for the fuzzing image.
   - CODEOWNERS.
   - The unused "Notify New Version Available" workflow is removed.
 
