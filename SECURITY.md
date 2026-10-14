@@ -26,27 +26,68 @@ We aim to acknowledge all security reports within **48 hours** and to release a 
 
 ## Supported Versions
 
-Security fixes go into `main` and are published in the next release. Always run the latest release; the Proxmox helper and `install.sh` update to it.
+FleetPilot follows a rolling model: each release is supported **until the next release is published**. Security fixes go into `main` and ship in a new release, usually within days for high and critical issues. Releases are not backported.
 
 | Version | Security Updates |
 |---|---|
 | Latest release and `main` | :white_check_mark: Supported |
-| Older releases | :x: Not supported, please update |
+| Any earlier release | :x: Ends on the day the next release is published; update with the installer or the Proxmox helper |
+
+The release notes say when a release fixes a security problem, so you can decide how urgently to update.
 
 ---
 
 ## Verifying a Release
 
-Each release (from v1.7.1 on) carries the source archive, a CycloneDX SBOM, `SHA256SUMS`, and SLSA build provenance signed through Sigstore by the release workflow. Nobody holds a private key for it; the signature proves that GitHub Actions built the file from this repository's tag.
+Each release (from v1.7.1 on) carries the source archive, a CycloneDX SBOM, `SHA256SUMS`, and SLSA build provenance signed through Sigstore. **Integrity and authenticity:** check that the files match and were built by this repository's release workflow from its tag:
 
 ```bash
-gh attestation verify fleetpilot-X.Y.Z.tar.gz --repo ChristianHandy/FleetPilot
 sha256sum -c SHA256SUMS
+gh attestation verify fleetpilot-X.Y.Z.tar.gz --repo ChristianHandy/FleetPilot \
+  --signer-workflow ChristianHandy/FleetPilot/.github/workflows/release.yml
 ```
 
-Tags are signed with the maintainer's OpenPGP key `F73DEF204C54E71D` (`git tag -v vX.Y.Z`). Older releases that carry a `SHA256SUMS.asc` are signed with the same key (`gpg --verify SHA256SUMS.asc SHA256SUMS`).
+**Expected identity:** the provenance must be signed by the workflow `.github/workflows/release.yml` of `ChristianHandy/FleetPilot`, running for a `refs/tags/vX.Y.Z` tag (`gh attestation verify` prints both). Nobody holds a private key for this signature; it comes from GitHub's OIDC identity of that workflow run.
 
-The measures that protect the code, the build and the releases are listed under [Security and supply chain](README.md#security-and-supply-chain).
+Release tags are signed by the maintainer's OpenPGP key:
+
+```text
+09D7 7410 5F9A A1DE 6B12  6AD1 F73D EF20 4C54 E71D   ChristianHandy <christianhandy180@gmail.com>
+```
+
+```bash
+gpg --import docs/security/release-signing-key.asc
+git tag -v vX.Y.Z
+```
+
+Older releases that carry a `SHA256SUMS.asc` are signed with the same key (`gpg --verify SHA256SUMS.asc SHA256SUMS`). The measures that protect the code, the build and the releases are listed under [Security and supply chain](README.md#security-and-supply-chain).
+
+---
+
+## Secrets and Credentials Policy
+
+**Project secrets** (GitHub account, repository secrets, the release signing key):
+
+- Held only by the people listed in [GOVERNANCE.md](GOVERNANCE.md); GitHub accounts with access use two-factor authentication.
+- The signing key lives in the maintainer's GPG keyring with a passphrase and expires every two years (renewed before it expires).
+- Releases need no stored secret: provenance is signed keylessly through OIDC.
+- Repository secrets (only the optional read-only `SCORECARD_TOKEN`) are fine-grained, least-privilege, expire within a year and are rotated when they expire or someone leaves.
+- Workflows get no write permissions by default; secrets are never printed or passed to pull requests from forks.
+- Secret scanning with push protection blocks committed credentials. A leaked credential is revoked first, then removed from history.
+
+**Secrets of a FleetPilot installation:**
+
+- `SECRET_KEY` and the generated passwords are created with a CSPRNG and stored in files readable only by the service user.
+- Device credentials are encrypted at rest; the SSH key is created per installation.
+- Rotation: change `SECRET_KEY` (this signs everyone out and needs stored device credentials re-entered), regenerate the SSH key from Hosts, and rotate API tokens through their expiry.
+
+---
+
+## Design and Threat Model
+
+- [docs/architecture.md](docs/architecture.md): components, actors and actions, trust boundaries
+- [docs/security/threat-model.md](docs/security/threat-model.md): security assessment, attack surface, threats and mitigations
+- [docs/dependencies.md](docs/dependencies.md): how dependencies are chosen, locked and tracked; SCA and VEX policy
 
 ---
 

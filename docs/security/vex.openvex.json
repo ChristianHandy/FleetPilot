@@ -1,0 +1,8 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/ChristianHandy/FleetPilot/blob/main/docs/security/vex.openvex.json",
+  "author": "FleetPilot maintainers <https://github.com/ChristianHandy/FleetPilot>",
+  "timestamp": "2026-10-14T12:00:00Z",
+  "version": 1,
+  "statements": []
+}
