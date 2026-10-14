@@ -11,6 +11,7 @@ Updates for Linux and Windows machines, SMART disk health, FRITZ!Box / OpenWrt /
 [![Release](https://img.shields.io/github/v/release/ChristianHandy/FleetPilot)](https://github.com/ChristianHandy/FleetPilot/releases/latest)
 [![Tests](https://github.com/ChristianHandy/FleetPilot/actions/workflows/tests.yml/badge.svg)](https://github.com/ChristianHandy/FleetPilot/actions/workflows/tests.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/ChristianHandy/FleetPilot/badge)](https://scorecard.dev/viewer/?uri=github.com/ChristianHandy/FleetPilot)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15465/badge)](https://www.bestpractices.dev/projects/15465)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue)](https://python.org)
 
