@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Every route needs a signed-in user, except a short list of public ones.
 
 Routes are protected by decorators, not by one global check, so this test walks
