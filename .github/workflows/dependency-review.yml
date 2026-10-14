@@ -25,3 +25,11 @@ jobs:
       - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           comment-summary-in-pr: always
+          # SCA policy (docs/dependencies.md): no known vulnerability of any severity,
+          # no malicious package, and only licenses compatible with GPL-3.0.
+          fail-on-severity: low
+          allow-licenses: >-
+            MIT, MIT-0, BSD-2-Clause, BSD-3-Clause, 0BSD, ISC, Apache-2.0, PSF-2.0, Python-2.0,
+            MPL-2.0, LGPL-2.1-only, LGPL-2.1-or-later, LGPL-3.0-only, LGPL-3.0-or-later,
+            GPL-2.0-or-later, GPL-3.0-only, GPL-3.0-or-later, Unlicense, CC0-1.0, Zlib, HPND,
+            BlueOak-1.0.0, Unicode-3.0, X11

@@ -1,0 +1,41 @@
+name: DCO
+
+# Every commit in a pull request must be signed off by its author
+# (Developer Certificate of Origin, https://developercertificate.org): the
+# contributor states they have the right to submit it. Bots are exempt.
+on:
+  pull_request:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  dco:
+    name: DCO sign-off
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read          # read the pull request's commits
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Every commit is signed off by its author
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          missing=0
+          for commit in $(git rev-list --no-merges "$BASE..$HEAD"); do
+            author="$(git log -1 --format='%an <%ae>' "$commit")"
+            case "$author" in *"[bot]"*) continue ;; esac
+            if ! git log -1 --format='%(trailers:key=Signed-off-by,valueonly)' "$commit" | grep -qxF "$author"; then
+              echo "::error::$(git log -1 --format='%h %s' "$commit"): missing 'Signed-off-by: $author'. Amend with: git commit --amend -s"
+              missing=1
+            fi
+          done
+          exit "$missing"
