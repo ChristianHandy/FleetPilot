@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FleetPilot · Self-hosted homelab dashboard</title>
+<meta name="description" content="FleetPilot is a free, self-hosted dashboard for your homelab: OS updates, CVE scan, SMART disk health, Proxmox VMs and backups, FRITZ!Box, OpenWrt and OPNsense routers. Agentless, one-command install. Try the live demo in your browser.">
+<link rel="canonical" href="https://christianhandy.github.io/FleetPilot/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="FleetPilot · Self-hosted homelab dashboard">
+<meta property="og:description" content="Updates, CVE scan, disk health, Proxmox, routers and backups in one self-hosted dashboard. Try the live demo in your browser.">
+<meta property="og:url" content="https://christianhandy.github.io/FleetPilot/">
+<meta property="og:image" content="https://christianhandy.github.io/FleetPilot/assets/screens/home.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="assets/fleetpilot-logo.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/bootstrap-icons/bootstrap-icons.min.css">
+<link rel="stylesheet" href="home.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap top-row">
+    <a class="brand" href="./"><img src="assets/fleetpilot-logo.svg" alt="" width="28" height="28"><span>FleetPilot</span></a>
+    <nav class="top-nav" aria-label="Main">
+      <a href="#features">Features</a>
+      <a href="#demo">Demo</a>
+      <a href="#install">Install</a>
+      <a href="#security">Security</a>
+      <a href="https://github.com/ChristianHandy/FleetPilot/blob/main/docs/user-guide.md">Docs</a>
+    </nav>
+    <a class="btn btn-ghost-light btn-sm" href="https://github.com/ChristianHandy/FleetPilot"><i class="bi bi-github" aria-hidden="true"></i> GitHub</a>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div class="hero-text">
+        <p class="eyebrow">Free and open source · GPL-3.0 · {{VERSION}}</p>
+        <h1>One dashboard for your whole homelab.</h1>
+        <p class="lead">FleetPilot keeps your servers, Proxmox nodes, NAS, routers and disks in view and up to date: OS updates, known vulnerabilities, SMART health, VMs, backups and FRITZ!Box, OpenWrt or OPNsense. Self-hosted, agentless, installed with one command.</p>
+        <div class="cta">
+          <a class="btn btn-primary btn-lg" href="demo/"><i class="bi bi-play-fill" aria-hidden="true"></i> Try the live demo</a>
+          <a class="btn btn-ghost-light btn-lg" href="#install"><i class="bi bi-terminal" aria-hidden="true"></i> Install</a>
+        </div>
+        <ul class="hero-points">
+          <li><i class="bi bi-check2" aria-hidden="true"></i> No cloud, no subscription, no agents</li>
+          <li><i class="bi bi-check2" aria-hidden="true"></i> Linux, Windows, Proxmox, TrueNAS, Unraid, routers</li>
+          <li><i class="bi bi-check2" aria-hidden="true"></i> English, Deutsch, Français, Español, Nederlands</li>
+        </ul>
+      </div>
+      <figure class="hero-shot">
+        <div class="browser"><span></span><span></span><span></span></div>
+        <img src="assets/screens/home.png" alt="FleetPilot home page with the service map and the state of every server" width="1440" height="900">
+      </figure>
+    </div>
+  </section>
+
+  <section class="band" id="demo" aria-labelledby="demo-title">
+    <div class="wrap split">
+      <div>
+        <p class="eyebrow eyebrow-accent">Live demo</p>
+        <h2 id="demo-title">Try it before you install it</h2>
+        <p>The demo is not a video or a mock-up. It is the real FleetPilot, running in your browser tab (WebAssembly), connected to an emulated homelab: two Proxmox nodes with VMs, a TrueNAS box, a backup server, Linux and Windows machines, a FRITZ!Box with repeater, OpenWrt and OPNsense.</p>
+        <ul class="ticks">
+          <li>Update a server and watch the real <code>apt</code> output</li>
+          <li>Wake a switched-off PC with Wake-on-LAN</li>
+          <li>Let a disk fail and see the SMART alert arrive in the outbox</li>
+          <li>Start VMs, change fan speeds, check routers for firmware</li>
+          <li>Scan for real CVEs, update, rescan</li>
+        </ul>
+        <p class="muted small">Nothing leaves your browser. About 20&nbsp;MB on first load, ready in a few seconds.</p>
+        <div class="cta">
+          <a class="btn btn-primary" href="demo/"><i class="bi bi-play-fill" aria-hidden="true"></i> Open the live demo</a>
+          <a class="btn btn-ghost" href="tour/">Quick static tour</a>
+        </div>
+      </div>
+      <figure class="shot">
+        <img src="assets/screens/demo.png" alt="The live demo: FleetPilot's vulnerability page next to the Virtual lab panel with emulated servers" width="1440" height="900" loading="lazy">
+      </figure>
+    </div>
+  </section>
+
+  <section class="section" id="features" aria-labelledby="features-title">
+    <div class="wrap">
+      <p class="eyebrow eyebrow-accent center">Features</p>
+      <h2 class="center" id="features-title">Everything your homelab needs, in one place</h2>
+      <p class="center lead-dark">Agentless: FleetPilot talks to your machines over SSH and to appliances over their APIs. Nothing to install on them.</p>
+      <div class="cards">
+        <article class="card"><i class="bi bi-arrow-repeat" aria-hidden="true"></i><h3>OS updates</h3>
+          <p>Debian, Ubuntu, Fedora, Arch and Windows (winget) over SSH. One host or all, with live output, history and schedules.</p></article>
+        <article class="card"><i class="bi bi-shield-exclamation" aria-hidden="true"></i><h3>Vulnerability scan</h3>
+          <p>Known CVEs in every server's packages (OSV.dev), Docker images (Trivy) and firewalls, with severity, the fixing version and daily alerts.</p></article>
+        <article class="card"><i class="bi bi-device-hdd" aria-hidden="true"></i><h3>Disk health</h3>
+          <p>SMART data from servers, Proxmox nodes, TrueNAS and Unraid. Alerts by e-mail, ntfy, Gotify, Discord or Slack before a disk dies.</p></article>
+        <article class="card"><i class="bi bi-router" aria-hidden="true"></i><h3>Routers</h3>
+          <p>FRITZ!Box and FRITZ!Repeater with Mesh, OpenWrt, OPNsense, pfSense, MikroTik, VyOS and more: status, devices, firmware checks, encrypted backups.</p></article>
+        <article class="card"><i class="bi bi-boxes" aria-hidden="true"></i><h3>Proxmox and backups</h3>
+          <p>VMs and containers across your cluster: start, stop, snapshots. Proxmox Backup Server, Duplicati, restic, BorgWarehouse, UrBackup and Bacula.</p></article>
+        <article class="card"><i class="bi bi-database" aria-hidden="true"></i><h3>Storage</h3>
+          <p>TrueNAS and Unraid pools, datasets, shares and alerts, next to the disks of all your machines.</p></article>
+        <article class="card"><i class="bi bi-cpu" aria-hidden="true"></i><h3>Hardware and fans</h3>
+          <p>Live CPU, memory and temperatures, fan control (lm-sensors, IPMI, liquidctl, Raspberry Pi), Wake-on-LAN and scheduled shutdowns.</p></article>
+        <article class="card"><i class="bi bi-person-lock" aria-hidden="true"></i><h3>Secure by default</h3>
+          <p>2FA with TOTP, passkeys and YubiKey, roles, sessions per device, a tamper-evident audit trail and a security center.</p></article>
+        <article class="card"><i class="bi bi-plug" aria-hidden="true"></i><h3>Integrations</h3>
+          <p>Prometheus metrics, Home Assistant, CheckMK, a REST API with scoped tokens, and a public status page.</p></article>
+        <article class="card"><i class="bi bi-universal-access" aria-hidden="true"></i><h3>Accessible</h3>
+          <p>Checked against WCAG 2.2 AA. Text size, high contrast, reduced motion and an easy-language mode, in five languages.</p></article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section alt" aria-labelledby="shots-title">
+    <div class="wrap">
+      <p class="eyebrow eyebrow-accent center">Screenshots</p>
+      <h2 class="center" id="shots-title">A closer look</h2>
+      <div class="tabs" role="tablist" aria-label="Screenshots">
+        <button role="tab" aria-selected="true" aria-controls="shot-view" data-src="assets/screens/routers.png" data-alt="Routers page with FRITZ!Box, repeater, OpenWrt and OPNsense">Routers</button>
+        <button role="tab" aria-selected="false" aria-controls="shot-view" data-src="assets/screens/vulnerabilities.png" data-alt="Vulnerability scan with CVEs, severity and the fixing version">Vulnerabilities</button>
+        <button role="tab" aria-selected="false" aria-controls="shot-view" data-src="assets/screens/smart.png" data-alt="SMART dashboard with one disk warning about reallocated sectors">Disk health</button>
+        <button role="tab" aria-selected="false" aria-controls="shot-view" data-src="assets/screens/router-detail.png" data-alt="FRITZ!Box detail page with internet line, Wi-Fi and connected devices">Router detail</button>
+        <button role="tab" aria-selected="false" aria-controls="shot-view" data-src="assets/screens/security.png" data-alt="Security center with checks and sign-in rules">Security center</button>
+        <button role="tab" aria-selected="false" aria-controls="shot-view" data-src="assets/screens/accessibility.png" data-alt="Accessibility settings">Accessibility</button>
+      </div>
+      <figure class="shot shot-wide" id="shot-view" role="tabpanel" aria-live="polite">
+        <img src="assets/screens/routers.png" alt="Routers page with FRITZ!Box, repeater, OpenWrt and OPNsense" width="1440" height="900" loading="lazy">
+      </figure>
+    </div>
+  </section>
+
+  <section class="section" id="install" aria-labelledby="install-title">
+    <div class="wrap">
+      <p class="eyebrow eyebrow-accent center">Install</p>
+      <h2 class="center" id="install-title">Running in a few minutes</h2>
+      <div class="install">
+        <article class="card install-card">
+          <h3><i class="bi bi-hdd-rack" aria-hidden="true"></i> Proxmox VE</h3>
+          <p>In the Shell of your Proxmox node. Creates an unprivileged Debian container, installs FleetPilot with HTTPS and prints the address and admin password.</p>
+          <div class="code"><code id="cmd-pve">bash -c "$(curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/proxmox/fleetpilot-lxc.sh)"</code>
+            <button type="button" class="copy" data-copy="cmd-pve" aria-label="Copy the Proxmox command"><i class="bi bi-clipboard" aria-hidden="true"></i></button></div>
+        </article>
+        <article class="card install-card">
+          <h3><i class="bi bi-ubuntu" aria-hidden="true"></i> Debian, Ubuntu, Raspberry Pi OS</h3>
+          <p>As root on the machine. Then open <code>https://&lt;server-ip&gt;</code> and sign in as <code>admin</code> with the password the installer shows.</p>
+          <div class="code"><code id="cmd-deb">curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/install.sh | bash</code>
+            <button type="button" class="copy" data-copy="cmd-deb" aria-label="Copy the Debian command"><i class="bi bi-clipboard" aria-hidden="true"></i></button></div>
+        </article>
+      </div>
+      <p class="center muted">Read the scripts before you run them, as with any <code>curl | bash</code>. The <a href="https://github.com/ChristianHandy/FleetPilot/blob/main/docs/installation.md">installation guide</a> (<a href="https://github.com/ChristianHandy/FleetPilot/blob/main/docs/de/installation.md">Deutsch</a>) covers unattended installs, your own certificate, updates and backups.</p>
+    </div>
+  </section>
+
+  <section class="band" id="security" aria-labelledby="security-title">
+    <div class="wrap split">
+      <div>
+        <p class="eyebrow eyebrow-accent">Security</p>
+        <h2 id="security-title">It holds the keys to your homelab. It is built like it.</h2>
+        <p>FleetPilot runs as an unprivileged service user from a read-only install, and its few root actions go through small helpers with fixed arguments. The project itself is hardened too, and every release can be verified.</p>
+        <a class="btn btn-ghost" href="https://github.com/ChristianHandy/FleetPilot/blob/main/SECURITY.md">Security policy</a>
+        <a class="btn btn-ghost" href="https://scorecard.dev/viewer/?uri=github.com/ChristianHandy/FleetPilot">OpenSSF Scorecard</a>
+      </div>
+      <ul class="sec-list">
+        <li><i class="bi bi-patch-check" aria-hidden="true"></i><div><strong>Signed releases</strong><span>SBOM, checksums and Sigstore-signed SLSA build provenance: <code>gh attestation verify</code></span></div></li>
+        <li><i class="bi bi-bug" aria-hidden="true"></i><div><strong>Analysed and fuzzed</strong><span>CodeQL, Bandit and ~200 tests on every change; parsers fuzzed with Atheris</span></div></li>
+        <li><i class="bi bi-lock" aria-hidden="true"></i><div><strong>Locked dependencies</strong><span>Every package pinned by hash, scanned for vulnerabilities, updated after a cooldown</span></div></li>
+        <li><i class="bi bi-diagram-3" aria-hidden="true"></i><div><strong>Hardened CI</strong><span>Actions pinned to commits, least-privilege tokens, protected main branch</span></div></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section final">
+    <div class="wrap center">
+      <h2>See it for yourself</h2>
+      <p class="lead-dark">Open the demo, click around, break a disk. Then install it on your own hardware.</p>
+      <div class="cta cta-center">
+        <a class="btn btn-primary btn-lg" href="demo/"><i class="bi bi-play-fill" aria-hidden="true"></i> Try the live demo</a>
+        <a class="btn btn-ghost btn-lg" href="https://github.com/ChristianHandy/FleetPilot"><i class="bi bi-github" aria-hidden="true"></i> Star on GitHub</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot-row">
+    <div class="brand brand-foot"><img src="assets/fleetpilot-logo.svg" alt="" width="22" height="22"><span>FleetPilot {{VERSION}}</span></div>
+    <nav aria-label="Footer">
+      <a href="https://github.com/ChristianHandy/FleetPilot/blob/main/docs/user-guide.md">User guide</a>
+      <a href="https://github.com/ChristianHandy/FleetPilot/blob/main/docs/de/benutzerhandbuch.md">Benutzerhandbuch</a>
+      <a href="https://github.com/ChristianHandy/FleetPilot/releases">Releases</a>
+      <a href="https://github.com/ChristianHandy/FleetPilot/discussions">Discussions</a>
+      <a href="https://github.com/ChristianHandy/FleetPilot/blob/main/CONTRIBUTING.md">Contributing</a>
+      <a href="https://github.com/ChristianHandy/FleetPilot/blob/main/LICENSE">GPL-3.0</a>
+    </nav>
+  </div>
+</footer>
+<script src="home.js"></script>
+</body>
+</html>

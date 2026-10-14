@@ -1,10 +1,11 @@
-# FleetPilot demo
+# FleetPilot website and demo
 
 Published at **https://christianhandy.github.io/FleetPilot/** by `.github/workflows/pages.yml` on every push to `main`.
 
 | Path | What it is | Built by |
 |------|------------|----------|
-| `/` | **Live demo**: the real FleetPilot, running in the visitor's browser against an emulated homelab | `demo/build_live.py` |
+| `/` | **Project homepage**: what FleetPilot is, features, screenshots, install, security, links to the demo | `demo/build_home.py` (from `demo/home/`) |
+| `/demo/` | **Live demo**: the real FleetPilot, running in the visitor's browser against an emulated homelab | `demo/build_live.py` |
 | `/tour/` | Static tour: pre-rendered pages, buttons do nothing (for old browsers and slow connections) | `demo/build_site.py` |
 
 ## How the live demo works
@@ -35,9 +36,9 @@ sw.js (service worker): every request below app/<lab-id>/ goes to the page above
 ## Run it locally
 
 ```bash
-python demo/build_live.py && python demo/build_site.py
+python demo/build_live.py && python demo/build_site.py && python demo/build_home.py
 mkdir -p /tmp/fp-demo && ln -sfn "$PWD/demo/site" /tmp/fp-demo/FleetPilot
-python -m http.server 8000 --directory /tmp/fp-demo     # open http://localhost:8000/FleetPilot/
+python -m http.server 8000 --directory /tmp/fp-demo     # open http://localhost:8000/FleetPilot/ (demo: /FleetPilot/demo/)
 ```
 
 Service workers need `localhost` or HTTPS.

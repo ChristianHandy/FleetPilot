@@ -1,6 +1,6 @@
 """Build the live demo: FleetPilot running in the browser (Pyodide) against an emulated homelab.
 
-    python demo/build_live.py [OUT]       # default OUT: demo/site
+    python demo/build_live.py [OUT]       # default OUT: demo/site/demo
 
 Writes the demo page (demo/live/*), FleetPilot's source and the lab as one zip, and
 the pure-Python dependencies as wheels, downloaded with the hashes pinned in
@@ -20,7 +20,7 @@ import zipfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LIVE = os.path.join(REPO, "demo", "live")
-OUT = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else os.path.join(REPO, "demo", "site")
+OUT = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else os.path.join(REPO, "demo", "site", "demo")
 
 # Pure-Python packages from requirements-lock.txt that FleetPilot imports in the demo.
 # Left out: compiled ones Pyodide provides, server-only ones (gunicorn), and optional
