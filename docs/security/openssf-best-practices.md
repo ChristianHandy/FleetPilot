@@ -1,6 +1,6 @@
 # OpenSSF Best Practices: answers for the "passing" level
 
-The questionnaire is at https://www.bestpractices.dev/en/projects/new: sign in with GitHub and enter `https://github.com/ChristianHandy/FleetPilot`. Many fields are filled in automatically. Copy the rest from below: **status**, then the **justification** (most fields accept a URL).
+The project is registered as [#15465](https://www.bestpractices.dev/projects/15465). To change answers, sign in at bestpractices.dev with GitHub. Many fields are filled in automatically. Copy the rest from below: **status**, then the **justification** (most fields accept a URL).
 
 `R` = https://github.com/ChristianHandy/FleetPilot
 
