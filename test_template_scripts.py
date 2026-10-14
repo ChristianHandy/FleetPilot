@@ -65,3 +65,32 @@ def test_no_html_entities_inside_scripts():
             for m in ENTITY.finditer(script):
                 broken.append(f"{path}: …{script[max(0, m.start() - 40):m.end() + 20]}…")
     assert not broken, "\n".join(broken[:10])
+
+
+# Expressions that may appear unencoded inside an inline <script>: JSON, numbers, booleans,
+# fixed translations, URLs and tokens FleetPilot generates itself. Anything else (a host,
+# device or fan name, a token from storage) must go through |tojson.
+_SAFE_IN_SCRIPT = re.compile(
+    r"""^\s*(?:
+        .*\|\s*tojson\s*                        # JSON-encoded
+      | _\((?:'[^']*'|"[^"]*")\)                # fixed translation
+      | url_for\(.*\) | csrf_token\(\)          # generated URL, CSRF token
+      | icon\(.*\)                              # inline SVG icon from ui_icons
+      | [\w.]+\.id                              # numeric database id
+      | \w+\s*\|\s*length                       # a count
+      | '(?:true|false)'\s+if\s+\w+\s+else\s+'(?:true|false)'
+      | current_theme\|default\("dark"\)        # 'light' or 'dark', validated in set_theme
+    )\s*$""", re.X)
+
+
+def test_inline_scripts_only_contain_encoded_values():
+    import glob
+    unsafe = []
+    for path in sorted(glob.glob("templates/**/*.html", recursive=True)):
+        with open(path, encoding="utf-8") as fh:
+            source = fh.read()
+        for script in re.finditer(r"<script\b(?![^>]*\bsrc=)[^>]*>(.*?)</script\b[^>]*>", source, re.S | re.I):
+            for expr in re.finditer(r"\{\{(.*?)\}\}", script.group(1), re.S):
+                if not _SAFE_IN_SCRIPT.match(expr.group(1)):
+                    unsafe.append(f"{path}: {{{{{expr.group(1)}}}}}")
+    assert not unsafe, "Use |tojson for values inside <script>:\n" + "\n".join(unsafe)

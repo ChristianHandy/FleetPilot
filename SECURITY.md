@@ -85,9 +85,14 @@ Older releases that carry a `SHA256SUMS.asc` are signed with the same key (`gpg 
 
 ## Design and Threat Model
 
+**What you can expect:** FleetPilot protects the machines it manages from people who are not signed in, keeps every user within their role (viewer, operator, admin), treats everything a managed device sends as untrusted, and only reaches root through fixed helpers. The controls are listed under [Security Architecture](#security-architecture).
+
+**What you cannot expect:** protection from admins (they can run commands on every managed machine), from plugins you install, or from an attacker who already controls the FleetPilot server. It is built for a LAN or VPN, not for direct exposure to the internet. See [Known Limitations](#known-limitations).
+
 - [docs/architecture.md](docs/architecture.md): components, actors and actions, trust boundaries
 - [docs/security/threat-model.md](docs/security/threat-model.md): security assessment, attack surface, threats and mitigations
 - [docs/dependencies.md](docs/dependencies.md): how dependencies are chosen, locked and tracked; SCA and VEX policy
+- [docs/security/assurance-case.md](docs/security/assurance-case.md): why the security requirements are met: trust boundaries, secure design principles, OWASP Top 10 countermeasures
 
 ---
 
@@ -200,11 +205,11 @@ Disk management features require `sudo` or `root` access, which significantly ex
 
 ### 6. Harden SSH Connectivity
 
-By default, the SSH client uses `AutoAddPolicy`, which accepts any host key on first connection. This is acceptable for initial setup but is vulnerable to Man-in-the-Middle (MitM) attacks in a production environment.
+By default, FleetPilot trusts a host's SSH key the first time it connects (trust on first use), stores it in `known_hosts` in the data directory, and refuses the connection if the key ever changes. A machine in the middle at the very first connection would not be noticed.
 
 To harden SSH connectivity:
-- Pre-populate the `~/.ssh/known_hosts` file on the FleetPilot server by connecting to each managed host manually once.
-- Change `AutoAddPolicy` to `paramiko.WarningPolicy` or `paramiko.RejectPolicy` in the SSH client configuration within `app.py`.
+- Add every managed host's key in advance, to `known_hosts` in the data directory or to the service user's `~/.ssh/known_hosts` (for example with `ssh-keyscan`, comparing the fingerprints with the hosts' own `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`).
+- Set `FLEETPILOT_SSH_STRICT_HOST_KEYS=true`: FleetPilot then refuses every host whose key it does not already know.
 - Protect the `~/.ssh/` directory on the FleetPilot server with strict permissions (`chmod 700 ~/.ssh`).
 
 ---
@@ -257,7 +262,7 @@ The following security gaps are acknowledged. Contributions to address them are 
 
 | Limitation | Risk | Recommended Mitigation |
 |---|---|---|
-| **SSH `AutoAddPolicy`** | Vulnerable to MitM attacks on first connection | Pre-populate `known_hosts` and switch to `RejectPolicy` (see above) |
+| **SSH host keys trusted on first use** | A machine in the middle at the very first connection is not detected; later key changes are refused | Pre-populate `known_hosts` and set `FLEETPILOT_SSH_STRICT_HOST_KEYS=true` (see above) |
 | **Inline scripts in templates** | The CSP must allow `'unsafe-inline'` scripts, so it limits but does not stop injected scripts | Templates escape all remote data; moving scripts to files would allow a nonce-based CSP |
 | **In-memory login throttling** | Counters reset when FleetPilot restarts and are per worker | Also rate-limit at the reverse proxy, or use fail2ban on the audit log |
 | **Session cookie flags** | Cookies lack `Secure` flag on plain HTTP | Run behind HTTPS; the Security center flags plain HTTP |

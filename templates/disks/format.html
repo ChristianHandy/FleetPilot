@@ -71,7 +71,7 @@
 
 <script>
 (() => {
-  const required = 'ERASE /dev/{{ device }}';
+  const required = {{ ('ERASE /dev/' ~ device)|tojson }};
   const confirmation = document.getElementById('confirmation');
   const submit = document.getElementById('format-submit');
   confirmation.addEventListener('input', () => {

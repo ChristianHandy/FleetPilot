@@ -1,6 +1,8 @@
 # Contributing to FleetPilot
 
-Thanks for helping. Bug reports, ideas, translations, documentation and code are all welcome.
+Thanks for helping. Bug reports, ideas, translations, documentation and code are all welcome. Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md). Where the project is heading is in the [roadmap](ROADMAP.md), and who decides what is in [GOVERNANCE.md](GOVERNANCE.md).
+
+**New here?** Issues labelled [good first issue](https://github.com/ChristianHandy/FleetPilot/labels/good%20first%20issue) are small, self-contained tasks (a test, a translation, a documentation fix) that need little knowledge of the code.
 
 ## Reporting bugs and asking for features
 
@@ -49,11 +51,39 @@ All Python dependencies, with exact versions and hashes, are in `requirements-lo
 
 ## Test policy
 
-- **New functionality comes with automated tests** in a `test_*.py` file at the top level (pytest). Pull requests that add features without tests are asked to add them.
+- **New functionality must come with automated tests** in a `test_*.py` file at the top level (pytest). This is a rule, not a wish: a pull request that adds major functionality without tests is not merged until they are added.
 - **Bug fixes come with a test** that fails without the fix whenever that is practical.
 - Code that talks to devices is tested against recorded or emulated output. See `test_routers.py` and the emulated lab in `demo/live/lab`.
 - Parsers for data from the network belong in the fuzzer (`fuzz/fuzz_parsers.py`).
 - **Coverage must not drop.** CI measures statement and branch coverage and fails below the floor in `.coveragerc`, which is raised as coverage grows. The goal is 90% of statements and 80% of branches.
+
+## Code review
+
+Every change, including the maintainer's own, goes through a pull request and is reviewed before it is merged.
+
+**How:** the reviewer reads the whole diff on GitHub, checks the CI results, and for user-visible changes runs the change locally, against real devices or the emulated lab of the live demo (`python demo/build_live.py`). Questions and requested changes are left as review comments; every conversation must be resolved before merging (branch protection enforces this).
+
+**What is checked:**
+
+- **Purpose:** the change is wanted (an issue, the roadmap or a clear explanation) and does one thing.
+- **Correctness:** it does what it says, including error cases and the devices and operating systems it affects.
+- **Security:**
+  - input from forms, APIs and devices is validated
+  - no shell strings, unparameterized SQL or new paths built from untrusted input
+  - role checks on new routes
+  - secrets are not logged or shown
+  - changes to authentication, the installers, root helpers or the release pipeline are called out in the description
+- **Tests:** new functionality has tests, a fixed bug has a regression test, and the tests would fail without the change.
+- **Style and docs:** the code follows the coding style below; user-facing changes update the user guides, the translations and `CHANGELOG.md`.
+- **Dependencies:** any new dependency follows [docs/dependencies.md](docs/dependencies.md).
+
+**Required to merge:**
+
+- all required checks pass: tests on Python 3.11–3.13, CodeQL, the lint, Bandit, pip-audit, dependency review and DCO
+- every review conversation is resolved
+- the reviewer approves. While FleetPilot has one maintainer, the maintainer reviews contributors' pull requests, and their own (and AI-assisted) changes are reviewed by the maintainer against this list before merging, without a second person (see [GOVERNANCE.md](GOVERNANCE.md#continuity))
+
+A pull request that does not meet these is not merged, however small.
 
 ## Coding style
 

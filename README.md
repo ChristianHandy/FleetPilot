@@ -188,6 +188,12 @@ This component was previously the separate `HAOS_SMART_Monitor` repository. The 
 
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
 
+- [CONTRIBUTING.md](CONTRIBUTING.md): how to contribute, the test policy, code review and coding style
+- [Code of conduct](CODE_OF_CONDUCT.md)
+- [Roadmap](ROADMAP.md): what is planned for the next year, and what is not
+- [Governance](GOVERNANCE.md): roles, decisions and continuity
+- [Good first issues](https://github.com/ChristianHandy/FleetPilot/labels/good%20first%20issue): small tasks to start with
+
 ---
 
 ## Support the project

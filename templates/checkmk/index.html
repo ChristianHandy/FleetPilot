@@ -315,7 +315,7 @@
 
 {% block scripts %}
 <script>
-const TOKEN = "{{ token }}";
+const TOKEN = {{ token|tojson }};
 
 function copyToken() {
   navigator.clipboard.writeText(TOKEN).then(() => showToast("Token copied!", "success"));
