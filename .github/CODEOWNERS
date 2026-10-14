@@ -1,0 +1,8 @@
+# Every change is reviewed by the maintainer. Changes to CI, release and
+# installer code are security-relevant and listed separately for visibility.
+*                       @ChristianHandy
+/.github/               @ChristianHandy
+/install*.sh            @ChristianHandy
+/proxmox/               @ChristianHandy
+/scripts/               @ChristianHandy
+/requirements*.txt      @ChristianHandy

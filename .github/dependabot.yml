@@ -1,10 +1,14 @@
-# Weekly dependency update pull requests (OpenSSF Scorecard: Dependency-Update-Tool).
+# Dependency update pull requests (OpenSSF Scorecard: Dependency-Update-Tool).
+# New versions wait a week before Dependabot proposes them, so a compromised
+# release is usually caught and pulled before it reaches FleetPilot.
 version: 2
 updates:
   - package-ecosystem: pip
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       python:
         patterns: ["*"]
@@ -12,11 +16,26 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: docker
+    directory: /.clusterfuzzlite
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
   - package-ecosystem: nuget
     directory: /FleetPilotCS
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
   - package-ecosystem: gradle
     directory: /FleetPilotAndroid
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7

@@ -7,6 +7,15 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 ### Added
 
 - Pull requests are fuzzed with ClusterFuzzLite (`.clusterfuzzlite/`, Atheris), focused on the changed code.
+- **Signed releases with build provenance**: each release now carries the source archive, the SBOM, `SHA256SUMS` and Sigstore-signed SLSA provenance (`gh attestation verify`). It is assembled as a draft and published in one step.
+- **Hardened CI**:
+  - Least-privilege permissions per job and no stored checkout credentials.
+  - Concurrency limits for every workflow.
+  - CodeQL with the security-extended queries, now also for the workflows themselves.
+  - A zizmor audit of all workflows.
+  - Dependabot groups, a 7-day cooldown, and updates for the fuzzing image.
+  - CODEOWNERS.
+  - The unused "Notify New Version Available" workflow is removed.
 
 - **Vulnerability scan** (Servers → Vulnerabilities): known CVEs in the installed packages of every Linux server (Debian, Ubuntu, Raspberry Pi OS, Proxmox VE/Backup Server, TrueNAS SCALE, Alpine, Rocky Linux, AlmaLinux) from OSV.dev, Docker container images through Trivy when it is installed, pfSense/OPNsense `pkg audit`, and FleetPilot's own Python packages and server. Shows severity (CVSS), the fixing version and where each vulnerability is; filters; scan one target or all; optional daily scan with notifications about new high/critical findings that have a fix; `GET /api/vulnerabilities`, Prometheus metrics and a Security center check. Only package names and versions are sent to OSV.dev; nothing in offline mode; `FLEETPILOT_OSV_URL` for a mirror.
 
