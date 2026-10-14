@@ -267,7 +267,7 @@ def _allowed_key_path(key_path: str):
     for root in roots:
         if candidate.startswith(root + os.sep) and os.path.isfile(candidate):
             return candidate
-    logger.warning("[FanController] Ignoring SSH key outside the allowed folders: %s", key_path)
+    logger.warning("[FanController] Ignoring SSH key outside the allowed folders: %s", safe_errors.log_text(key_path))
     return None
 
 
@@ -1906,7 +1906,7 @@ def detect_controllers(host: str, port: int = 22, username: str = "root",
 
     except Exception as exc:
         result["error"] = safe_errors.public_error(exc)
-        logger.warning("[fan_controller] detect_controllers error for %s: %s", host, exc)
+        logger.warning("[fan_controller] detect_controllers error for %s: %s", safe_errors.log_text(host), safe_errors.log_text(exc))
     finally:
         if ssh:
             try:

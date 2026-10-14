@@ -138,7 +138,7 @@ def save_routes(routes: list[dict[str, Any]]) -> None:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             json.dump(normalized, handle, indent=2, sort_keys=True)
             handle.write("\n")
-        os.chmod(temporary, 0o640)
+        os.chmod(temporary, 0o600)   # read by the root helper only
         os.replace(temporary, ROUTES_FILE)
     finally:
         if os.path.exists(temporary):

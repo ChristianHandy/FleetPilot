@@ -18,7 +18,7 @@ def _make_read_only(root):
         for name in filenames + dirnames:
             path = os.path.join(dirpath, name)
             os.chmod(path, os.stat(path).st_mode & ~(stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH))
-    os.chmod(root, 0o555)
+    os.chmod(root, 0o500)
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores file permissions")
@@ -30,7 +30,7 @@ def test_app_starts_with_read_only_code_directory(tmp_path):
     data.mkdir()
     (code / "logs").mkdir()
     _make_read_only(code)
-    os.chmod(code / "logs", 0o755)   # the installer gives the service data/ and logs/ only
+    os.chmod(code / "logs", 0o700)   # the installer gives the service data/ and logs/ only
     env = dict(os.environ, FLEETPILOT_DATA_DIR=str(data), PYTHONDONTWRITEBYTECODE="1",
                FLEETPILOT_ROUTER_POLL_MINUTES="0")
     script = ("import app, disktool_core as d, version_manager as v\n"
@@ -42,7 +42,7 @@ def test_app_starts_with_read_only_code_directory(tmp_path):
                                 capture_output=True, text=True, timeout=120)
     finally:
         for dirpath, dirnames, _ in os.walk(code):
-            os.chmod(dirpath, 0o755)
+            os.chmod(dirpath, 0o700)
     assert result.returncode == 0, result.stderr[-2000:]
     assert result.stdout.strip().splitlines()[-1].startswith(str(data))
 

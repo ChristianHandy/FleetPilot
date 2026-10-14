@@ -200,7 +200,7 @@ def apply() -> None:
     try:
         with os.fdopen(descriptor, 'w', encoding='utf-8') as handle:
             handle.write(content)
-        os.chmod(candidate, 0o640)
+        os.chmod(candidate, 0o600)  # HAProxy reads its configuration as root
         check = command(['haproxy', '-c', '-f', str(candidate)])
         if check.returncode != 0:
             fail(check.stdout + check.stderr, 2)
