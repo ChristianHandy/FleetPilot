@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 ARP Tracker Module - Track IP address changes using ARP tables and MAC addresses.
 
@@ -10,7 +12,6 @@ This module provides functionality to:
 
 import subprocess
 import re
-import json
 import logging
 import platform
 from typing import Dict, List, Tuple, Optional

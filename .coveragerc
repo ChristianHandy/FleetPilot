@@ -1,0 +1,24 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Test coverage of the FleetPilot server (python -m coverage run -m pytest; coverage report).
+# Not measured: the tests themselves, the browser demo and fuzzers, the stress script that runs
+# on managed hosts, the Home Assistant integration (needs Home Assistant) and the C#/Android clients.
+[run]
+branch = True
+source = .
+omit =
+    test_*.py
+    conftest.py
+    demo/*
+    fuzz/*
+    hw_monitor/hw_stress_test.py
+    integrations/*
+    FleetPilotCS/*
+    FleetPilotAndroid/*
+
+[report]
+# Raised as tests are added; the goal is 90% of statements and 80% of branches (ROADMAP.md).
+fail_under = 43
+precision = 1
+skip_covered = True
+show_missing = True

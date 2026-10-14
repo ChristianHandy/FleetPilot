@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 # FleetPilot: reset a user's password on the server.
 #
 #   sudo bash /opt/fleetpilot/reset-password.sh            # user "admin", asks for a password

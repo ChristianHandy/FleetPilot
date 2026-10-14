@@ -13,7 +13,7 @@ Updates for Linux and Windows machines, SMART disk health, FRITZ!Box / OpenWrt /
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/ChristianHandy/FleetPilot/badge)](https://scorecard.dev/viewer/?uri=github.com/ChristianHandy/FleetPilot)
 [![OpenSSF Baseline](https://www.bestpractices.dev/projects/15465/baseline)](https://www.bestpractices.dev/projects/15465)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15465/badge)](https://www.bestpractices.dev/projects/15465)
-[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue)](https://python.org)
 
 <img src="docs/screenshots/routers.png" alt="FleetPilot routers page: FRITZ!Box, repeater, OpenWrt and OPNsense with status, firmware, uptime and connected devices" width="100%">
@@ -204,7 +204,7 @@ If FleetPilot is useful to you, a ⭐ on GitHub helps other people find it, and 
 
 ## License
 
-[GNU General Public License v3.0](LICENSE): free to use, study, change and share; changed versions you distribute must stay under the GPL.
+[GNU General Public License v3.0 or later](LICENSE) (`SPDX-License-Identifier: GPL-3.0-or-later`, stated in every source file): free to use, study, change and share; changed versions you distribute must stay under the GPL.
 
 ---
 

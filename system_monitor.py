@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 system_monitor.py — FleetPilot System Resource & Temperature Monitor
 Collects CPU, RAM, disk, network and temperature metrics every 60 seconds.
@@ -5,6 +7,7 @@ Stores history in a SQLite database (DATA_DIR/system_monitor.db).
 """
 import os
 import sqlite3
+import db_util
 import threading
 import time
 import json
@@ -23,7 +26,7 @@ _RETENTION_DAYS = 30  # keep 30 days of history
 # ── Database helpers ──────────────────────────────────────────────────────────
 
 def _get_db():
-    conn = sqlite3.connect(_DB_PATH, timeout=10)
+    conn = sqlite3.connect(_DB_PATH, timeout=10, factory=db_util.ClosingConnection)
     conn.row_factory = sqlite3.Row
     return conn
 

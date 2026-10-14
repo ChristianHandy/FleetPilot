@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Vulnerability (CVE) scan of the servers, FleetPilot itself and appliance services.
 
 What is scanned:
@@ -21,6 +23,7 @@ import math
 import os
 import re
 import sqlite3
+import db_util
 import subprocess
 import threading
 import time
@@ -79,7 +82,7 @@ def init_db(data_dir: str) -> None:
 def _db() -> sqlite3.Connection:
     if not _DB_PATH:
         raise RuntimeError("vuln_scanner.init_db() was not called.")
-    conn = sqlite3.connect(_DB_PATH, timeout=15)
+    conn = sqlite3.connect(_DB_PATH, timeout=15, factory=db_util.ClosingConnection)
     conn.row_factory = sqlite3.Row
     return conn
 

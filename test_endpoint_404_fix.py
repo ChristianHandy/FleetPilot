@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Test script to verify the /disks/pluginmanager/ endpoint fix
 Tests that the endpoint exists and old endpoint returns 404
 """
 import sys
 import os
-import time
-import threading
 
 # Add the parent directory to the path to import modules
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -26,26 +26,26 @@ def test_endpoint_exists():
             # Should be 302 (redirect) not 404
             if response.status_code == 404:
                 print("✗ Endpoint returns 404 - endpoint does not exist")
-                return False
+                raise AssertionError("test_endpoint_exists failed; see the output above")
             elif response.status_code == 302:
                 # Check redirect location
                 location = response.headers.get('Location', '')
                 print(f"  Redirects to: {location}")
                 if 'login' in location.lower() or location.startswith('/?next='):
                     print("✓ Endpoint exists and redirects to login (as expected)")
-                    return True
+                    return
                 else:
                     print(f"✗ Unexpected redirect location: {location}")
-                    return False
+                    raise AssertionError("test_endpoint_exists failed; see the output above")
             else:
                 print(f"✓ Endpoint exists (status {response.status_code})")
-                return True
+                return
                 
     except Exception as e:
         print(f"✗ Test failed: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        raise AssertionError("test_endpoint_exists failed; see the output above")
 
 def test_old_endpoint_404():
     """Test that old /pluginmanager/ endpoint returns 404"""
@@ -61,16 +61,16 @@ def test_old_endpoint_404():
             
             if response.status_code == 404:
                 print("✓ Old endpoint correctly returns 404")
-                return True
+                return
             else:
                 print(f"✗ Old endpoint should return 404 but returns {response.status_code}")
-                return False
+                raise AssertionError("test_old_endpoint_404 failed; see the output above")
                 
     except Exception as e:
         print(f"✗ Test failed: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        raise AssertionError("test_old_endpoint_404 failed; see the output above")
 
 def test_endpoint_consistency():
     """Test that plugin manager endpoint is consistent with other disk routes"""
@@ -92,49 +92,17 @@ def test_endpoint_consistency():
         if plugin_manager_routes:
             print(f"  Plugin manager routes: {plugin_manager_routes}")
             print("✓ Plugin manager endpoint is under /disks hierarchy")
-            return True
+            return
         else:
             print("✗ No plugin manager routes found under /disks")
-            return False
+            raise AssertionError("test_endpoint_consistency failed; see the output above")
             
     except Exception as e:
         print(f"✗ Test failed: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        raise AssertionError("test_endpoint_consistency failed; see the output above")
 
-def main():
-    """Run all tests"""
-    print("=" * 70)
-    print("Endpoint 404 Fix Verification Test Suite")
-    print("=" * 70)
-    
-    tests = [
-        test_endpoint_exists,
-        test_old_endpoint_404,
-        test_endpoint_consistency,
-    ]
-    
-    results = []
-    for test in tests:
-        try:
-            results.append(test())
-        except Exception as e:
-            print(f"\n✗ Test crashed: {e}")
-            import traceback
-            traceback.print_exc()
-            results.append(False)
-    
-    print("\n" + "=" * 70)
-    print(f"Test Results: {sum(results)}/{len(results)} passed")
-    print("=" * 70)
-    
-    if all(results):
-        print("\n✓ All tests passed! The endpoint fix is working correctly.")
-        return 0
-    else:
-        print("\n✗ Some tests failed")
-        return 1
-
-if __name__ == '__main__':
-    sys.exit(main())
+if __name__ == "__main__":
+    import pytest
+    sys.exit(pytest.main([__file__, "-q"]))

@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Email notification system for the FleetPilot.
 Sends scheduled reports and error notifications via SMTP.
@@ -6,7 +8,6 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
-import json
 import logging
 import email_config
 
@@ -108,7 +109,7 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         status_text = "ONLINE" if status else "OFFLINE"
         body += f"  {hostname}: {status_text}\n"
     
-    body += f"""
+    body += """
 === RECENT UPDATE HISTORY ===
 """
     

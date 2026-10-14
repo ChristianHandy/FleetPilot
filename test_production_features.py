@@ -1,4 +1,7 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests for backups, Prometheus metrics, SMART alert de-duplication and email settings."""
+import pathlib
 import io
 import json
 import os
@@ -100,6 +103,7 @@ def test_backup_pages_require_admin_and_work(admin_client):
     name = config_backup.list_backups(fp.DATA_DIR)[0]['name']
     r = admin_client.get(f'/system/backups/download/{name}')
     assert r.status_code == 200 and r.data[:2] == b'\x1f\x8b'
+    r.close()
     assert admin_client.get('/system/backups/download/..%2Fusers.db').status_code == 404
     assert admin_client.post(f'/system/backups/delete/{name}').status_code == 302
 
@@ -131,7 +135,7 @@ def test_email_password_is_encrypted_and_not_rendered(admin_client):
     settings = email_config.load_email_settings()
     settings.update(smtp_server='smtp.example.com', smtp_password='s3cret-smtp-pass')
     email_config.save_email_settings(settings)
-    raw = open(email_config._config_path()).read()
+    raw = pathlib.Path(email_config._config_path()).read_text()
     assert 's3cret-smtp-pass' not in raw
     assert email_config.load_email_settings()['smtp_password'] == 's3cret-smtp-pass'
     page = admin_client.get('/email_settings').get_data(as_text=True)

@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The live demo's emulated homelab still works with the current FleetPilot.
 
 The lab replaces threads, sockets and SSH process-wide, so it runs in a separate

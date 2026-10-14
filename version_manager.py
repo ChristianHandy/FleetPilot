@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Version Manager Module
 Handles checking for new dashboard versions from GitHub and managing update notifications.

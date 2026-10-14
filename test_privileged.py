@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Root helpers and self-update for both install types: install.sh (git, service user) and release tarballs run as root."""
 import time
 

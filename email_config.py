@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Email configuration management for FleetPilot.
 Handles email settings for scheduled reports and notifications.

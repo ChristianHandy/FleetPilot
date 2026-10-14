@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 backup_controller.py — FleetPilot Universal Backup Server Integration
 
@@ -20,6 +22,7 @@ Database: DATA_DIR/backup_controller.db
 """
 
 import safe_errors
+import secret_box
 import json
 import logging
 import os
@@ -30,7 +33,7 @@ import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import requests
 import urllib3
@@ -40,7 +43,6 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logger = logging.getLogger(__name__)
 
 # ── Encryption helpers ────────────────────────────────────────────────────────
-import secret_box
 _box = secret_box.SecretBox("raw32")
 _encrypt = _box.encrypt
 _decrypt = _box.decrypt
@@ -119,7 +121,7 @@ def _ssh_run(host: str, port: int, username: str, password: str,
              ssh_key: str, command: str, timeout: int = 30) -> Tuple[int, str, str]:
     """Run a command on a remote host via SSH. Returns (returncode, stdout, stderr)."""
     try:
-        import paramiko
+        import paramiko  # noqa: F401  (only checks that paramiko is installed)
         import ssh_helper
     except ImportError:
         return 1, "", "paramiko not installed"
@@ -494,20 +496,6 @@ def _poll_pbs(srv: Dict) -> Dict:
     except Exception:
         tasks = []
 
-    # Get backup jobs config
-    try:
-        r = sess.get(f"{base}/config/sync", timeout=15)
-        sync_jobs = r.json().get("data", []) if r.ok else []
-    except Exception:
-        sync_jobs = []
-
-    # Get backup schedules
-    try:
-        r = sess.get(f"{base}/config/backup", timeout=15)
-        backup_jobs_cfg = r.json().get("data", []) if r.ok else []
-    except Exception:
-        backup_jobs_cfg = []
-
     # Store jobs from tasks
     with _db_lock:
         conn = _db()
@@ -768,7 +756,6 @@ def _poll_borgwarehouse(srv: Dict) -> Dict:
             last_save = repo.get("lastSave", 0)
             alert_threshold = repo.get("alert", 0)
             storage_used = repo.get("storageUsed", 0)
-            storage_size = repo.get("storageSize", 0)
 
             # Determine status
             if alert_threshold and last_save:

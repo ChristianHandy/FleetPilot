@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 data_sync.py — Automatic Data Synchronisation for FleetPilot
 
@@ -21,16 +23,13 @@ Usage:
 
 import safe_errors
 import os
-import json
-import sqlite3
 import threading
-import time
 import logging
 import hashlib
 import hmac
 import shutil
 import tempfile
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, List
 
 logger = logging.getLogger(__name__)
@@ -226,7 +225,7 @@ def _sync_once():
     try:
         peer_manifest = _get_peer_manifest(_peer_url)
         if peer_manifest is None:
-            _sync_errors.append(f"{datetime.utcnow().isoformat()[:19]} Peer unreachable")
+            _sync_errors.append(f"{datetime.now(timezone.utc).replace(tzinfo=None).isoformat()[:19]} Peer unreachable")
             _sync_errors = _sync_errors[-20:]
             return
 
@@ -260,12 +259,12 @@ def _sync_once():
                         pulled.append(fname)
                         logger.debug(f"[Sync] Pulled {fname}")
 
-        _last_sync = datetime.utcnow().isoformat()[:19]
+        _last_sync = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()[:19]
         if pushed or pulled:
             logger.info(f"[Sync] Cycle complete — pushed: {pushed}, pulled: {pulled}")
 
     except Exception as e:
-        msg = f"{datetime.utcnow().isoformat()[:19]} {safe_errors.public_error(e, 'Sync')}"
+        msg = f"{datetime.now(timezone.utc).replace(tzinfo=None).isoformat()[:19]} {safe_errors.public_error(e, 'Sync')}"
         _sync_errors.append(msg)
         _sync_errors = _sync_errors[-20:]
 

@@ -1,6 +1,10 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 addon_meta = {
     "name": "example_plugin",
     "html": '''
+    {# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+       SPDX-License-Identifier: GPL-3.0-or-later -#}
     {% extends 'disks/base.html' %}
     {% block title %}Example Plugin – {{ device }}{% endblock %}
     {% block content %}

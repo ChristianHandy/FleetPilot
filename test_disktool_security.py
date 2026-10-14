@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Test script for disktool_core security features
 Tests the fix for command injection vulnerability at line 80
@@ -26,13 +28,13 @@ def test_run_function_requires_list():
     
     # Test that valid list commands work
     try:
-        result = disktool_core.run(['echo', 'test'])
+        disktool_core.run(['echo', 'test'])
         print("✓ List commands are accepted")
     except Exception as e:
         print(f"✗ Valid list command failed: {e}")
-        return False
+        raise AssertionError("test_run_function_requires_list failed; see the output above")
     
-    return True
+    return
 
 
 def test_run_function_validates_empty_list():
@@ -45,10 +47,10 @@ def test_run_function_validates_empty_list():
     except ValueError as e:
         assert "cannot be empty" in str(e)
         print("✓ Empty command lists are rejected")
-        return True
+        return
     except Exception as e:
         print(f"✗ Unexpected error: {e}")
-        return False
+        raise AssertionError("test_run_function_validates_empty_list failed; see the output above")
 
 
 def test_run_function_validates_argument_types():
@@ -62,10 +64,10 @@ def test_run_function_validates_argument_types():
     except ValueError as e:
         assert "must be strings" in str(e)
         print("✓ Non-string arguments are rejected")
-        return True
+        return
     except Exception as e:
         print(f"✗ Unexpected error: {e}")
-        return False
+        raise AssertionError("test_run_function_validates_argument_types failed; see the output above")
 
 
 def test_run_function_validates_executable():
@@ -91,8 +93,8 @@ def test_run_function_validates_executable():
         try:
             disktool_core.run(cmd)
             print(f"✗ Dangerous command accepted: {cmd}")
-            return False
-        except ValueError as e:
+            raise AssertionError("test_run_function_validates_executable failed; see the output above")
+        except ValueError:
             # All should raise ValueError with appropriate message
             pass
     
@@ -108,17 +110,17 @@ def test_run_function_validates_executable():
     
     for cmd in valid_commands:
         try:
-            result = disktool_core.run(cmd)
+            disktool_core.run(cmd)
             # Command should execute without raising ValueError
         except ValueError as e:
             print(f"✗ Valid command rejected: {cmd} - {e}")
-            return False
+            raise AssertionError("test_run_function_validates_executable failed; see the output above")
         except Exception:
             # Other exceptions (like command not found) are OK
             pass
     
     print("✓ Valid executables are accepted")
-    return True
+    return
 
 
 def test_sanitize_device_name():
@@ -133,7 +135,7 @@ def test_sanitize_device_name():
             assert result == name
         except Exception as e:
             print(f"✗ Valid device name rejected: {name} - {e}")
-            return False
+            raise AssertionError("test_sanitize_device_name failed; see the output above")
     
     print("✓ Valid device names accepted")
     
@@ -155,12 +157,12 @@ def test_sanitize_device_name():
         try:
             disktool_core.sanitize_device_name(name)
             print(f"✗ Invalid device name accepted: {name}")
-            return False
+            raise AssertionError("test_sanitize_device_name failed; see the output above")
         except (ValueError, Exception):
             pass
     
     print("✓ Invalid device names rejected")
-    return True
+    return
 
 
 def test_subprocess_shell_false():
@@ -175,48 +177,12 @@ def test_subprocess_shell_false():
     # Check that shell=False is explicitly set
     if 'shell=False' in source:
         print("✓ subprocess.run explicitly uses shell=False")
-        return True
+        return
     else:
         print("✗ subprocess.run does not explicitly set shell=False")
-        return False
+        raise AssertionError("test_subprocess_shell_false failed; see the output above")
 
 
-def main():
-    """Run all tests"""
-    print("=" * 60)
-    print("Disktool Core Security Test Suite")
-    print("=" * 60)
-    
-    tests = [
-        test_run_function_requires_list,
-        test_run_function_validates_empty_list,
-        test_run_function_validates_argument_types,
-        test_run_function_validates_executable,
-        test_sanitize_device_name,
-        test_subprocess_shell_false,
-    ]
-    
-    results = []
-    for test in tests:
-        try:
-            results.append(test())
-        except Exception as e:
-            print(f"\n✗ Test crashed: {e}")
-            import traceback
-            traceback.print_exc()
-            results.append(False)
-    
-    print("\n" + "=" * 60)
-    print(f"Test Results: {sum(results)}/{len(results)} passed")
-    print("=" * 60)
-    
-    if all(results):
-        print("\n✓ All security tests passed!")
-        return 0
-    else:
-        print("\n✗ Some security tests failed")
-        return 1
-
-
-if __name__ == '__main__':
-    sys.exit(main())
+if __name__ == "__main__":
+    import pytest
+    sys.exit(pytest.main([__file__, "-q"]))

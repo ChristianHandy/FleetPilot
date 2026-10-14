@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Authoritative FleetPilot release metadata.
 
 Keep this module dependency-free so the web interface, health checks, deployment

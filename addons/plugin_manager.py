@@ -1,4 +1,6 @@
-from flask import Blueprint, render_template, jsonify, current_app, request, flash, redirect, url_for, session
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+from flask import Blueprint, render_template, jsonify, current_app, flash, redirect, url_for, session
 import requests
 import os
 import re

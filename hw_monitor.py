@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 hw_monitor.py — Hardware Monitor & Stress Test Module for FleetPilot
 =====================================================================
@@ -13,8 +15,16 @@ New in this version:
 
 import safe_errors
 import secret_box
-import paramiko
-import ssh_helper, threading, time, json, os, re, shlex, sqlite3, datetime, uuid
+import ssh_helper
+import threading
+import time
+import json
+import os
+import re
+import shlex
+import sqlite3
+import datetime
+import uuid
 
 _box = secret_box.SecretBox("sha256")
 
@@ -158,14 +168,17 @@ def init_db(data_dir):
         ("hw_live_metrics","gpu_mem_used_mb","INTEGER"),
         ("hw_live_metrics","gpu_mem_total_mb","INTEGER"),
     ]:
-        try: conn.execute(f"ALTER TABLE {col[0]} ADD COLUMN {col[1]} {col[2]}")
-        except: pass
+        try:
+            conn.execute(f"ALTER TABLE {col[0]} ADD COLUMN {col[1]} {col[2]}")
+        except Exception:
+            pass
     conn.execute("UPDATE hw_servers SET stress_log='/root/hw_stress_test/stress_test.log' WHERE stress_log IS NULL")
     conn.execute("UPDATE hw_servers SET stress_script='/root/hw_stress_test.py' WHERE stress_script IS NULL")
     # Encrypt passwords stored in plain text by earlier versions.
     for row in conn.execute("SELECT id, ssh_pass FROM hw_servers WHERE ssh_pass != '' AND ssh_pass NOT LIKE 'gAAAAA%'").fetchall():
         conn.execute("UPDATE hw_servers SET ssh_pass=? WHERE id=?", (_enc(row[1]), row[0]))
-    conn.commit(); conn.close()
+    conn.commit()
+    conn.close()
     # Auto-import servers from hosts.json (central registry)
     _auto_import_from_hosts(data_dir)
 
@@ -220,41 +233,41 @@ try:
     parts2 = list(map(int, line.split()[1:]))
     idle2 = parts2[3]; total2 = sum(parts2)
     d['cpu_pct'] = round(100*(1-(idle2-idle)/(total2-total)),1)
-except: d['cpu_pct'] = None
+except Exception: d['cpu_pct'] = None
 try: d['cpu_cores'] = os.cpu_count()
-except: pass
+except Exception: pass
 
 # ── Memory ──
 try:
     mi = {}
     with open('/proc/meminfo') as _mf:
         for l in _mf:
-        k,v = l.split(':')
-        mi[k.strip()] = int(v.strip().split()[0])
+            k,v = l.split(':')
+            mi[k.strip()] = int(v.strip().split()[0])
     d['ram_total_mb'] = mi['MemTotal']//1024
     d['ram_used_mb'] = (mi['MemTotal']-mi['MemAvailable'])//1024
     d['swap_total_mb'] = mi.get('SwapTotal',0)//1024
     d['swap_used_mb'] = (mi.get('SwapTotal',0)-mi.get('SwapFree',0))//1024
-except: pass
+except Exception: pass
 
 # ── Uptime ──
 try:
-            with open('/proc/uptime') as _uf: d['uptime_s'] = int(float(_uf.read().split()[0]))
-except: pass
+    with open('/proc/uptime') as _uf: d['uptime_s'] = int(float(_uf.read().split()[0]))
+except Exception: pass
 
 # ── Network ──
 try:
     with open('/proc/net/dev') as _nf:
         for l in _nf:
-        l = l.strip()
-        if ':' in l and not l.startswith('lo'):
-            iface = l.split(':')[0].strip()
-            vals = l.split(':')[1].split()
-            d['net_iface'] = iface
-            d['net_rx_bytes'] = int(vals[0])
-            d['net_tx_bytes'] = int(vals[8])
-            break
-except: pass
+            l = l.strip()
+            if ':' in l and not l.startswith('lo'):
+                iface = l.split(':')[0].strip()
+                vals = l.split(':')[1].split()
+                d['net_iface'] = iface
+                d['net_rx_bytes'] = int(vals[0])
+                d['net_tx_bytes'] = int(vals[8])
+                break
+except Exception: pass
 
 # ── Disk I/O ──
 try:
@@ -264,7 +277,7 @@ try:
             d['disk_read_sectors'] = int(p[5])
             d['disk_write_sectors'] = int(p[9])
             break
-except: pass
+except Exception: pass
 
 # ── CPU Temperature (with millidegree fix and AMD Tdie preference) ──
 try:
@@ -305,7 +318,7 @@ except Exception:
         d['cpu_temp'] = max(valid) if valid else (max(temps) if temps else None)
         fans_rpm = [int(m) for m in re.findall(r'([0-9]+) RPM', r.stdout)]
         d['fans'] = [{'chip':'sensors','feature':'fan'+str(i+1),'rpm':rpm,'channel':i+1} for i,rpm in enumerate(fans_rpm)]
-    except: pass
+    except Exception: pass
 
 # ── GPU: NVIDIA ──
 nvidia_found = False
@@ -323,7 +336,7 @@ try:
         d['gpu_on_bus'] = True
         d['gpu_vendor'] = 'nvidia'
         nvidia_found = True
-except: pass
+except Exception: pass
 
 # ── GPU: AMD (rocm-smi) ──
 if not nvidia_found:
@@ -347,7 +360,7 @@ if not nvidia_found:
                     if vram_used: d['gpu_mem_used_mb'] = int(vram_used)//1024//1024
                     if vram_total: d['gpu_mem_total_mb'] = int(vram_total)//1024//1024
                     break
-    except: pass
+    except Exception: pass
 
 # ── GPU: AMD sysfs fallback ──
 if not nvidia_found and 'gpu_temp' not in d:
@@ -367,7 +380,7 @@ if not nvidia_found and 'gpu_temp' not in d:
                         d['gpu_vendor'] = 'amd'
                         break
                 if 'gpu_temp' in d: break
-    except: pass
+    except Exception: pass
 
 if 'gpu_on_bus' not in d: d['gpu_on_bus'] = True
 
@@ -385,7 +398,7 @@ try:
         for l in reversed(lines):
             if '[CRITICAL]' in l:
                 d['stress_failure'] = l.split('[CRITICAL]')[-1].strip(); break
-except: pass
+except Exception: pass
 d['ts'] = time.time()
 print(json.dumps(d))
 """
@@ -406,14 +419,14 @@ for hwmon in sorted(glob.glob('/sys/class/hwmon/hwmon*')):
                 'current':int(open(pwm).read().strip()) if os.path.exists(pwm) else None,
                 'max':int(open(max_f).read().strip()) if os.path.exists(max_f) else 255,
                 'enable':int(open(en).read().strip()) if os.path.exists(en) else None})
-        except: pass
+        except Exception: pass
     for fan_in in sorted(glob.glob(hwmon+'/fan*_input')):
         m = re.search(r'fan(\\d+)', fan_in)
         ch = int(m.group(1)) if m else 0
         try:
             rpm = int(open(fan_in).read().strip())
             fans.append({'hwmon':hwmon,'name':name,'type':'rpm','channel':ch,'rpm':rpm,'path':fan_in})
-        except: pass
+        except Exception: pass
 print(json.dumps(fans))
 """
 
@@ -427,14 +440,16 @@ def _task_run(task_id, server, action_fn, title):
     now = datetime.datetime.now().isoformat()
     conn.execute("INSERT OR REPLACE INTO hw_tasks (id,server_id,server_name,type,title,status,started_ts,log) VALUES (?,?,?,?,?,?,?,?)",
                  (task_id, server["id"], server["name"], action_fn.__name__, title, "running", now, ""))
-    conn.commit(); conn.close()
+    conn.commit()
+    conn.close()
 
     log_lines = []
     def append_log(line):
         log_lines.append(line)
         conn2 = get_db()
         conn2.execute("UPDATE hw_tasks SET log=? WHERE id=?", ("\n".join(log_lines[-200:]), task_id))
-        conn2.commit(); conn2.close()
+        conn2.commit()
+        conn2.close()
 
     try:
         result = action_fn(server, append_log)
@@ -447,7 +462,8 @@ def _task_run(task_id, server, action_fn, title):
     conn3 = get_db()
     conn3.execute("UPDATE hw_tasks SET status=?,finished_ts=?,result=? WHERE id=?",
                   (status, datetime.datetime.now().isoformat(), str(result)[:500], task_id))
-    conn3.commit(); conn3.close()
+    conn3.commit()
+    conn3.close()
 
 def start_task(server, action_fn, title):
     """Start a background task and return its ID."""
@@ -465,18 +481,25 @@ _poll_thread = None
 
 def collect_metrics(server):
     sid = server["id"]
-    ip = server["ip"]; port = server["ssh_port"]
-    user = server["ssh_user"]; pw = _pw(server)
+    ip = server["ip"]
+    port = server["ssh_port"]
+    user = server["ssh_user"]
+    pw = _pw(server)
     ok, raw = ssh_run_script(ip, port, user, pw, COLLECT_SCRIPT, timeout=15)
     now = datetime.datetime.now().isoformat()
     conn = get_db()
     if not ok:
         conn.execute("INSERT OR REPLACE INTO hw_live_metrics (server_id,ts,reachable) VALUES (?,?,0)", (sid, now))
-        conn.commit(); conn.close(); return
-    try: data = json.loads(raw)
+        conn.commit()
+        conn.close()
+        return
+    try:
+        data = json.loads(raw)
     except Exception:
         conn.execute("INSERT OR REPLACE INTO hw_live_metrics (server_id,ts,reachable) VALUES (?,?,0)", (sid, now))
-        conn.commit(); conn.close(); return
+        conn.commit()
+        conn.close()
+        return
 
     net_rx_kbps = net_tx_kbps = None
     if "net_rx_bytes" in data:
@@ -571,8 +594,10 @@ def _polling_loop():
                 "SELECT * FROM hw_servers WHERE enabled=1").fetchall()]
             conn.close()
             threads = [threading.Thread(target=collect_metrics, args=(s,), daemon=True) for s in servers]
-            for t in threads: t.start()
-            for t in threads: t.join(timeout=18)
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=18)
         except Exception as e:
             print(f"[HW Monitor] Poll error: {e}")
         waited = 0
@@ -592,7 +617,7 @@ def start_polling():
 def register_routes(app, login_required, csrf=None, operator_required=None):
     """Register all HW Monitor routes on the FleetPilot Flask app."""
     operator_only = operator_required or (lambda f: f)
-    from flask import render_template, jsonify, request, redirect, Response
+    from flask import render_template, jsonify, request, redirect
 
     @app.before_request
     def _hw_monitor_viewed():
@@ -601,8 +626,10 @@ def register_routes(app, login_required, csrf=None, operator_required=None):
 
     def exempt(f):
         if csrf:
-            try: return csrf.exempt(f)
-            except: pass
+            try:
+                return csrf.exempt(f)
+            except Exception:
+                pass
         return f
 
     @app.route("/hw")
@@ -656,8 +683,10 @@ def register_routes(app, login_required, csrf=None, operator_required=None):
         result = []
         for r in rows:
             d = dict(r)
-            try: d["fans"] = json.loads(d["fans"] or "[]")
-            except: d["fans"] = []
+            try:
+                d["fans"] = json.loads(d["fans"] or "[]")
+            except Exception:
+                d["fans"] = []
             result.append(d)
         return jsonify(result)
 
@@ -667,10 +696,13 @@ def register_routes(app, login_required, csrf=None, operator_required=None):
         conn = get_db()
         row = conn.execute("SELECT * FROM hw_live_metrics WHERE server_id=?", (sid,)).fetchone()
         conn.close()
-        if not row: return jsonify({})
+        if not row:
+            return jsonify({})
         d = dict(row)
-        try: d["fans"] = json.loads(d["fans"] or "[]")
-        except: d["fans"] = []
+        try:
+            d["fans"] = json.loads(d["fans"] or "[]")
+        except Exception:
+            d["fans"] = []
         return jsonify(d)
 
     @app.route("/api/hw/server/<int:sid>/history")
@@ -704,7 +736,8 @@ def register_routes(app, login_required, csrf=None, operator_required=None):
         conn = get_db()
         row = conn.execute("SELECT * FROM hw_servers WHERE id=?", (sid,)).fetchone()
         conn.close()
-        if not row: return jsonify({"ok": False, "output": "Server not found"})
+        if not row:
+            return jsonify({"ok": False, "output": "Server not found"})
         s = dict(row)
         ip, port, user, pw = s["ip"], s["ssh_port"], s["ssh_user"], _pw(s)
         script = s.get("stress_script", "/root/hw_stress_test.py")
@@ -746,8 +779,10 @@ def register_routes(app, login_required, csrf=None, operator_required=None):
         elif action == "detect_fans":
             ok, out = ssh_run_script(ip, port, user, pw, FAN_DETECT_SCRIPT, timeout=12)
             if ok:
-                try: return jsonify({"ok": True, "fans": json.loads(out)})
-                except: return jsonify({"ok": False, "fans": [], "output": out[:200]})
+                try:
+                    return jsonify({"ok": True, "fans": json.loads(out)})
+                except Exception:
+                    return jsonify({"ok": False, "fans": [], "output": out[:200]})
             return jsonify({"ok": False, "fans": [], "output": out[:200]})
         elif action == "check_deps":
             check = ("echo stress-ng:$(which stress-ng 2>/dev/null && echo OK || echo MISSING); "
@@ -773,7 +808,8 @@ def register_routes(app, login_required, csrf=None, operator_required=None):
         conn = get_db()
         row = conn.execute("SELECT * FROM hw_servers WHERE id=?", (sid,)).fetchone()
         conn.close()
-        if not row: return jsonify({"ok": False, "output": "Server not found"})
+        if not row:
+            return jsonify({"ok": False, "output": "Server not found"})
         s = dict(row)
         pwm_path = str(data.get("pwm_path") or "")
         # Only hwmon PWM nodes; the path is written to by root on the remote host.
@@ -803,7 +839,8 @@ def register_routes(app, login_required, csrf=None, operator_required=None):
         conn.execute("INSERT INTO hw_alerts (server_id,ts,type,message,acknowledged,ack_ts,ack_note) "
                      "SELECT ?,?,?,stress_failure,1,?,? FROM hw_live_metrics WHERE server_id=?",
                      (sid, now, 'stress_failure', now, note, sid))
-        conn.commit(); conn.close()
+        conn.commit()
+        conn.close()
         return jsonify({"ok": True})
 
     @app.route("/api/hw/server/<int:sid>/alerts")
@@ -840,7 +877,8 @@ def register_routes(app, login_required, csrf=None, operator_required=None):
         conn = get_db()
         row = conn.execute("SELECT log,status FROM hw_tasks WHERE id=?", (task_id,)).fetchone()
         conn.close()
-        if not row: return jsonify({"lines": [], "status": "not_found"})
+        if not row:
+            return jsonify({"lines": [], "status": "not_found"})
         return jsonify({"lines": (row["log"] or "").splitlines()[-100:], "status": row["status"]})
 
     @app.route("/api/hw/tasks/<task_id>/cancel", methods=["POST"])
@@ -851,7 +889,8 @@ def register_routes(app, login_required, csrf=None, operator_required=None):
         conn = get_db()
         conn.execute("UPDATE hw_tasks SET status='cancelled',finished_ts=? WHERE id=? AND status='running'",
                      (datetime.datetime.now().isoformat(), task_id))
-        conn.commit(); conn.close()
+        conn.commit()
+        conn.close()
         return jsonify({"ok": True})
 
     @app.route("/api/hw/tasks/<task_id>/delete", methods=["POST"])
@@ -861,7 +900,8 @@ def register_routes(app, login_required, csrf=None, operator_required=None):
     def api_hw_task_delete(task_id):
         conn = get_db()
         conn.execute("DELETE FROM hw_tasks WHERE id=?", (task_id,))
-        conn.commit(); conn.close()
+        conn.commit()
+        conn.close()
         return jsonify({"ok": True})
 
     @app.route("/api/hw/tasks/clear", methods=["POST"])
@@ -871,7 +911,8 @@ def register_routes(app, login_required, csrf=None, operator_required=None):
     def api_hw_tasks_clear():
         conn = get_db()
         conn.execute("DELETE FROM hw_tasks WHERE status != 'running'")
-        conn.commit(); conn.close()
+        conn.commit()
+        conn.close()
         return jsonify({"ok": True})
 
     # ── Server Management ──
@@ -888,7 +929,8 @@ def register_routes(app, login_required, csrf=None, operator_required=None):
             conn = get_db()
             conn.execute("INSERT INTO hw_servers (name,ip,ssh_port,ssh_user,ssh_pass) VALUES (?,?,?,?,?)",
                          (d["name"], d["ip"], d.get("port", 22), d.get("user", "root"), _enc(d.get("password", ""))))
-            conn.commit(); conn.close()
+            conn.commit()
+            conn.close()
             return jsonify({"ok": True})
         conn = get_db()
         rows = [dict(r) for r in conn.execute(
@@ -903,5 +945,6 @@ def register_routes(app, login_required, csrf=None, operator_required=None):
     def api_hw_del_server(sid):
         conn = get_db()
         conn.execute("UPDATE hw_servers SET enabled=0 WHERE id=?", (sid,))
-        conn.commit(); conn.close()
+        conn.commit()
+        conn.close()
         return jsonify({"ok": True})

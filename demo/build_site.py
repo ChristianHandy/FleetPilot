@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Render the static, clickable FleetPilot demo for GitHub Pages.
 
     python demo/build_site.py [OUT]      # writes OUT (default demo/site/tour/)

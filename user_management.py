@@ -1,11 +1,16 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 User Management Module
 Provides user authentication, role-based access control, and user CRUD operations.
 """
 import sqlite3
+import db_util
+from functools import wraps
+from flask import session, redirect, url_for, flash, request
+import json as _json
 import os
 from pathlib import Path
-from datetime import datetime
 from werkzeug.security import generate_password_hash as _werkzeug_hash, check_password_hash
 
 
@@ -21,8 +26,6 @@ PASSWORD_METHOD = 'pbkdf2:sha256:600000' if fips_mode() else 'scrypt'
 
 def generate_password_hash(password):
     return _werkzeug_hash(password, method=PASSWORD_METHOD)
-from functools import wraps
-from flask import session, redirect, url_for, flash, request
 
 # Database file for user management
 # Stored in DATA_DIR (persistent across git-pull updates)
@@ -36,7 +39,7 @@ USER_DB_FILE = _get_data_dir() / 'users.db'
 
 def get_user_db():
     """Get database connection for user management."""
-    conn = sqlite3.connect(USER_DB_FILE, timeout=15)
+    conn = sqlite3.connect(USER_DB_FILE, timeout=15, factory=db_util.ClosingConnection)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -220,9 +223,7 @@ def update_user(user_id, username=None, email=None, active=None, password=None):
     Returns:
         True if successful, False otherwise
     """
-    # Whitelist of allowed columns to prevent SQL injection
-    ALLOWED_COLUMNS = {'username', 'email', 'active', 'password_hash'}
-    
+    # Column names are fixed below; only the values come from the caller.
     updates = []
     params = []
     
@@ -420,7 +421,6 @@ def admin_required(f):
 
 # ── Dashboard Layout Preferences ─────────────────────────────────────────────
 
-import json as _json
 
 # Default widget configuration — defines all available widgets, their default
 # order, size, and visibility.  Each entry is keyed by a stable widget ID.

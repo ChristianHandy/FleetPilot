@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 FleetPilot — VM Controller
 ===========================
@@ -12,16 +14,17 @@ Credentials are stored encrypted with Fernet (symmetric key in SECRET_KEY env va
 """
 
 import safe_errors
-import os
+import secret_box
+import time as _time_mod
+import urllib.parse
 import json
 import sqlite3
+import db_util
 import shutil
 import logging
-import threading
 import urllib.request
 import urllib.error
 import ssl
-from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, List, Any
 
@@ -30,7 +33,6 @@ logger = logging.getLogger("fleetpilot.vm_controller")
 DB_FILE = None  # set by init_db(data_dir); see migration note there
 
 # ── Encryption helpers ──────────────────────────────────────────────────────────
-import secret_box
 _box = secret_box.SecretBox("sha256")
 _encrypt = _box.encrypt
 _decrypt = _box.decrypt
@@ -39,7 +41,7 @@ _decrypt = _box.decrypt
 # ── Database ──────────────────────────────────────────────────────────────────
 
 def get_db():
-    conn = sqlite3.connect(str(DB_FILE), timeout=15)
+    conn = sqlite3.connect(str(DB_FILE), timeout=15, factory=db_util.ClosingConnection)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -168,7 +170,6 @@ def get_events(limit: int = 100) -> List[Dict]:
 
 # ── HTTP helper ───────────────────────────────────────────────────────────────
 
-import time as _time_mod
 
 # Transient network errors that are safe to retry
 _RETRYABLE_ERRORS = (TimeoutError, ConnectionResetError, ConnectionRefusedError)
@@ -469,7 +470,6 @@ class VeeamClient:
 
 
 # ── urllib.parse shim (needed for ProxmoxClient._login) ──────────────────────
-import urllib.parse
 
 
 # ── High-level API used by Flask routes ──────────────────────────────────────

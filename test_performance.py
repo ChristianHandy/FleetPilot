@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Regression tests for the performance work: these paths must stay fast and correct."""
 import json
 import socket
@@ -52,6 +54,7 @@ def test_hw_monitor_imports_hosts_json_and_encrypts_passwords(tmp_path, recwarn)
         hw_monitor._DB_PATH = previous
     con = sqlite3.connect(data / "hw_monitor.db")
     row = con.execute("SELECT name, ip, ssh_user, ssh_pass FROM hw_servers").fetchone()
+    con.close()
     assert row[:3] == ("web1", "192.0.2.10", "admin")
     assert row[3] != "s3cret-pw" and hw_monitor._pw({"ssh_pass": row[3]}) == "s3cret-pw"
     assert not [w for w in recwarn if "Auto-import" in str(w.message)]
@@ -99,3 +102,4 @@ def test_registry_sync_writes_once(tmp_path):
         fp._sync_hosts_into(registry, hosts)
     assert len(commits) == 1
     assert len(registry.list_servers()) == 25
+    conn.close()

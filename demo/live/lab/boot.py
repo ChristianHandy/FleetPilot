@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Start FleetPilot inside the emulated lab and answer browser requests.
 
     start(origin, prefix)   import FleetPilot, build the lab, configure FleetPilot like a homelab owner would

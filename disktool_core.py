@@ -1,5 +1,15 @@
-import os, json, csv, sqlite3, shutil, subprocess, threading, re
-from datetime import datetime
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+import os
+import json
+import csv
+import sqlite3
+import db_util
+import shutil
+import subprocess
+import threading
+import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 import privileged
@@ -46,7 +56,7 @@ def local_block_device(device):
 
 def get_db():
     """Stellt eine DB-Verbindung her und liefert das Connection-Objekt zurück."""
-    conn = sqlite3.connect(DB_FILE, timeout=15)
+    conn = sqlite3.connect(DB_FILE, timeout=15, factory=db_util.ClosingConnection)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -172,14 +182,14 @@ def run(cmd):
     
     # Check for control characters including null bytes
     if any(ord(c) < 32 for c in executable):
-        raise ValueError(f"Invalid command executable: contains control characters")
+        raise ValueError("Invalid command executable: contains control characters")
     
     # Allow only alphanumeric, dash, and underscore for command names
     # OR absolute paths that start with / and don't contain path traversal
     if executable.startswith('/'):
         # For absolute paths, ensure no path traversal patterns
         if '..' in executable or not re.match(r'^/[a-zA-Z0-9/_-]+$', executable):
-            raise ValueError(f"Invalid command executable: path traversal detected")
+            raise ValueError("Invalid command executable: path traversal detected")
     else:
         # For command names, only allow safe characters
         if not re.match(r'^[a-zA-Z0-9_-]+$', executable):
@@ -221,7 +231,7 @@ def sync_disks():
        Startet bei Auto-Modus ggf. automatische Aufgaben (Format, SMART)."""
     global auto_enabled
     # Use SQLite-compatible timestamp format for comparison
-    now = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+    now = datetime.now(timezone.utc).replace(tzinfo=None).strftime('%Y-%m-%d %H:%M:%S')
     new_devices = []
     with get_db() as db:
         db.execute('UPDATE disks SET present = 0')
@@ -267,13 +277,16 @@ def update_op(op_id, status=None, progress=None, details=None):
     sets = []
     vals = []
     if status:
-        sets.append('status=?'); vals.append(status)
+        sets.append('status=?')
+        vals.append(status)
         if status in {'OK', 'FAIL', 'STOPPED', 'INTERRUPTED'}:
             sets.append('finished_ts=CURRENT_TIMESTAMP')
     if progress is not None:
-        sets.append('progress=?'); vals.append(progress)
+        sets.append('progress=?')
+        vals.append(progress)
     if details is not None:
-        sets.append('details=?'); vals.append(str(details)[:5000])
+        sets.append('details=?')
+        vals.append(str(details)[:5000])
     if not sets:
         return
     vals.append(op_id)
@@ -611,7 +624,8 @@ def get_task_status(op_id):
             row['finished_ts'], row['runner_note'])
 
 def get_task_action(op_id):
-    row = get_db().execute("SELECT action FROM operations WHERE id=?", (op_id,)).fetchone()
+    with get_db() as db:
+        row = db.execute("SELECT action FROM operations WHERE id=?", (op_id,)).fetchone()
     return row['action'] if row else None
 
 def stop_task(op_id):

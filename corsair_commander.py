@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 corsair_commander.py — FleetPilot Corsair Commander Pro Integration
 Manages Corsair Commander Pro (and compatible) devices connected to remote
@@ -16,12 +18,13 @@ Database: DATA_DIR/corsair_commander.db
 """
 
 import safe_errors
+import secret_box
 import json
 import logging
-import os
 import shlex
 import re
 import sqlite3
+import db_util
 import threading
 import time
 from pathlib import Path
@@ -31,7 +34,6 @@ import ssh_helper
 logger = logging.getLogger(__name__)
 
 # ── Encryption helpers (same pattern as vm_controller) ───────────────────────
-import secret_box
 _box = secret_box.SecretBox("raw32")
 _encrypt = _box.encrypt
 _decrypt = _box.decrypt
@@ -46,7 +48,7 @@ _RETENTION_DAYS = 30
 # ── Database ─────────────────────────────────────────────────────────────────
 
 def _get_db():
-    conn = sqlite3.connect(str(_DB_FILE), timeout=10)
+    conn = sqlite3.connect(str(_DB_FILE), timeout=10, factory=db_util.ClosingConnection)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -161,7 +163,6 @@ def delete_device(dev_id: int):
 
 def _ssh_connect(dev: Dict):
     """Open a paramiko SSH connection to the device's host."""
-    import paramiko
     kwargs = dict(
         hostname=dev["host"],
         port=dev.get("port", 22),
@@ -390,7 +391,7 @@ def test_connection(dev_id: int) -> Dict:
             return {"ok": False, "message": f"liquidctl not found on remote host: {out}"}
         # List devices
         match = dev.get("match_str", "Commander Pro")
-        list_out, _, _ = _run_remote(ssh, f"liquidctl list --json 2>/dev/null", timeout=10)
+        list_out, _, _ = _run_remote(ssh, "liquidctl list --json 2>/dev/null", timeout=10)
         devices = _parse_liquidctl_json(list_out)
         found = [d for d in devices if match.lower() in str(d).lower()]
         if not found:

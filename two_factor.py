@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Two-Factor Authentication Module for FleetPilot
 Supports:
@@ -6,6 +8,7 @@ Supports:
   - YubiKey FIDO2/WebAuthn (hardware key challenge-response)
 """
 import sqlite3
+import db_util
 import os
 import base64
 import hashlib
@@ -19,7 +22,6 @@ import urllib.request
 import urllib.parse
 import urllib.error
 from pathlib import Path
-from datetime import datetime, timedelta
 
 # ── Optional imports ──────────────────────────────────────────────────────────
 try:
@@ -65,7 +67,7 @@ def _get_data_dir():
 TFA_DB = _get_data_dir() / '2fa.db'
 
 def get_db():
-    conn = sqlite3.connect(str(TFA_DB), timeout=15)
+    conn = sqlite3.connect(str(TFA_DB), timeout=15, factory=db_util.ClosingConnection)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
@@ -362,7 +364,7 @@ def validate_yubikey_otp(otp: str, client_id: str = '1', secret_key: str = '') -
                 return {'valid': False, 'reason': 'Replayed OTP — possible replay attack'}
             else:
                 return {'valid': False, 'reason': f'Yubico API: {status}'}
-        except Exception as e:
+        except Exception:
             continue  # Try next server
 
     return {'valid': False, 'reason': 'All Yubico API servers unreachable'}

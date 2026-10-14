@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """How FleetPilot runs its root helpers (disk actions, self-update, proxy apply).
 
 install.sh copies them root-owned to /usr/local/lib/fleetpilot and lets the

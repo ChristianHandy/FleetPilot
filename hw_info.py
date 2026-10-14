@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 hw_info.py — Hardware Overview Module for FleetPilot
 
@@ -13,14 +15,13 @@ Usage:
 
 import safe_errors
 import sqlite3
+import db_util
 import json
 import os
 import threading
 import logging
-import re
-from datetime import datetime
-from typing import Optional, Dict, List, Any
-import paramiko
+from datetime import datetime, timezone
+from typing import Optional, Dict, List
 import ssh_helper
 
 logger = logging.getLogger(__name__)
@@ -318,12 +319,12 @@ class HwInfoCollector:
         self._lock = threading.Lock()
 
     def _init_db(self):
-        with sqlite3.connect(self._db_path, timeout=15) as conn:
+        with sqlite3.connect(self._db_path, timeout=15, factory=db_util.ClosingConnection) as conn:
             conn.executescript(self.SCHEMA)
             conn.commit()
 
     def _conn(self):
-        conn = sqlite3.connect(self._db_path, timeout=15)
+        conn = sqlite3.connect(self._db_path, timeout=15, factory=db_util.ClosingConnection)
         conn.row_factory = sqlite3.Row
         return conn
 
@@ -362,7 +363,7 @@ class HwInfoCollector:
             else:
                 return {'error': 'Invalid output format'}
 
-            data['_collected_at'] = datetime.utcnow().isoformat()
+            data['_collected_at'] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
             data['_host'] = host
 
             # Cache in DB
@@ -434,7 +435,7 @@ def init(data_dir: str):
 
 def register_routes(app, login_required, csrf=None):
     """Register /hw_overview routes on the Flask app."""
-    from flask import render_template, request, jsonify, redirect, url_for
+    from flask import render_template, jsonify
 
     def _overview_inventory():
         """Return every configured server, enriched with cached hardware metadata.
@@ -495,7 +496,8 @@ def register_routes(app, login_required, csrf=None):
         srv = reg.get_server(name=server_name)
         if not srv:
             # Try hosts.json
-            import json as _json, os as _os
+            import json as _json
+            import os as _os
             data_dir = current_app.config.get('DATA_DIR', '.')
             try:
                 with open(_os.path.join(data_dir, 'hosts.json')) as f:

@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Make FleetPilot run in one browser thread, talking only to the emulated lab.
 
 The browser has no threads, sockets, processes or SMTP. Everything FleetPilot

@@ -1,10 +1,26 @@
-import runtime_env  # must stay first: loads .env and SECRET_KEY before other modules
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+import runtime_env  # noqa: F401  (must stay first: loads .env and SECRET_KEY before other modules)
 from flask import Flask, has_request_context, render_template, redirect, session, request, flash, jsonify, send_file, url_for, make_response, abort, g
-from markupsafe import escape as html_escape
-import re, time as _time
+from flask.sessions import SecureCookieSession as _SecureCookieSession
+from urllib.parse import urlparse as _urlparse
+import ipaddress as _ipaddress
+import re as _re_host
+import jinja2.exceptions
+import subprocess
+import secrets as _secrets_mod
+import re
+import time as _time
 from collections import defaultdict
 from i18n import get_translator, SUPPORTED_LANGUAGES
-import json, threading, paramiko, os, secrets, hmac, socket, concurrent.futures
+import json
+import threading
+import paramiko
+import os
+import secrets
+import hmac
+import socket
+import concurrent.futures
 import requests
 import sqlite3
 import audit_log
@@ -84,7 +100,6 @@ PRODUCTION_STATUS = production_runtime.configure_app(app)
 # A request to /api/ carrying "Authorization: Bearer fp_..." is authenticated by
 # that personal token alone. It gets a throwaway session that is never written
 # back as a cookie, so tokens cannot be turned into browser sessions.
-from flask.sessions import SecureCookieSession as _SecureCookieSession
 
 
 class _TokenSession(_SecureCookieSession):
@@ -217,7 +232,6 @@ def _clear_login_attempts(ip, username=None):
             _login_attempts.pop(f'{kind}:{value}', None)
 
 # ── Safe redirects ────────────────────────────────────────────────────────────
-from urllib.parse import urlparse as _urlparse
 
 
 def _local_url(target, fallback=None):
@@ -323,8 +337,6 @@ def sanitize_input(value, max_len=256):
         return ''
     return value
 
-import ipaddress as _ipaddress
-import re as _re_host
 
 # Allowed hostname pattern: RFC-1123 labels, optional port suffix stripped before check
 _HOSTNAME_RE = _re_host.compile(
@@ -1611,7 +1623,6 @@ def _fmt_ts(value):
 app.jinja_env.filters['fp_ts'] = _fmt_ts
 
 
-import jinja2.exceptions
 
 
 def _fmt_duration(seconds):
@@ -2806,7 +2817,7 @@ def detect_os(name):
             import subprocess as _sp
             r = _sp.run(["cat", "/etc/os-release"], capture_output=True, text=True, timeout=5)
             os_info = _parse_os_release(r.stdout)
-        except Exception as e:
+        except Exception:
             os_info = {"name": "Linux", "type": "linux", "version": ""}
     else:
         try:
@@ -3405,7 +3416,7 @@ def users_edit(uid):
             flash(f'User {username} updated successfully.')
             return redirect(url_for('users_list'))
         else:
-            flash(f'Failed to update user. Username may already exist.')
+            flash('Failed to update user. Username may already exist.')
     
     all_roles = user_management.list_roles()
     user_roles = user_management.get_user_role_names(uid)
@@ -3590,7 +3601,6 @@ def add_security_headers(response):
 
 # ---- Network Scanner Routes ----
 
-import subprocess
 
 def _detect_hostname(ip):
     """Try reverse DNS lookup for a discovered IP."""
@@ -3802,7 +3812,8 @@ _server_update_running = False
 def _run_server_update_bg(sudo_password: str):
     """Background thread: apt update + apt upgrade on the FleetPilot host."""
     global _server_update_running, _server_update_log
-    import subprocess, shlex, datetime
+    import subprocess
+    import datetime
 
     def log(msg, level='info'):
         ts = datetime.datetime.now().strftime('%H:%M:%S')
@@ -3866,8 +3877,8 @@ def _run_server_update_bg(sudo_password: str):
             ['apt-get', '--simulate', 'upgrade', '-y'],
             capture_output=True, timeout=60, env=env
         )
-        upgradable = [l for l in proc.stdout.decode(errors='replace').splitlines()
-                      if l.startswith('Inst ')]
+        upgradable = [ln for ln in proc.stdout.decode(errors='replace').splitlines()
+                      if ln.startswith('Inst ')]
         if upgradable:
             log(f'Found {len(upgradable)} package(s) to upgrade:')
             for pkg in upgradable[:20]:
@@ -4150,8 +4161,6 @@ def set_language():
 # Plugin Manager Routes
 # ─────────────────────────────────────────────────────────────────────────────
 
-import re
-from pathlib import Path
 
 REMOTE_PLUGIN_REPO = "https://raw.githubusercontent.com/ChristianHandy/FleetPilot-Plugins/main/plugins.json"
 
@@ -4306,8 +4315,6 @@ def plugin_docs():
 @login_required
 def plugin_repository_json():
     """Proxy / cache the remote plugin repository JSON."""
-    import urllib.request
-    import urllib.error
     if offline_mode():
         return jsonify({"plugins": [], "offline": True})
     data = cache_get('plugin_repository')
@@ -4337,8 +4344,6 @@ def plugin_install_remote(plugin_id):
     if offline_mode():
         flash("Online plugin installation is disabled (FLEETPILOT_OFFLINE).", "error")
         return redirect("/plugins")
-    import urllib.request
-    import urllib.error
     try:
         resp = requests.get(REMOTE_PLUGIN_REPO, timeout=10)
         resp.raise_for_status()
@@ -4804,8 +4809,7 @@ def api_smart_disks():
 # ─────────────────────────────────────────────────────────────────────────────
 # CheckMK Integration Routes
 # ─────────────────────────────────────────────────────────────────────────────
-import checkmk_integration as _cmk
-import secrets as _secrets_mod
+import checkmk_integration as _cmk  # noqa: E402  (kept next to the routes that use it)
 
 # API token for CheckMK (stored in a simple file, generated on first use)
 _CMK_TOKEN_FILE = os.path.join(DATA_DIR, ".checkmk_token")
@@ -5591,7 +5595,7 @@ def api_commander_all():
 # ═══════════════════════════════════════════════════════════════════════════════
 # Fan Controller — universal fan management (lm-sensors, IPMI, nbfc, liquidctl)
 # ═══════════════════════════════════════════════════════════════════════════════
-import fan_controller as _fc  # DB already initialized in with app.app_context() block above
+import fan_controller as _fc  # noqa: E402  (kept next to the routes that use it; DB initialized above)
 
 
 @app.route('/fans')
@@ -6391,7 +6395,6 @@ def twofa_setup_alias():
 @login_required
 def api_host_metrics():
     """Return live CPU, RAM, uptime and load for a host via SSH."""
-    import json as _json
     host_name = request.args.get('host', '')
     if not host_name:
         return jsonify({'error': 'no host'}), 400
@@ -6579,7 +6582,7 @@ def api_host_shutdown(name):
 # Scheduled Shutdown Routes
 # ─────────────────────────────────────────────────────────────────────────────
 
-import scheduled_shutdown as _ss
+import scheduled_shutdown as _ss  # noqa: E402  (kept next to the routes that use it)
 
 
 @app.route('/shutdown_schedule')

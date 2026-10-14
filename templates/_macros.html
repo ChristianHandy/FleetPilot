@@ -1,3 +1,5 @@
+{# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+   SPDX-License-Identifier: GPL-3.0-or-later -#}
 {# Shared template helpers. #}
 {% macro post_button(url, label, cls='btn btn-sm', confirm=None, title=None) -%}
 <form method="post" action="{{ url }}" class="d-inline-block m-0"{% if confirm %} onsubmit="return confirm({{ confirm|tojson|forceescape }})"{% endif %}>

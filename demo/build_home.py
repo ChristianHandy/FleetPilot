@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Build the project homepage for GitHub Pages (the site root).
 
     python demo/build_home.py [OUT]       # default OUT: demo/site

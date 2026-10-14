@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 # =============================================================================
 #  FleetPilot — Update Script
 #  Pulls the latest code, backs up your data, and restarts the service.

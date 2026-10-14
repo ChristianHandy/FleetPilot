@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Emulated appliances with HTTP APIs: Proxmox VE and Backup Server, TrueNAS, FRITZ!, OpenWrt, OPNsense."""
 import json
 import re

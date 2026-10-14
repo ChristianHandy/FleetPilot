@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Runtime hardening helpers for FleetPilot's single-site production profile."""
 from __future__ import annotations
 

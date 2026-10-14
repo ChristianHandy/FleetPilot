@@ -1,9 +1,10 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """DataUpdateCoordinator for SMART Disk Monitor."""
 from __future__ import annotations
 
 import logging
 from datetime import timedelta
-from typing import Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed

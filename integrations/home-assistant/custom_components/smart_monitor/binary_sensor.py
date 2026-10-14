@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Binary sensor platform for SMART Disk Monitor – disk health alerts."""
 from __future__ import annotations
 

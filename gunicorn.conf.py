@@ -1,8 +1,10 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 FleetPilot — Gunicorn Production Configuration
 Optimised for a typical home-lab / small-enterprise server.
 """
-import multiprocessing, os
+import os
 
 # ── Binding ───────────────────────────────────────────────────────────────────
 # Respect the SERVER_IP env var set in /opt/fleetpilot/.env. Without it, listen on

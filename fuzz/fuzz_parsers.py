@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Fuzz the parsers that read text FleetPilot does not control.
 
 Router, disk and SOAP output comes from devices on the network, so a broken or

@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 fan_controller.py — FleetPilot Universal Fan Controller Integration
 
@@ -25,12 +27,14 @@ Package installation:
 """
 
 import safe_errors
+import secret_box
 import json
 import logging
 import os
 import shlex
 import re
 import sqlite3
+import db_util
 import threading
 import time
 from pathlib import Path
@@ -40,7 +44,6 @@ import ssh_helper
 logger = logging.getLogger(__name__)
 
 # ── Encryption helpers ────────────────────────────────────────────────────────
-import secret_box
 _box = secret_box.SecretBox("raw32")
 _encrypt = _box.encrypt
 _decrypt = _box.decrypt
@@ -126,7 +129,7 @@ _RETENTION_DAYS = 30
 # ── Database ──────────────────────────────────────────────────────────────────
 
 def _get_db():
-    conn = sqlite3.connect(str(_DB_FILE), timeout=10)
+    conn = sqlite3.connect(str(_DB_FILE), timeout=10, factory=db_util.ClosingConnection)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -272,7 +275,6 @@ def _allowed_key_path(key_path: str):
 
 
 def _ssh_connect(dev: Dict):
-    import paramiko
     kwargs = dict(
         hostname=dev["host"],
         port=dev.get("port", 22),
@@ -351,7 +353,7 @@ def install_packages(dev_id: int, progress_key: str = None) -> Dict:
         sudo_prefix = "" if (is_root or not use_sudo) else "sudo "
 
         if apt_pkgs and is_debian:
-            _log(f"Updating apt cache...")
+            _log("Updating apt cache...")
             out, err, code = _run_remote(
                 ssh,
                 f"DEBIAN_FRONTEND=noninteractive {sudo_prefix}apt-get update -qq 2>&1",
@@ -369,7 +371,7 @@ def install_packages(dev_id: int, progress_key: str = None) -> Dict:
             for line in (out or err or "").splitlines():
                 _log(line)
             if code == 0:
-                _log(f"✔ apt packages installed successfully.")
+                _log("✔ apt packages installed successfully.")
             else:
                 _log(f"✘ apt install failed (exit {code})")
 
@@ -560,8 +562,10 @@ def _fetch_lm_sensors(dev: Dict) -> Dict:
         logger.warning("[fan_controller] lm_sensors fetch error for %s: %s", dev.get("name"), exc)
     finally:
         if ssh:
-            try: ssh.close()
-            except Exception: pass
+            try:
+                ssh.close()
+            except Exception:
+                pass
     return result
 
 
@@ -625,8 +629,10 @@ def _fetch_ipmi(dev: Dict) -> Dict:
         logger.warning("[fan_controller] ipmi fetch error for %s: %s", dev.get("name"), exc)
     finally:
         if ssh:
-            try: ssh.close()
-            except Exception: pass
+            try:
+                ssh.close()
+            except Exception:
+                pass
     return result
 
 
@@ -693,8 +699,10 @@ def _fetch_nbfc(dev: Dict) -> Dict:
         logger.warning("[fan_controller] nbfc fetch error for %s: %s", dev.get("name"), exc)
     finally:
         if ssh:
-            try: ssh.close()
-            except Exception: pass
+            try:
+                ssh.close()
+            except Exception:
+                pass
     return result
 
 
@@ -770,8 +778,10 @@ def _fetch_liquidctl(dev: Dict) -> Dict:
         logger.warning("[fan_controller] liquidctl fetch error for %s: %s", dev.get("name"), exc)
     finally:
         if ssh:
-            try: ssh.close()
-            except Exception: pass
+            try:
+                ssh.close()
+            except Exception:
+                pass
     return result
 
 
@@ -866,8 +876,10 @@ done
         logger.warning("[fan_controller] pwm_sysfs fetch error for %s: %s", dev.get("name"), exc)
     finally:
         if ssh:
-            try: ssh.close()
-            except Exception: pass
+            try:
+                ssh.close()
+            except Exception:
+                pass
     return result
 
 
@@ -903,7 +915,7 @@ def _fetch_rpi_gpio_fan(dev: Dict) -> Dict:
         ssh = _ssh_connect(dev)
         # `pin` is validated as a 0-27 integer before interpolation. The kernel
         # pwm-gpio-fan driver owns the pin and enforces the thermal fan curve.
-        command = f"""
+        command = """
 model=$(tr -d '\\0' </proc/device-tree/model 2>/dev/null || true)
 temp=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null || true)
 overlay=$(grep -Rni '^[[:space:]]*dtoverlay=pwm-gpio-fan' /boot/firmware/config.txt /boot/config.txt 2>/dev/null || true)
@@ -1135,13 +1147,12 @@ def _fetch_arctic_usb(dev: Dict) -> Dict:
         out, err, code = _run_remote(ssh, "python3 - 2>&1", timeout=15, stdin_data=_ARCTIC_READ_SCRIPT)
         result["raw"] = out
 
-        method = "unknown"
         for line in out.splitlines():
             if line.startswith("ERROR:"):
                 result["error"] = line[6:]
                 return result
             elif line.startswith("METHOD:"):
-                method = line[7:]
+                continue  # which sysfs method the helper used; not shown
             elif line.startswith("CH"):
                 # CH1:1200:128:50
                 parts = line.split(":")
@@ -1178,8 +1189,10 @@ def _fetch_arctic_usb(dev: Dict) -> Dict:
         logger.warning("[fan_controller] arctic_usb fetch error for %s: %s", dev.get("name"), exc)
     finally:
         if ssh:
-            try: ssh.close()
-            except Exception: pass
+            try:
+                ssh.close()
+            except Exception:
+                pass
     return result
 
 
@@ -1232,8 +1245,10 @@ def _set_fan_arctic_usb(dev: Dict, channel: str, speed, extra: dict) -> Dict:
         result["message"] = safe_errors.public_error(exc)
     finally:
         if ssh:
-            try: ssh.close()
-            except Exception: pass
+            try:
+                ssh.close()
+            except Exception:
+                pass
     return result
 
 
@@ -1304,8 +1319,10 @@ def _set_fan_lm_sensors(dev: Dict, channel: str, speed, extra: dict) -> Dict:
         result["message"] = safe_errors.public_error(exc)
     finally:
         if ssh:
-            try: ssh.close()
-            except Exception: pass
+            try:
+                ssh.close()
+            except Exception:
+                pass
     return result
 
 
@@ -1364,8 +1381,10 @@ def _set_fan_ipmi(dev: Dict, channel: str, speed, extra: dict) -> Dict:
         result["message"] = safe_errors.public_error(exc)
     finally:
         if ssh:
-            try: ssh.close()
-            except Exception: pass
+            try:
+                ssh.close()
+            except Exception:
+                pass
     return result
 
 
@@ -1393,8 +1412,10 @@ def _set_fan_nbfc(dev: Dict, channel: str, speed, extra: dict) -> Dict:
         result["message"] = safe_errors.public_error(exc)
     finally:
         if ssh:
-            try: ssh.close()
-            except Exception: pass
+            try:
+                ssh.close()
+            except Exception:
+                pass
     return result
 
 
@@ -1427,8 +1448,10 @@ def _set_fan_liquidctl(dev: Dict, channel: str, speed, extra: dict) -> Dict:
         result["message"] = safe_errors.public_error(exc)
     finally:
         if ssh:
-            try: ssh.close()
-            except Exception: pass
+            try:
+                ssh.close()
+            except Exception:
+                pass
     return result
 
 
@@ -1473,8 +1496,10 @@ def _set_fan_pwm_sysfs(dev: Dict, channel: str, speed, extra: dict) -> Dict:
         result["message"] = safe_errors.public_error(exc)
     finally:
         if ssh:
-            try: ssh.close()
-            except Exception: pass
+            try:
+                ssh.close()
+            except Exception:
+                pass
     return result
 
 
@@ -1539,8 +1564,10 @@ def test_connection(dev_id: int) -> Dict:
         return {"ok": False, "message": safe_errors.public_error(exc, "SSH connection")}
     finally:
         if ssh:
-            try: ssh.close()
-            except Exception: pass
+            try:
+                ssh.close()
+            except Exception:
+                pass
 
 
 # ── Polling ───────────────────────────────────────────────────────────────────
@@ -1813,7 +1840,7 @@ def detect_controllers(host: str, port: int = 22, username: str = "root",
         ipmi_ver, _, ipmi_code = _r("ipmitool -V 2>&1 | head -1")
         if ipmi_code == 0:
             ipmi_fans, _, _ = _r("ipmitool sdr type Fan 2>&1 | head -10", timeout=20)
-            fan_count_ipmi = len([l for l in ipmi_fans.splitlines() if "|" in l])
+            fan_count_ipmi = len([ln for ln in ipmi_fans.splitlines() if "|" in ln])
             # Detect vendor
             dmi_vendor, _, _ = _r("cat /sys/class/dmi/id/sys_vendor 2>/dev/null")
             vendor = "generic"
@@ -1840,7 +1867,7 @@ def detect_controllers(host: str, port: int = 22, username: str = "root",
             nbfc_status, _, _ = _r("nbfc status -a 2>&1 | head -20")
             confidence = "high" if nbfc_code == 0 else "low"
             reason = (
-                f"nbfc-linux installed, {len([l for l in nbfc_status.splitlines() if 'Fan' in l])} fan(s) detected"
+                f"nbfc-linux installed, {len([ln for ln in nbfc_status.splitlines() if 'Fan' in ln])} fan(s) detected"
                 if nbfc_code == 0
                 else "Laptop detected but nbfc-linux not installed — install from https://github.com/nbfc-linux/nbfc-linux"
             )

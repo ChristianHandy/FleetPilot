@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """SMART Disk Monitor integration for Home Assistant."""
 from __future__ import annotations
 

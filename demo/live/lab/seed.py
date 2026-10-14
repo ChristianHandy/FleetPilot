@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Configure the demo FleetPilot the way a homelab owner would, through FleetPilot's own functions.
 
 Everything shown afterwards (status, disks, VMs, router details) is read from the

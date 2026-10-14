@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Test script for remote disk plugin functionality
 """
@@ -25,7 +27,7 @@ def test_device_name_validation():
         assert not re.match(r'^[a-zA-Z0-9_-]{1,255}$', name), f"Invalid name '{name}' passed validation"
     print("  ✓ Invalid device names fail validation")
     
-    return True
+    return
 
 def test_filesystem_validation():
     """Test filesystem type validation"""
@@ -42,7 +44,7 @@ def test_filesystem_validation():
         assert fs not in ['ext4', 'xfs', 'fat32'], f"Invalid fs '{fs}' passed"
     print("  ✓ Invalid filesystem types rejected")
     
-    return True
+    return
 
 def test_smart_mode_validation():
     """Test SMART mode validation"""
@@ -59,7 +61,7 @@ def test_smart_mode_validation():
         assert mode not in ['short', 'long'], f"Invalid mode '{mode}' passed"
     print("  ✓ Invalid SMART modes rejected")
     
-    return True
+    return
 
 def test_plugin_metadata():
     """Test plugin metadata structure"""
@@ -70,7 +72,7 @@ def test_plugin_metadata():
     print(f"  ✓ Plugin name: {remote_disk_plugin.addon_meta['name']}")
     print("  ✓ Plugin HTML template present")
     
-    return True
+    return
 
 def test_plugin_functions():
     """Test that all required plugin functions exist"""
@@ -89,7 +91,7 @@ def test_plugin_functions():
         assert hasattr(remote_disk_plugin, func_name), f"Function '{func_name}' not found"
         print(f"  ✓ Function '{func_name}' exists")
     
-    return True
+    return
 
 def test_command_injection_prevention():
     """Test that command injection is prevented"""
@@ -113,45 +115,11 @@ def test_command_injection_prevention():
             print(f"  ✓ Blocked: {malicious[:50]}")
         else:
             print(f"  ✗ FAILED TO BLOCK: {malicious}")
-            return False
+            raise AssertionError("test_command_injection_prevention failed; see the output above")
     
     print("  ✓ All command injection attempts blocked")
-    return True
+    return
 
-def main():
-    """Run all tests"""
-    print("=" * 60)
-    print("Remote Disk Plugin Tests")
-    print("=" * 60)
-    
-    tests = [
-        test_device_name_validation,
-        test_filesystem_validation,
-        test_smart_mode_validation,
-        test_plugin_metadata,
-        test_plugin_functions,
-        test_command_injection_prevention,
-    ]
-    
-    passed = 0
-    failed = 0
-    
-    for test in tests:
-        try:
-            if test():
-                passed += 1
-        except AssertionError as e:
-            print(f"  ✗ FAILED: {e}")
-            failed += 1
-        except Exception as e:
-            print(f"  ✗ ERROR: {e}")
-            failed += 1
-    
-    print("\n" + "=" * 60)
-    print(f"Results: {passed} passed, {failed} failed")
-    print("=" * 60)
-    
-    return 0 if failed == 0 else 1
-
-if __name__ == '__main__':
-    sys.exit(main())
+if __name__ == "__main__":
+    import pytest
+    sys.exit(pytest.main([__file__, "-q"]))

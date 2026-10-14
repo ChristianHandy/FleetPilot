@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Test script to verify the /addons/ to /disks/addons/ redirect fix
 Tests that addon paths without /disks prefix redirect correctly
@@ -27,19 +29,19 @@ def test_addon_redirect_unauthenticated():
                 # Should redirect to login with next parameter
                 if 'login' in location.lower() or location.startswith('/?next='):
                     print("✓ Correctly redirects to login")
-                    return True
+                    return
                 else:
                     print(f"✗ Unexpected redirect location: {location}")
-                    return False
+                    raise AssertionError("test_addon_redirect_unauthenticated failed; see the output above")
             else:
                 print(f"✗ Expected 302 redirect, got {response.status_code}")
-                return False
+                raise AssertionError("test_addon_redirect_unauthenticated failed; see the output above")
                 
     except Exception as e:
         print(f"✗ Test failed: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        raise AssertionError("test_addon_redirect_unauthenticated failed; see the output above")
 
 def test_addon_redirect_authenticated():
     """Test that /addons/ paths redirect to /disks/addons/ when authenticated"""
@@ -83,22 +85,22 @@ def test_addon_redirect_authenticated():
                     response = client.get('/addons/example_plugin/zd320', follow_redirects=True)
                     if response.status_code == 200:
                         print("✓ Successfully reaches the plugin page after redirect")
-                        return True
+                        return
                     else:
                         print(f"✗ Expected 200 after redirect, got {response.status_code}")
-                        return False
+                        raise AssertionError("test_addon_redirect_authenticated failed; see the output above")
                 else:
                     print(f"✗ Expected redirect to /disks/addons/..., got {location}")
-                    return False
+                    raise AssertionError("test_addon_redirect_authenticated failed; see the output above")
             else:
                 print(f"✗ Expected 302 redirect, got {response.status_code}")
-                return False
+                raise AssertionError("test_addon_redirect_authenticated failed; see the output above")
                 
     except Exception as e:
         print(f"✗ Test failed: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        raise AssertionError("test_addon_redirect_authenticated failed; see the output above")
 
 def test_original_path_still_works():
     """Test that original /disks/addons/ path still works"""
@@ -117,22 +119,22 @@ def test_original_path_still_works():
                 print(f"  Redirects to: {location}")
                 if 'login' in location.lower() or location.startswith('/?next='):
                     print("✓ Original path still works correctly")
-                    return True
+                    return
                 else:
                     print(f"✗ Unexpected redirect: {location}")
-                    return False
+                    raise AssertionError("test_original_path_still_works failed; see the output above")
             elif response.status_code == 404:
                 print("✗ Original path returns 404 - this is broken!")
-                return False
+                raise AssertionError("test_original_path_still_works failed; see the output above")
             else:
                 print(f"✗ Unexpected status code: {response.status_code}")
-                return False
+                raise AssertionError("test_original_path_still_works failed; see the output above")
                 
     except Exception as e:
         print(f"✗ Test failed: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        raise AssertionError("test_original_path_still_works failed; see the output above")
 
 def test_no_404_for_addon_paths():
     """Test that we no longer get 404 for /addons/ paths"""
@@ -147,53 +149,20 @@ def test_no_404_for_addon_paths():
             
             if response.status_code == 404:
                 print("✗ Still getting 404 - fix didn't work!")
-                return False
+                raise AssertionError("test_no_404_for_addon_paths failed; see the output above")
             elif response.status_code == 302:
                 print("✓ No 404 error - redirect is working")
-                return True
+                return
             else:
                 print(f"✓ No 404 error - got {response.status_code}")
-                return True
+                return
                 
     except Exception as e:
         print(f"✗ Test failed: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        raise AssertionError("test_no_404_for_addon_paths failed; see the output above")
 
-def main():
-    """Run all tests"""
-    print("=" * 70)
-    print("Addon Redirect Fix Verification Test Suite")
-    print("=" * 70)
-    
-    tests = [
-        test_addon_redirect_unauthenticated,
-        test_addon_redirect_authenticated,
-        test_original_path_still_works,
-        test_no_404_for_addon_paths,
-    ]
-    
-    results = []
-    for test in tests:
-        try:
-            results.append(test())
-        except Exception as e:
-            print(f"\n✗ Test crashed: {e}")
-            import traceback
-            traceback.print_exc()
-            results.append(False)
-    
-    print("\n" + "=" * 70)
-    print(f"Test Results: {sum(results)}/{len(results)} passed")
-    print("=" * 70)
-    
-    if all(results):
-        print("\n✓ All tests passed! The addon redirect fix is working correctly.")
-        return 0
-    else:
-        print("\n✗ Some tests failed")
-        return 1
-
-if __name__ == '__main__':
-    sys.exit(main())
+if __name__ == "__main__":
+    import pytest
+    sys.exit(pytest.main([__file__, "-q"]))

@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;

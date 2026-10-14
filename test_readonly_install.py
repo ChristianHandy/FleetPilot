@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The installer makes the code directory root-owned: FleetPilot may only write to its data dir."""
 import io
 import os
@@ -70,6 +72,7 @@ def test_host_image_is_stored_in_data_dir_and_served_sandboxed(monkeypatch):
     assert os.path.exists(os.path.join(fp.DATA_DIR, "host_images", "img-host.svg"))
     served = client.get(url)
     assert served.status_code == 200 and "sandbox" in served.headers["Content-Security-Policy"]
+    served.close()
     assert fp.app.test_client().get(url).status_code in (302, 401)      # login required
 
 

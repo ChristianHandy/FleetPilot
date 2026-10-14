@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Controlled FleetPilot ingress migration: pve03 HAProxy -> Raspberry Pi HAProxy.
 # This script is intended to run as root on the Raspberry Pi.
 set -euo pipefail

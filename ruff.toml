@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Coding standard for Python: PEP 8, checked by ruff with its default rules (Pyflakes and the
+# pycodestyle error rules). CI fails on any finding. A rare exception is marked in the code with
+# "# noqa: <rule>  (reason)" so it can be reviewed where it happens. See CONTRIBUTING.md.
+line-length = 120
+extend-exclude = ["FleetPilotCS", "FleetPilotAndroid", "demo/site"]
+
+[lint]
+select = ["E4", "E7", "E9", "F"]

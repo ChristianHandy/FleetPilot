@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+   SPDX-License-Identifier: GPL-3.0-or-later */
 /* FleetPilot live demo: starts FleetPilot in a worker and shows it in the frame.
  *
  * sw.js sends every request for app/<lab>/... here; this page passes it to worker.js,

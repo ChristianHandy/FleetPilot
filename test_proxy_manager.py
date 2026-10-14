@@ -1,5 +1,6 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Focused safety checks for FleetPilot proxy route management."""
-from pathlib import Path
 import tempfile
 
 import proxy_manager

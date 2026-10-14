@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """requirements-lock.txt (what installs get) must satisfy requirements.txt (what FleetPilot needs)."""
 import os
 import re
