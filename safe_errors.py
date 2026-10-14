@@ -43,3 +43,9 @@ def public_error(exc, action='The request'):
     if isinstance(exc, (ValueError, KeyError, TypeError)):
         return f'{action} failed: invalid input or response.'
     return f'{action} failed. Details are in the FleetPilot log.'
+
+
+def log_text(value):
+    """``value`` as one log line: line breaks are escaped, so input such as a host or
+    path name cannot start a fake log entry (log injection)."""
+    return str(value).replace("\r", "\\r").replace("\n", "\\n")

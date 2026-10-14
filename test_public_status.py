@@ -2,7 +2,7 @@ from jinja2 import Environment, FileSystemLoader
 
 
 def test_public_status_template_is_read_only_and_hides_private_backend_addresses():
-    environment = Environment(loader=FileSystemLoader('templates'))
+    environment = Environment(loader=FileSystemLoader('templates'), autoescape=True)
     template = environment.get_template('public_status.html')
     rendered = template.render(
         generated_at='2026-08-14 12:00:00',

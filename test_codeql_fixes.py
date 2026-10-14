@@ -127,3 +127,56 @@ def test_duplicati_signs_in_with_the_real_login_api(monkeypatch):
     token = bc._duplicati_auth({"protocol": "https", "host": "nas", "port": 8200, "password": "pw-1"})
     assert token == "token-123"
     assert sent == {"url": "https://nas:8200/api/v1/auth/login", "body": {"Password": "pw-1", "RememberMe": False}}
+
+
+def test_proxmox_paths_only_use_names_proxmox_reported(monkeypatch):
+    import vm_controller as vc
+    calls = []
+    client = vc.ProxmoxClient.__new__(vc.ProxmoxClient)
+    client._ticket = client._csrf = "x"
+    monkeypatch.setattr(client, "get_nodes", lambda: [{"node": "pve-01"}])
+    monkeypatch.setattr(client, "_post", lambda path, body=None: calls.append(path) or {"ok": True})
+    client.vm_action("pve-01", 100, "start", "lxc")
+    assert calls == ["/nodes/pve-01/lxc/100/status/start"]
+    for node, rtype, action in [("pve-01/../../access", "qemu", "start"), ("pve-01", "qemu/../x", "start"),
+                                ("pve-01", "qemu", "start/../delete")]:
+        with pytest.raises(ValueError):
+            client.vm_action(node, 100, action, rtype)
+    assert len(calls) == 1
+    monkeypatch.setattr(vc, "connect", lambda ep: client)
+    assert vc.vm_power_action(1, "evil\nnode", 100, "start")["ok"] is False
+
+
+def test_duplicati_only_runs_jobs_it_lists(monkeypatch):
+    import backup_controller as bc
+    posted = []
+
+    class Resp:
+        ok, status_code, text = True, 200, "ok"
+
+        def json(self):
+            return [{"Backup": {"ID": "3"}}]
+    monkeypatch.setattr(bc, "_duplicati_auth", lambda srv: "token")
+    monkeypatch.setattr(bc.requests, "get", lambda url, **k: Resp())
+    monkeypatch.setattr(bc.requests, "post", lambda url, **k: posted.append(url) or Resp())
+    srv = {"protocol": "https", "host": "192.0.2.9", "port": 8200}
+    assert bc.trigger_duplicati_backup(srv, "3")["ok"] is True
+    assert bc.trigger_duplicati_backup(srv, "3/../../x")["ok"] is False
+    assert posted == ["https://192.0.2.9:8200/api/v1/backup/3/run"]
+
+
+def test_log_text_keeps_one_entry_per_line():
+    assert safe_errors.log_text("pve-01\nINFO: admin logged in\r") == "pve-01\\nINFO: admin logged in\\r"
+    assert safe_errors.log_text(42) == "42"
+
+
+def test_data_sync_checks_certificates_by_default(monkeypatch):
+    import data_sync
+    for name in ("FLEETPILOT_SYNC_CA", "FLEETPILOT_SYNC_VERIFY"):
+        monkeypatch.delenv(name, raising=False)
+    assert data_sync._verify() is True
+    monkeypatch.setenv("FLEETPILOT_SYNC_CA", "/etc/fleetpilot/peer.pem")
+    assert data_sync._verify() == "/etc/fleetpilot/peer.pem"
+    monkeypatch.delenv("FLEETPILOT_SYNC_CA")
+    monkeypatch.setenv("FLEETPILOT_SYNC_VERIFY", "false")
+    assert data_sync._verify() is False

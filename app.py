@@ -1075,7 +1075,7 @@ def get_local_public_key():
         with open(pub_path, "w") as f:
             f.write(f"{key.get_name()} {key.get_base64()}\n")
         os.chmod(priv_path, 0o600)
-        os.chmod(pub_path, 0o644)
+        os.chmod(pub_path, 0o600)   # only the service user needs it
         with open(pub_path, "r") as f:
             return f.read().strip()
     except Exception as e:
@@ -3533,7 +3533,8 @@ for _code in (400, 403, 404, 405, 413, 429):
 
 @app.errorhandler(sqlite3.IntegrityError)
 def _handle_integrity_error(exc):
-    app.logger.info('Rejected duplicate or invalid record on %s: %s', request.path, exc)
+    app.logger.info('Rejected duplicate or invalid record on %s: %s', safe_errors.log_text(request.path),
+                    safe_errors.log_text(exc))
     message = 'A record with that name already exists.' if 'UNIQUE' in str(exc) else 'That record could not be saved.'
     if _wants_json():
         return jsonify({'ok': False, 'error': message}), 409
@@ -3543,7 +3544,8 @@ def _handle_integrity_error(exc):
 
 @app.errorhandler(500)
 def _handle_server_error(exc):
-    app.logger.error('Unhandled error on %s %s', request.method, request.path, exc_info=getattr(exc, 'original_exception', exc))
+    app.logger.error('Unhandled error on %s %s', safe_errors.log_text(request.method), safe_errors.log_text(request.path),
+                     exc_info=getattr(exc, 'original_exception', exc))
     return _error_response(500)
 
 
@@ -4529,11 +4531,11 @@ def vm_disks(ep_id):
         disks = vm_controller.get_proxmox_disks(ep_id, node)
         # Register disks in SMART manager
         for d in disks:
-            dev = d.get("dev", d.get("devpath", "")).lstrip("/dev/")
+            dev = (d.get("dev") or d.get("devpath", "")).removeprefix("/dev/")
             if dev:
                 smart_manager.register_disk(
                     source="proxmox",
-                    device=dev,
+                    device=f"{node}:{dev}",   # same key as the SMART poller: nodes of a cluster all have an sda
                     serial=d.get("serial"),
                     model=d.get("model"),
                     size_gb=round(d.get("size", 0) / 1e9, 1) if d.get("size") else None,
@@ -6465,7 +6467,7 @@ def host_wol(name):
         with _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM) as s:
             s.setsockopt(_socket.SOL_SOCKET, _socket.SO_BROADCAST, 1)
             s.sendto(magic, ('255.255.255.255', 9))
-        app.logger.info(f'WOL magic packet sent to {name} ({mac})')
+        app.logger.info('WOL magic packet sent to %s (%s)', safe_errors.log_text(name), safe_errors.log_text(mac))
         return jsonify({'ok': True, 'message': f'Magic packet sent to {name} ({mac}). Server should wake up within 30 seconds.'})
     except Exception as e:
         return jsonify({'ok': False, 'error': _error_message(e)}), 500
@@ -6495,7 +6497,7 @@ def host_shutdown(name):
         api_port = host.get('unraid_api_port', 80)
         if not api_key:
             # Fallback to SSH shutdown if no API key
-            app.logger.info(f'Unraid {name}: no API key, falling back to SSH shutdown')
+            app.logger.info('Unraid %s: no API key, falling back to SSH shutdown', safe_errors.log_text(name))
         else:
             try:
                 import requests as _req
@@ -6515,16 +6517,17 @@ def host_shutdown(name):
                 if resp.status_code == 200:
                     data = resp.json()
                     if 'errors' not in data:
-                        app.logger.info(f'Unraid {name} shutdown via GraphQL API OK')
+                        app.logger.info('Unraid %s shutdown via GraphQL API OK', safe_errors.log_text(name))
                         return jsonify({'ok': True, 'message': f'{name} is shutting down via Unraid API.'})
                     else:
                         err = data['errors'][0].get('message', 'Unknown error')
-                        app.logger.warning(f'Unraid {name} GraphQL error: {err}')
+                        app.logger.warning('Unraid %s GraphQL error: %s', safe_errors.log_text(name), safe_errors.log_text(err))
                         # Fall through to SSH
                 else:
-                    app.logger.warning(f'Unraid {name} GraphQL HTTP {resp.status_code}, falling back to SSH')
+                    app.logger.warning('Unraid %s GraphQL HTTP %s, falling back to SSH', safe_errors.log_text(name), resp.status_code)
             except Exception as e:
-                app.logger.warning(f'Unraid {name} GraphQL exception: {e}, falling back to SSH')
+                app.logger.warning('Unraid %s GraphQL exception: %s, falling back to SSH', safe_errors.log_text(name),
+                                   safe_errors.log_text(e))
     
     # ── Linux / Proxmox / Unraid fallback: SSH shutdown ──────────────────────
     try:
@@ -6557,10 +6560,11 @@ def host_shutdown(name):
         exit_code = stdout.channel.recv_exit_status()
         client.close()
         
-        app.logger.info(f'SSH shutdown sent to {name} ({ssh_host}), exit_code={exit_code}')
+        app.logger.info('SSH shutdown sent to %s (%s), exit_code=%s', safe_errors.log_text(name),
+                        safe_errors.log_text(ssh_host), exit_code)
         return jsonify({'ok': True, 'message': f'{name} is shutting down via SSH.'})
     except Exception as e:
-        app.logger.error(f'Shutdown failed for {name}: {e}')
+        app.logger.error('Shutdown failed for %s: %s', safe_errors.log_text(name), safe_errors.log_text(e))
         return jsonify({'ok': False, 'error': _error_message(e, 'Shutdown')}), 502
 
 

@@ -64,6 +64,18 @@ SYNC_TOKEN = os.environ.get('SYNC_TOKEN', '')
 _MIN_TOKEN_LEN = 32
 
 
+def _verify():
+    """Certificate check for requests to the peer: on by default.
+
+    FLEETPILOT_SYNC_CA names a CA bundle or the peer's own certificate (for a
+    self-signed peer); FLEETPILOT_SYNC_VERIFY=false turns the check off.
+    """
+    ca = os.environ.get("FLEETPILOT_SYNC_CA", "")
+    if ca:
+        return ca
+    return os.environ.get("FLEETPILOT_SYNC_VERIFY", "true").lower() != "false"
+
+
 def _token_configured() -> bool:
     return len(SYNC_TOKEN) >= _MIN_TOKEN_LEN
 
@@ -127,7 +139,7 @@ def _push_file(path: str, rel_name: str, peer_url: str) -> bool:
             data={'filename': rel_name, 'mtime': str(mtime), 'hash': _file_hash(path)},
             headers={'X-Sync-Token': SYNC_TOKEN},
             timeout=15,
-            verify=False  # nosec B501 - internal LAN only, self-signed certs,
+            verify=_verify(),
         )
         return resp.status_code == 200
     except Exception as e:
@@ -144,7 +156,7 @@ def _pull_file(rel_name: str, dest_path: str, peer_url: str) -> bool:
             params={'filename': rel_name},
             headers={'X-Sync-Token': SYNC_TOKEN},
             timeout=15,
-            verify=os.environ.get("FLEETPILOT_VERIFY_SSL", "false").lower() == "true"  # nosec B501 - internal LAN only, self-signed certs,
+            verify=_verify(),
         )
         if resp.status_code == 200:
             os.makedirs(os.path.dirname(dest_path), exist_ok=True)
@@ -167,7 +179,7 @@ def _get_peer_manifest(peer_url: str) -> Optional[Dict]:
             f'{peer_url}/api/sync/manifest',
             headers={'X-Sync-Token': SYNC_TOKEN},
             timeout=10,
-            verify=os.environ.get("FLEETPILOT_VERIFY_SSL", "false").lower() == "true"  # nosec B501 - internal LAN only, self-signed certs,
+            verify=_verify(),
         )
         if resp.status_code == 200:
             return resp.json()

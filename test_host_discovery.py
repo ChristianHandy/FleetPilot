@@ -52,7 +52,7 @@ def test_service_hub_template_is_present():
 
 def test_templates_compile():
     from jinja2 import Environment, FileSystemLoader
-    environment = Environment(loader=FileSystemLoader('templates'))
+    environment = Environment(loader=FileSystemLoader('templates'), autoescape=True)
     environment.get_template('index.html')
     environment.get_template('proxy_services.html')
     environment.get_template('base.html')

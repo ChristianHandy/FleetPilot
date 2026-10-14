@@ -237,7 +237,7 @@ def _http(method: str, url: str, headers: Dict = None,
                 logger.warning(
                     "_http %s %s — transient error (attempt %d/%d): %s. "
                     "Retrying in %.1fs…",
-                    method, url, attempt + 1, retries + 1, last_error, delay
+                    method, safe_errors.log_text(url), attempt + 1, retries + 1, safe_errors.log_text(last_error), delay
                 )
                 _time_mod.sleep(delay)
                 attempt += 1
@@ -253,6 +253,10 @@ def _http(method: str, url: str, headers: Dict = None,
 # ══════════════════════════════════════════════════════════════════════════════
 # Proxmox VE Client
 # ══════════════════════════════════════════════════════════════════════════════
+
+_GUEST_TYPES = {"qemu": "qemu", "lxc": "lxc"}
+_POWER_ACTIONS = {a: a for a in ("start", "stop", "shutdown", "reboot", "suspend", "resume")}
+
 
 class ProxmoxClient:
     """Proxmox VE REST API v2 client."""
@@ -312,37 +316,65 @@ class ProxmoxClient:
                         vms.append(vm)
         return vms
 
+    # Names that go into API paths come from Proxmox itself (or a fixed table), never
+    # straight from a request: an unknown node or guest type is refused.
+    def _node(self, node: str) -> str:
+        for known in self.get_nodes():
+            if known.get("node") == node:
+                return known["node"]
+        raise ValueError("Proxmox does not know this node.")
+
+    @staticmethod
+    def _guest(rtype: str) -> str:
+        try:
+            return _GUEST_TYPES[rtype]
+        except KeyError:
+            raise ValueError("Unknown guest type (expected qemu or lxc).") from None
+
+    def _guest_path(self, node: str, vmid: int, rtype: str) -> str:
+        return f"/nodes/{self._node(node)}/{self._guest(rtype)}/{int(vmid)}"
+
     def get_vm_status(self, node: str, vmid: int, rtype: str = "qemu") -> Dict:
-        r = self._get(f"/nodes/{node}/{rtype}/{vmid}/status/current")
+        r = self._get(f"{self._guest_path(node, vmid, rtype)}/status/current")
         return r["data"].get("data", {}) if r["ok"] else {}
 
     def vm_action(self, node: str, vmid: int, action: str,
                   rtype: str = "qemu") -> Dict:
         """action: start | stop | shutdown | reboot | suspend | resume"""
-        return self._post(f"/nodes/{node}/{rtype}/{vmid}/status/{action}")
+        try:
+            verb = _POWER_ACTIONS[action]
+        except KeyError:
+            raise ValueError("Unknown power action.") from None
+        return self._post(f"{self._guest_path(node, vmid, rtype)}/status/{verb}")
 
     def get_snapshots(self, node: str, vmid: int, rtype: str = "qemu") -> List[Dict]:
-        r = self._get(f"/nodes/{node}/{rtype}/{vmid}/snapshot")
+        r = self._get(f"{self._guest_path(node, vmid, rtype)}/snapshot")
         return r["data"].get("data", []) if r["ok"] else []
 
     def create_snapshot(self, node: str, vmid: int, snap_name: str,
                         description: str = "", rtype: str = "qemu") -> Dict:
         return self._post(
-            f"/nodes/{node}/{rtype}/{vmid}/snapshot",
+            f"{self._guest_path(node, vmid, rtype)}/snapshot",
             body={"snapname": snap_name, "description": description}
         )
 
     def get_storage(self, node: str) -> List[Dict]:
-        r = self._get(f"/nodes/{node}/storage")
+        r = self._get(f"/nodes/{self._node(node)}/storage")
         return r["data"].get("data", []) if r["ok"] else []
 
     def get_disks(self, node: str) -> List[Dict]:
-        r = self._get(f"/nodes/{node}/disks/list")
+        r = self._get(f"/nodes/{self._node(node)}/disks/list")
         return r["data"].get("data", []) if r["ok"] else []
 
     def get_disk_smart(self, node: str, disk: str) -> Dict:
         import urllib.parse
-        r = self._get(f"/nodes/{node}/disks/smart?disk={urllib.parse.quote(disk)}")
+        known = self._node(node)
+        r = self._get(f"/nodes/{known}/disks/list")
+        paths = [d.get("devpath") for d in (r["data"].get("data", []) if r["ok"] else []) if d.get("devpath")]
+        if disk not in paths:
+            raise ValueError("Proxmox does not list this disk.")
+        devpath = paths[paths.index(disk)]
+        r = self._get(f"/nodes/{known}/disks/smart?disk={urllib.parse.quote(devpath)}")
         return r["data"].get("data", {}) if r["ok"] else {}
 
     def get_cluster_resources(self) -> List[Dict]:
@@ -411,11 +443,17 @@ class VeeamClient:
             return r["data"].get("data", [])
         return []
 
+    def _job(self, job_id: str) -> str:
+        for job in self.get_jobs():
+            if str(job.get("id")) == job_id:
+                return str(job["id"])
+        raise ValueError("Veeam does not know this job.")
+
     def start_job(self, job_id: str) -> Dict:
-        return self._post(f"/jobs/{job_id}/start")
+        return self._post(f"/jobs/{self._job(job_id)}/start")
 
     def stop_job(self, job_id: str) -> Dict:
-        return self._post(f"/jobs/{job_id}/stop")
+        return self._post(f"/jobs/{self._job(job_id)}/stop")
 
     def get_managed_servers(self) -> List[Dict]:
         r = self._get("/backupInfrastructure/managedServers")
@@ -495,7 +533,10 @@ def vm_power_action(ep_id: int, node: str, vmid: int, action: str,
     client = connect(ep_id)
     if not isinstance(client, ProxmoxClient):
         return {"ok": False, "error": "Not a Proxmox endpoint"}
-    result = client.vm_action(node, vmid, action, rtype)
+    try:
+        result = client.vm_action(node, vmid, action, rtype)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
     status = "ok" if result.get("ok") else "error"
     log_event(ep_id, str(vmid), f"{node}/{vmid}", action.upper(), status,
               result.get("error", ""))
@@ -514,5 +555,8 @@ def get_proxmox_disk_smart(ep_id: int, node: str, disk: str) -> Dict:
     """Return SMART data for a disk on a Proxmox node."""
     client = connect(ep_id)
     if isinstance(client, ProxmoxClient):
-        return client.get_disk_smart(node, disk)
+        try:
+            return client.get_disk_smart(node, disk)
+        except ValueError:
+            return {}
     return {}

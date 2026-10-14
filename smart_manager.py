@@ -532,7 +532,8 @@ def collect_ssh_host_disks(host_name: str, host_ip: str, user: str,
                     break
         ssh = ssh_helper.create_client(**connect_kwargs)
     except Exception as exc:
-        logger.warning("[smart_manager] SSH connect failed for %s (%s): %s", host_name, host_ip, exc)
+        logger.warning("[smart_manager] SSH connect failed for %s (%s): %s", safe_errors.log_text(host_name),
+                       safe_errors.log_text(host_ip), safe_errors.log_text(exc))
         return []
 
     results = []
@@ -593,12 +594,13 @@ def collect_ssh_host_disks(host_name: str, host_ip: str, user: str,
                     "poh": parsed["poh"],
                 })
             except Exception as exc:
-                logger.warning("[smart_manager] SSH SMART failed for %s:/dev/%s: %s", host_name, dev, exc)
+                logger.warning("[smart_manager] SSH SMART failed for %s:/dev/%s: %s", safe_errors.log_text(host_name),
+                               safe_errors.log_text(dev), safe_errors.log_text(exc))
     finally:
         ssh.close()
 
     logger.info("[smart_manager] SSH import: %d disk(s) from %s (%s)",
-                len(results), host_name, host_ip)
+                len(results), safe_errors.log_text(host_name), safe_errors.log_text(host_ip))
     return results
 
 

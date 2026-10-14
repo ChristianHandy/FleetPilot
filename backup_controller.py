@@ -671,7 +671,13 @@ def trigger_duplicati_backup(srv: Dict, backup_id: str) -> Dict:
     if token:
         headers["Authorization"] = f"Bearer {token}"
     try:
-        r = requests.post(f"{base}/api/v1/backup/{backup_id}/run",
+        # Use the ID as Duplicati lists it, so nothing from the request ends up in the URL.
+        listed = requests.get(f"{base}/api/v1/backups", headers=headers, timeout=15, verify=True)
+        ids = [str((b.get("Backup") or {}).get("ID", "")) for b in (listed.json() if listed.ok else [])]
+        if backup_id not in ids:
+            return {"ok": False, "error": "Duplicati does not list this backup job."}
+        known = ids[ids.index(backup_id)]
+        r = requests.post(f"{base}/api/v1/backup/{known}/run",
                           headers=headers, timeout=15, verify=True)
         return {"ok": r.ok, "status_code": r.status_code, "message": r.text[:200]}
     except Exception as e:

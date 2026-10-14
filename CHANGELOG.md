@@ -4,6 +4,15 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ## [Unreleased]
 
+### Security
+
+- Fixes for CodeQL's security-extended findings:
+  - **Proxmox, Veeam and Duplicati:** API paths now only use names the device itself reported (node, guest type, power action, job, disk). A request can no longer put arbitrary text into the URL; before, the node and guest type from the form went into the Proxmox API path unchecked.
+  - **Logs:** host, device and path names have their line breaks escaped, so they cannot forge log entries.
+  - **File permissions:** the generated public SSH key, the proxy routes and the HAProxy candidate configuration are readable by their owner only.
+  - **Data sync:** the optional sync checks the peer's certificate by default (`FLEETPILOT_SYNC_CA` for a self-signed peer).
+- `/vm/<id>/disks` stored disks without their node, so the disks of a cluster's nodes overwrote each other there too.
+
 ### Added
 
 - Pull requests are fuzzed with ClusterFuzzLite (`.clusterfuzzlite/`, Atheris), focused on the changed code.

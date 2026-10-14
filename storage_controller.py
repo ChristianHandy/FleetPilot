@@ -745,6 +745,7 @@ def poll_and_log_disks(ep_id: int):
             disks = client.get_disk_summary()
             for d in disks:
                 log_disk_snapshot(ep_id, d)
-            logger.info("[storage_controller] Logged %d disks for endpoint %d", len(disks), ep_id)
+            logger.info("[storage_controller] Logged %d disks for endpoint %s", len(disks), safe_errors.log_text(ep_id))
     except Exception as exc:
-        logger.error("[storage_controller] Poll failed for endpoint %d: %s", ep_id, exc)
+        logger.error("[storage_controller] Poll failed for endpoint %s: %s", safe_errors.log_text(ep_id),
+                     safe_errors.log_text(exc))
