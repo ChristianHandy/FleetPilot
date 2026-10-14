@@ -87,7 +87,7 @@ def test_inline_scripts_only_contain_encoded_values():
     for path in sorted(glob.glob("templates/**/*.html", recursive=True)):
         with open(path, encoding="utf-8") as fh:
             source = fh.read()
-        for script in re.finditer(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", source, re.S):
+        for script in re.finditer(r"<script\b(?![^>]*\bsrc=)[^>]*>(.*?)</script\b[^>]*>", source, re.S | re.I):
             for expr in re.finditer(r"\{\{(.*?)\}\}", script.group(1), re.S):
                 if not _SAFE_IN_SCRIPT.match(expr.group(1)):
                     unsafe.append(f"{path}: {{{{{expr.group(1)}}}}}")
