@@ -16,7 +16,7 @@ Updates for Linux and Windows machines, SMART disk health, FRITZ!Box / OpenWrt /
 
 <img src="docs/screenshots/routers.png" alt="FleetPilot routers page: FRITZ!Box, repeater, OpenWrt and OPNsense with status, firmware, uptime and connected devices" width="100%">
 
-**[▶ Try the live demo](https://christianhandy.github.io/FleetPilot/)** · [Install](#quick-start) · [Features](#features) · [Screenshots](#screenshots) · [User guide](docs/user-guide.md) · [Security](SECURITY.md)
+**[▶ Try the live demo](https://christianhandy.github.io/FleetPilot/demo/)** · [Website](https://christianhandy.github.io/FleetPilot/) · [Install](#quick-start) · [Features](#features) · [Screenshots](#screenshots) · [User guide](docs/user-guide.md) · [Security](SECURITY.md)
 
 > **Test it before you install it.** The live demo is the real FleetPilot, running in your browser (WebAssembly) against an emulated homelab: Proxmox nodes, TrueNAS, a backup server, Linux and Windows machines, a FRITZ!Box, OpenWrt and OPNsense. Updates, Wake-on-LAN, VMs, fans, SMART alerts and router checks all work, and nothing leaves your browser.
 
@@ -82,7 +82,7 @@ FleetPilot holds SSH keys and admin access to your machines, so the project is b
 
 ## Screenshots
 
-Demo data; every page also has a light theme and works on phones. Try all of it in the **[live demo](https://christianhandy.github.io/FleetPilot/)** (or the lighter [static tour](https://christianhandy.github.io/FleetPilot/tour/)).
+Demo data; every page also has a light theme and works on phones. Try all of it in the **[live demo](https://christianhandy.github.io/FleetPilot/demo/)** (or the lighter [static tour](https://christianhandy.github.io/FleetPilot/tour/)).
 
 <table>
 <tr>

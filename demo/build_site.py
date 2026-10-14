@@ -113,7 +113,7 @@ with open(os.path.join(SITE, "demo.js"), "w") as fh:
     var bar = document.createElement('div');
     bar.id = 'fp-demo-bar';
     bar.innerHTML = 'Static tour with example data: buttons do nothing here. ' +
-      '<a href="../">Try the live demo</a>, where they work · ' +
+      '<a href="../demo/">Try the live demo</a>, where they work · ' +
       '<a href="https://github.com/ChristianHandy/FleetPilot#quick-start">Install FleetPilot</a>';
     document.body.insertBefore(bar, document.body.firstChild);
   });
