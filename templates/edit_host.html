@@ -160,7 +160,7 @@
 {% block scripts %}
 <script>
 /* ── Tag Input ─────────────────────────────────────────────── */
-let currentTags = {{ data.tags | tojson if data.tags else '[]' }};
+let currentTags = {{ (data.tags or [])|tojson }};
 
 function renderTagChips() {
   const wrapper = document.getElementById('tagWrapper');
@@ -251,7 +251,7 @@ function escHtml(s) {
 
 // Pre-fill existing OS profiles
 document.addEventListener('DOMContentLoaded', function() {
-  const existing = {{ data.os_profiles | tojson if data.os_profiles else '[]' }};
+  const existing = {{ (data.os_profiles or [])|tojson }};
   existing.forEach(p => addOsProfile(p.name, p.type, p.default));
   if (existing.length > 0) {
     document.getElementById('osToggle').classList.add('open');
