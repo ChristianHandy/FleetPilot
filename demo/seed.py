@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Demo mode: a FleetPilot with example data (RFC 5737 addresses, made-up devices).
 
 Importing this module seeds a fresh data folder (demo/.data) and returns the app as `fp`.
@@ -9,8 +11,6 @@ import os
 import secrets
 import shutil
 import sys
-import threading
-import time
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HERE = os.path.dirname(os.path.abspath(__file__))

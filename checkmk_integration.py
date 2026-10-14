@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 checkmk_integration.py — FleetPilot ↔ CheckMK Integration
 ===========================================================
@@ -20,12 +22,10 @@ Author: FleetPilot
 
 from __future__ import annotations
 import safe_errors
-import json
 import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
 # ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -76,7 +76,7 @@ def check_pending_updates(hosts: dict) -> list[str]:
 
         perf = f"pending_updates={total};1;1;0 security_updates={sec_count};1;1;0"
         if state == 0:
-            summary = f"No pending updates"
+            summary = "No pending updates"
         elif sec_count > 0:
             summary = f"{total} updates pending, {sec_count} SECURITY updates!"
         else:
@@ -91,7 +91,6 @@ def check_host_connectivity(hosts: dict) -> list[str]:
     lines = []
     for name, hdata in hosts.items():
         status = hdata.get("status", "unknown")
-        last_seen = hdata.get("last_seen", "")
         ip = hdata.get("host", "?")
 
         if status == "online":

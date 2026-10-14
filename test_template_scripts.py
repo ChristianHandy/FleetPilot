@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Values placed inside <script> must be JSON (|tojson), never HTML-escaped: '&#34;' there is a syntax error
 that silently breaks every button on the page."""
 import re

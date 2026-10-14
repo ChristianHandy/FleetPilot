@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 server_registry.py — Central Server Registry for FleetPilot
 
@@ -30,12 +32,13 @@ Usage:
 
 import contextlib
 import sqlite3
+import db_util
 import json
 import os
 import threading
 import logging
-from datetime import datetime
-from typing import Optional, List, Dict, Any
+from datetime import datetime, timezone
+from typing import Optional, List, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +109,13 @@ class ServerRegistry:
             self._local.conn = conn
         return self._local.conn
 
+    def close(self) -> None:
+        """Close this thread's connection."""
+        conn = getattr(self._local, 'conn', None)
+        if conn is not None:
+            conn.close()
+            self._local.conn = None
+
     def _commit(self):
         """Commit now, unless inside batch(), which commits once at the end."""
         if not getattr(self._local, 'batch', 0):
@@ -127,7 +137,7 @@ class ServerRegistry:
             self._conn().commit()
 
     def _init_db(self):
-        with sqlite3.connect(self._db_path, timeout=15) as conn:
+        with sqlite3.connect(self._db_path, timeout=15, factory=db_util.ClosingConnection) as conn:
             conn.executescript(self.SCHEMA)
             conn.commit()
 
@@ -139,7 +149,7 @@ class ServerRegistry:
         if isinstance(tags, list):
             tags = json.dumps(tags)
 
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         conn = self._conn()
 
         existing = conn.execute(
@@ -234,7 +244,7 @@ class ServerRegistry:
         conn = self._conn()
         conn.execute(
             "UPDATE servers SET online=?, last_seen=? WHERE id=?",
-            (1 if online else 0, datetime.utcnow().isoformat(), id)
+            (1 if online else 0, datetime.now(timezone.utc).replace(tzinfo=None).isoformat(), id)
         )
         self._commit()
 

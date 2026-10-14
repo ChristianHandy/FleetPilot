@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 router_manager.py — routers and open-source router operating systems.
 
@@ -37,6 +39,7 @@ import logging
 import os
 import re
 import sqlite3
+import db_util
 import threading
 import time
 from datetime import datetime
@@ -94,7 +97,7 @@ def _data_dir() -> str:
 
 
 def _db() -> sqlite3.Connection:
-    conn = sqlite3.connect(os.path.join(_data_dir(), "router_manager.db"), timeout=15)
+    conn = sqlite3.connect(os.path.join(_data_dir(), "router_manager.db"), timeout=15, factory=db_util.ClosingConnection)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -335,7 +338,7 @@ def parse_isc_leases(text: str) -> List[Dict[str, Any]]:
 
 def parse_kea_csv(text: str) -> List[Dict[str, Any]]:
     """Kea memfile leases (pfSense with Kea, VyOS 1.4+, OPNsense)."""
-    lines = [l for l in (text or "").splitlines() if l.strip()]
+    lines = [ln for ln in (text or "").splitlines() if ln.strip()]
     if not lines or not lines[0].startswith("address,"):
         return []
     header = lines[0].split(",")
@@ -607,7 +610,7 @@ class LinuxDriver(_SshDriver):
         s = split_sections(self.text(_LINUX_STATUS))
         os_release = dict(re.findall(r'^(\w+)="?([^"\n]*)"?$', s.get("os", ""), re.M))
         vyos = _json(s.get("vyos", "")) or {}
-        os_lines = [l for l in s.get("os", "").splitlines() if l.strip() and "=" not in l]
+        os_lines = [ln for ln in s.get("os", "").splitlines() if ln.strip() and "=" not in ln]
         if vyos.get("version"):
             firmware = f'VyOS {vyos["version"]}'
         else:  # /etc/system-release (IPFire: "IPFire 2.29 (x86_64) - core188") beats os-release

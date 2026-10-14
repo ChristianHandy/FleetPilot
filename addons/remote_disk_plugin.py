@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 # -----------------------------------------
 # 🌐 Remote Disk Management Plugin
 # -----------------------------------------
@@ -8,12 +10,11 @@
 #  - Run SMART tests on remote disks
 #  - View SMART data from remote systems
 
-import paramiko
-import sys, os
+import sys
+import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import ssh_helper
 import json
-import re
 import disktool_core
 from flask import request, flash, redirect, url_for
 
@@ -22,6 +23,8 @@ addon_meta = {
     
     # Embedded HTML template
     "html": """
+    {# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+       SPDX-License-Identifier: GPL-3.0-or-later -#}
     {% extends 'disks/base.html' %}
     {% block title %}Remote Disk Manager – {{ device }}{% endblock %}
     {% block content %}

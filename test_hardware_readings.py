@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Readings from Proxmox nodes and lm-sensors are stored under the right names and values."""
 import json
 
@@ -51,3 +53,17 @@ def test_lm_sensors_limits_are_not_shown_as_readings(monkeypatch):
     assert [t["value"] for t in result["temperatures"]] == [48.0]
     assert [f["rpm"] for f in result["fans"]] == [1123]
     assert [v["value"] for v in result["voltages"]] == [1.016]
+
+
+def test_hw_monitor_scripts_run_on_a_linux_host():
+    """The collector is sent to each host as a script; a syntax error there marks every host unreachable."""
+    import ast
+    import subprocess
+    import sys
+
+    import hw_monitor
+    ast.parse(hw_monitor.FAN_DETECT_SCRIPT)
+    out = subprocess.run([sys.executable, "-"], input=hw_monitor.COLLECT_SCRIPT, capture_output=True,
+                         text=True, timeout=60, check=True).stdout
+    data = json.loads(out)
+    assert data["ram_total_mb"] > 0 and data["cpu_cores"] >= 1 and "ts" in data

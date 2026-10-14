@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 FleetPilot — Storage Controller
 =================================
@@ -11,16 +13,16 @@ All connections are stored in the SQLite database (storage_controller.db).
 """
 
 import safe_errors
-import os
+import secret_box
 import json
 import sqlite3
+import db_util
 import shutil
 import logging
 import urllib.request
 import urllib.error
 import urllib.parse
 import ssl
-from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, List, Any
 
@@ -29,7 +31,6 @@ logger = logging.getLogger("fleetpilot.storage_controller")
 DB_FILE = None  # set by init_db(data_dir); see migration note there
 
 # ── Encryption (same pattern as vm_controller) ────────────────────────────────
-import secret_box
 _box = secret_box.SecretBox("sha256")
 _encrypt = _box.encrypt
 _decrypt = _box.decrypt
@@ -38,7 +39,7 @@ _decrypt = _box.decrypt
 # ── Database ──────────────────────────────────────────────────────────────────
 
 def get_db():
-    conn = sqlite3.connect(str(DB_FILE), timeout=15)
+    conn = sqlite3.connect(str(DB_FILE), timeout=15, factory=db_util.ClosingConnection)
     conn.row_factory = sqlite3.Row
     return conn
 

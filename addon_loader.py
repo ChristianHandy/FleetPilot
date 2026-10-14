@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 FleetPilot — Universal Plugin/Addon Loader
 ==========================================
@@ -17,7 +19,7 @@ import importlib.util
 import traceback
 import threading
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 import textwrap
 
 HOOK_NAMES = [

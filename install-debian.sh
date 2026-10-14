@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Kept for old links and guides: FleetPilot now has one installer for Debian,
 # Ubuntu and Raspberry Pi OS. See install.sh and docs/installation.md.
 set -euo pipefail

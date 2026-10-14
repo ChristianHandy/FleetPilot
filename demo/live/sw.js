@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+   SPDX-License-Identifier: GPL-3.0-or-later */
 /* FleetPilot live demo: service worker.
  *
  * Requests below <scope>/app/<lab-id>/ are FleetPilot pages. They are not sent to any

@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Regression tests for the CodeQL findings: redirects, paths, error text, XSS, commands."""
 import io
 import os

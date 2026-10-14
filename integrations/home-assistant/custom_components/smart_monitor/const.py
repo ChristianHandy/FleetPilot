@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Constants for the SMART Disk Monitor integration."""
 
 DOMAIN = "smart_monitor"

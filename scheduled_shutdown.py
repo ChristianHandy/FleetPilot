@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 scheduled_shutdown.py — Scheduled power-off for remote hosts via SSH.
 
@@ -7,16 +9,16 @@ executes the shutdown command via SSH.
 """
 
 import sqlite3
+import db_util
 import safe_errors
 import threading
 import time
 import logging
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict
 
-import paramiko
 import ssh_helper
 
 logger = logging.getLogger(__name__)
@@ -30,7 +32,7 @@ DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 
 def _get_db():
-    conn = sqlite3.connect(str(_DB_FILE), timeout=10)
+    conn = sqlite3.connect(str(_DB_FILE), timeout=10, factory=db_util.ClosingConnection)
     conn.row_factory = sqlite3.Row
     return conn
 

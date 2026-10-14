@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 FleetPilot — SMART Manager
 ============================
@@ -17,16 +19,15 @@ import os
 import re
 import json
 import sqlite3
+import db_util
 import shutil
 import logging
 
 import safe_errors
 import subprocess
 import threading
-import time
-from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional
 import ssh_helper
 
 logger = logging.getLogger("fleetpilot.smart_manager")
@@ -68,7 +69,7 @@ POH_CRITICAL = 50_000   # ~5.7 years
 # ── Database ──────────────────────────────────────────────────────────────────
 
 def get_db():
-    conn = sqlite3.connect(str(DB_FILE), timeout=15)
+    conn = sqlite3.connect(str(DB_FILE), timeout=15, factory=db_util.ClosingConnection)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -517,7 +518,6 @@ def collect_ssh_host_disks(host_name: str, host_ip: str, user: str,
     Returns list of imported disk dicts.
     """
     try:
-        import paramiko
         connect_kwargs = dict(hostname=host_ip, username=user, port=port, timeout=10)
         if key_path and Path(key_path).exists():
             connect_kwargs["key_filename"] = key_path

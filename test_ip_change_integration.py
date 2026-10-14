@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Integration test for IP change detection features
 Tests the web routes and end-to-end functionality
@@ -7,14 +9,13 @@ import unittest
 import json
 import os
 import tempfile
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 import sys
 
 # Add the parent directory to the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import app
-import arp_tracker
 
 
 class TestIpChangeDetectionIntegration(unittest.TestCase):
@@ -115,7 +116,8 @@ class TestIpChangeDetectionIntegration(unittest.TestCase):
             'user': 'admin',
             'mac': '00:11:22:33:44:55'
         }, follow_redirects=False)
-        
+        self.assertEqual(response.status_code, 302)
+
         # Check that MAC was added
         hosts = app.load_hosts()
         self.assertEqual(hosts['test-host']['mac'], '00:11:22:33:44:55')

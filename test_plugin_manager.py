@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Test script for plugin manager functionality
 """
 import sys
 import os
-import json
-import tempfile
 from pathlib import Path
 
 # Add the parent directory to the path to import modules
@@ -15,25 +15,25 @@ def test_plugin_manager_import():
     """Test that plugin manager can be imported"""
     print("Testing plugin manager import...")
     try:
-        from addons import plugin_manager
+        from addons import plugin_manager  # noqa: F401  (tests the import)
         print("✓ Plugin manager imported successfully")
-        return True
+        return
     except Exception as e:
         print(f"✗ Failed to import plugin manager: {e}")
-        return False
+        raise AssertionError("test_plugin_manager_import failed; see the output above")
 
 def test_plugin_manager_blueprint():
     """Test that plugin manager blueprint is configured correctly"""
     print("\nTesting plugin manager blueprint...")
     try:
-        from addons import plugin_manager
+        from addons import plugin_manager  # noqa: F401  (tests the import)
         assert hasattr(plugin_manager, 'blueprint'), "Blueprint not found"
         assert plugin_manager.blueprint.url_prefix == '/disks/pluginmanager', "Incorrect URL prefix"
         print("✓ Plugin manager blueprint configured correctly")
-        return True
+        return
     except Exception as e:
         print(f"✗ Blueprint test failed: {e}")
-        return False
+        raise AssertionError("test_plugin_manager_blueprint failed; see the output above")
 
 def test_plugin_validation():
     """Test plugin ID validation"""
@@ -52,10 +52,10 @@ def test_plugin_validation():
             assert not re.match(r'^[a-zA-Z0-9_]+$', pid), f"Invalid ID accepted: {pid}"
         
         print("✓ Plugin ID validation working correctly")
-        return True
+        return
     except Exception as e:
         print(f"✗ Validation test failed: {e}")
-        return False
+        raise AssertionError("test_plugin_validation failed; see the output above")
 
 def test_addon_loader_status():
     """Test that addon loader includes file information"""
@@ -72,16 +72,16 @@ def test_addon_loader_status():
         # Check that status includes file information
         for plugin in addon_mgr.status:
             assert 'file' in plugin, f"Plugin {plugin.get('name')} missing 'file' field"
-            assert 'name' in plugin, f"Plugin missing 'name' field"
+            assert 'name' in plugin, "Plugin missing 'name' field"
             assert 'status' in plugin, f"Plugin {plugin.get('name')} missing 'status' field"
         
         print(f"✓ Addon loader status includes file information for {len(addon_mgr.status)} plugins")
-        return True
+        return
     except Exception as e:
         print(f"✗ Addon loader test failed: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        raise AssertionError("test_addon_loader_status failed; see the output above")
 
 def test_remote_plugin_json_format():
     """Test that remote plugin JSON format is valid"""
@@ -115,17 +115,17 @@ def test_remote_plugin_json_format():
             assert re.match(r'^[a-zA-Z0-9_]+$', plugin['id']), f"Invalid plugin ID: {plugin['id']}"
         
         print("✓ Remote plugin JSON format is valid")
-        return True
+        return
     except Exception as e:
         print(f"✗ JSON format test failed: {e}")
-        return False
+        raise AssertionError("test_remote_plugin_json_format failed; see the output above")
 
 def test_security_checks():
     """Test security features"""
     print("\nTesting security checks...")
     try:
         # Test that plugin manager checks admin role
-        from addons import plugin_manager
+        from addons import plugin_manager  # noqa: F401  (tests the import)
         import inspect
         
         # Verify that install and uninstall functions exist
@@ -146,18 +146,18 @@ def test_security_checks():
         assert 'regex' in uninstall_source.lower() or 're.match' in uninstall_source, "Uninstall doesn't validate plugin file"
         
         print("✓ Security checks in place")
-        return True
+        return
     except Exception as e:
         print(f"✗ Security test failed: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        raise AssertionError("test_security_checks failed; see the output above")
 
 def test_path_sanitization():
     """Test path sanitization to prevent path traversal attacks"""
     print("\nTesting path sanitization...")
     try:
-        from addons import plugin_manager
+        from addons import plugin_manager  # noqa: F401  (tests the import)
         
         # Test valid paths
         base_dir = 'addons'
@@ -207,49 +207,13 @@ def test_path_sanitization():
                     assert False, "Absolute path not properly contained"
         
         print("✓ Path sanitization working correctly")
-        return True
+        return
     except Exception as e:
         print(f"✗ Path sanitization test failed: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        raise AssertionError("test_path_sanitization failed; see the output above")
 
-def main():
-    """Run all tests"""
-    print("=" * 60)
-    print("Plugin Manager Test Suite")
-    print("=" * 60)
-    
-    tests = [
-        test_plugin_manager_import,
-        test_plugin_manager_blueprint,
-        test_plugin_validation,
-        test_addon_loader_status,
-        test_remote_plugin_json_format,
-        test_security_checks,
-        test_path_sanitization,
-    ]
-    
-    results = []
-    for test in tests:
-        try:
-            results.append(test())
-        except Exception as e:
-            print(f"\n✗ Test crashed: {e}")
-            import traceback
-            traceback.print_exc()
-            results.append(False)
-    
-    print("\n" + "=" * 60)
-    print(f"Test Results: {sum(results)}/{len(results)} passed")
-    print("=" * 60)
-    
-    if all(results):
-        print("\n✓ All tests passed!")
-        return 0
-    else:
-        print("\n✗ Some tests failed")
-        return 1
-
-if __name__ == '__main__':
-    sys.exit(main())
+if __name__ == "__main__":
+    import pytest
+    sys.exit(pytest.main([__file__, "-q"]))

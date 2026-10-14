@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 name: Scorecard
 
 # OpenSSF Scorecard supply-chain checks; results go to code scanning and the badge.

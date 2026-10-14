@@ -45,3 +45,9 @@ FleetPilotCS/obj/
 # Fuzzer scratch data
 /fuzz/.data/
 /fuzz-out/
+
+# Test coverage data
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml

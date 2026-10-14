@@ -1,4 +1,7 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Tests for sessions, API tokens, sudo mode, the security center, notifications and audit export."""
+import pathlib
 import http.server
 import json
 import re
@@ -293,9 +296,11 @@ def test_allowlist_blocks_other_networks_but_never_locks_out_the_admin(client):
     assert outsider.get('/', environ_base={'REMOTE_ADDR': '192.0.2.10'}).status_code == 403
     assert outsider.get('/', environ_base={'REMOTE_ADDR': '10.4.5.6'}).status_code == 200
     assert outsider.get('/status', environ_base={'REMOTE_ADDR': '192.0.2.10'}).status_code == 200
-    # An admin on 192.0.2.10 cannot save a list without their own address.
-    r = client.post('/system/security/settings', data={'ip_allowlist': '10.0.0.0/8'},
-                    environ_base={'REMOTE_ADDR': '10.9.9.9'})
+    # An admin on 10.9.9.9 cannot save a list without their own address.
+    r = client.post('/system/security/settings', data={'ip_allowlist': '192.168.0.0/16'},
+                    environ_base={'REMOTE_ADDR': '10.9.9.9'}, follow_redirects=True)
+    assert 'would lock you out' in r.get_data(as_text=True)
+    assert account_security.get_settings()['ip_allowlist'] == ['10.0.0.0/8']
     assert account_security.ip_allowed('::ffff:10.1.1.1', ['10.0.0.0/8'])
     assert not account_security.ip_allowed('garbage', ['10.0.0.0/8'])
 
@@ -364,7 +369,7 @@ def test_notification_channels_store_urls_encrypted_and_deliver():
     url = f'http://127.0.0.1:{server.server_port}/hook/secret-token-123'
     try:
         cid = notify.add_channel('Sink', 'webhook', url, ['smart'], 'warning')
-        assert 'secret-token-123' not in open(notify._path()).read()
+        assert 'secret-token-123' not in pathlib.Path(notify._path()).read_text()
         assert notify.list_channels()[0]['url_hint'].endswith('/…')
         # Below the channel's level, or another event: nothing is sent.
         assert notify.send('smart', 't', 'm', 'info', wait=True) == []
@@ -378,6 +383,7 @@ def test_notification_channels_store_urls_encrypted_and_deliver():
         assert notify.send('smart', 't', 'm', 'critical', wait=True) == []
     finally:
         server.shutdown()
+        server.server_close()
         for ch in notify.list_channels():
             notify.delete_channel(ch['id'])
 

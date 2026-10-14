@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """FleetPilot-managed reverse-proxy route registry.
 
 Only administrators can manage the registry through FleetPilot.  The service

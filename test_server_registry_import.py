@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The registry must import servers from the module databases FleetPilot actually writes."""
 import sqlite3
 
@@ -33,3 +35,4 @@ def test_imports_from_hw_monitor_fans_and_backups(tmp_path):
     assert hosts['pbs']['host'] == '192.0.2.13'
     # Encrypted module secrets are not copied into the registry.
     assert not hosts['rig'].get('password')
+    reg.close()

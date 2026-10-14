@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Router support: parsers, drivers (with simulated devices), storage, permissions."""
 import io
 import json
@@ -190,14 +192,15 @@ def _router(platform, **extra):
 
 def test_openwrt_status_updates_backup(fake_ssh):
     rid = _router("openwrt")
-    ssh = fake_ssh({"ubus call system board": _sections(OPENWRT), "apk list": OPKG,
+    fake_ssh({"ubus call system board": _sections(OPENWRT), "apk list": OPKG,
                     "sysupgrade -b": b"\x1f\x8b" + b"\x00" * 200})
     st = rm.poll(rid)
     assert st["online"] and st["model"] == "GL.iNet GL-MT6000" and st["firmware"] == "OpenWrt 24.10.0 r28427"
     assert st["uptime"] == 93784 and st["mem_used"] == 1048576000 - 700000000 and len(st["clients"]) == 2
     assert rm.check_updates(rid)["count"] == 2
     name = rm.backup(rid)
-    raw = open(os.path.join(rm._backup_dir(), name), "rb").read()
+    with open(os.path.join(rm._backup_dir(), name), "rb") as fh:
+        raw = fh.read()
     assert b"\x1f\x8b" not in raw                       # stored encrypted
     assert rm.read_backup(rid, name)[1].startswith(b"\x1f\x8b")
     assert rm.read_backup(rid, "../" + name) is None
@@ -325,7 +328,9 @@ def test_validation_and_encrypted_secrets(tmp_path):
     with pytest.raises(ValueError):
         rm.add_router({"name": "o", "platform": "opnsense", "host": "fw"})     # API key required
     rid = rm.add_router({"name": "sec", "platform": "openwrt", "host": "gw.lan", "password": "wifi-secret-123"})
-    raw = sqlite3.connect(os.path.join(str(tmp_path), "router_manager.db")).execute("SELECT * FROM routers").fetchall()
+    con = sqlite3.connect(os.path.join(str(tmp_path), "router_manager.db"))
+    raw = con.execute("SELECT * FROM routers").fetchall()
+    con.close()
     assert "wifi-secret-123" not in repr(raw)
     assert rm.get_router(rid, secrets=True)["password"] == "wifi-secret-123"
     assert rm.get_router(rid)["password"] == ""

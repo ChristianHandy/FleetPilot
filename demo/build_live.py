@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Build the live demo: FleetPilot running in the browser (Pyodide) against an emulated homelab.
 
     python demo/build_live.py [OUT]       # default OUT: demo/site/demo

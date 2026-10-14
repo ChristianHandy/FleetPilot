@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 name: Tests
 
 on:
@@ -31,14 +33,18 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --require-hashes -r requirements-lock.txt -r requirements-dev-lock.txt
-      - name: Lint for crashes (undefined or shadowed names)
-        run: ruff check --select F821,F811,F823,F632,F601,F707,E9 --exclude FleetPilotCS,FleetPilotAndroid .
+      - name: Coding standard (ruff, rules in ruff.toml)
+        run: ruff check --output-format=github .
       - name: Run tests
         env:
           FLEETPILOT_DATA_DIR: ${{ runner.temp }}/fleetpilot-data
         run: |
           mkdir -p "$FLEETPILOT_DATA_DIR"
-          python -m pytest -q
+          python -m coverage run -m pytest -q
+      - name: Test coverage (fails below fail_under in .coveragerc)
+        run: |
+          python -m coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY" || true
+          python -m coverage report --format=total
       - name: Check dependencies for known vulnerabilities
         run: pip-audit --require-hashes --disable-pip -r requirements-lock.txt
       - name: Bandit (high severity fails the build)

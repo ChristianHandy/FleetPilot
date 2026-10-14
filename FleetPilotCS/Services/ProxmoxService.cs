@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
 using System.Net.Http.Headers;
 using System.Text;
 using Newtonsoft.Json;

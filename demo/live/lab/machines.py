@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Emulated machines: Linux and Windows servers with disks, packages, sensors and fans.
 
 A machine answers the shell commands FleetPilot sends over SSH (or runs locally, for

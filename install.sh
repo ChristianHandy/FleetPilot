@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 # =============================================================================
 #  FleetPilot installer
 #  Debian 12/13, Ubuntu 22.04/24.04, Raspberry Pi OS (Bookworm/Trixie).

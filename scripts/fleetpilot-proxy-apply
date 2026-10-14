@@ -1,4 +1,6 @@
 #!/usr/bin/python3
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Root-owned FleetPilot HAProxy configuration helper.
 
 The FleetPilot web process may write only a structured route registry. This

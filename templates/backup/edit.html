@@ -1,3 +1,5 @@
+{# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+   SPDX-License-Identifier: GPL-3.0-or-later -#}
 {% extends "base.html" %}
 {% block title %}Edit {{ srv.name }}{% endblock %}
 {% block page_back %}<a href="{{ url_for('backup_detail', server_id=srv.id) }}">{{ icon('arrow-left', 14) }} {{ srv.name }}</a>{% endblock %}

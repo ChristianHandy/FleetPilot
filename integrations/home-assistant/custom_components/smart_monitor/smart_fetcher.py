@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """SSH client and SMART data fetcher for SMART Disk Monitor."""
 from __future__ import annotations
 
@@ -11,7 +13,7 @@ from typing import Any
 
 import paramiko
 
-from .const import SMART_ATTRS, NVME_ATTRS, HEALTH_PASSED, HEALTH_FAILED, HEALTH_UNKNOWN
+from .const import NVME_ATTRS, HEALTH_PASSED, HEALTH_FAILED, HEALTH_UNKNOWN
 
 _LOGGER = logging.getLogger(__name__)
 

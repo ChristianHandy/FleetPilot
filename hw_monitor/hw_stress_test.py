@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 pve03 Hardware Stress Test
 ==========================
@@ -260,7 +262,7 @@ def test_ram(stop_event):
         return
 
     # Runde 2: Bit-Flip-Erkennung (prüft auf defekte RAM-Zellen)
-    log(f"RAM Phase 2: Bit-Flip-Erkennung (stress-ng --vm-rw)", "TEST")
+    log("RAM Phase 2: Bit-Flip-Erkennung (stress-ng --vm-rw)", "TEST")
     proc = run_bg(f"stress-ng --vm-rw 2 --vm-bytes {RAM_STRESS_MB // 2}M --timeout 180s --verify")
     start = time.time()
     while time.time() - start < 185 and not stop_event.is_set():
@@ -269,8 +271,8 @@ def test_ram(stop_event):
 
     # Runde 3: Hugepages
     if not stop_event.is_set():
-        log(f"RAM Phase 3: Hugepages-Test", "TEST")
-        proc = run_bg(f"stress-ng --bigheap 2 --timeout 60s")
+        log("RAM Phase 3: Hugepages-Test", "TEST")
+        proc = run_bg("stress-ng --bigheap 2 --timeout 60s")
         start = time.time()
         while time.time() - start < 65 and not stop_event.is_set():
             time.sleep(2)
@@ -354,6 +356,7 @@ def test_disk(stop_event):
 
 def test_gpu(stop_event):
     """GPU-Stress-Test via nvidia-smi und stress-ng mit GPU-Speicher."""
+    global running
     log("=== GPU-TEST START === (NVIDIA GTX 1650)", "TEST")
     test_results["phases"]["gpu"] = {"status": "running", "start": datetime.datetime.now().isoformat()}
 
@@ -375,7 +378,6 @@ def test_gpu(stop_event):
     proc = run_bg(f"stress-ng --matrix {CPU_CORES} --matrix-size 512 --timeout 120s")
     start = time.time()
     while time.time() - start < 125 and not stop_event.is_set():
-        gpu_t = get_gpu_temp()
         gpu_ok = get_gpu_status()
         if not gpu_ok:
             log("KRITISCH: GPU während Matrix-Test vom Bus gefallen!", "CRITICAL")
@@ -393,7 +395,7 @@ def test_gpu(stop_event):
 
     # Phase 3: GPU-Speicher-Stress via nvidia-smi + stress-ng vm
     log("GPU Phase 2: GPU-Speicher-Stress (stress-ng --vm, 120s)", "TEST")
-    proc = run_bg(f"stress-ng --vm 2 --vm-bytes 1G --vm-method flip --timeout 120s")
+    proc = run_bg("stress-ng --vm 2 --vm-bytes 1G --vm-method flip --timeout 120s")
     start = time.time()
     while time.time() - start < 125 and not stop_event.is_set():
         gpu_ok = get_gpu_status()
@@ -436,6 +438,7 @@ def test_gpu(stop_event):
 
 def test_combined(stop_event):
     """Kombinierter Stress-Test: CPU + RAM + Disk + GPU gleichzeitig."""
+    global running
     log("=== KOMBINIERTER STRESS-TEST START === (alles gleichzeitig)", "TEST")
     test_results["phases"]["combined"] = {"status": "running", "start": datetime.datetime.now().isoformat()}
 
@@ -493,11 +496,11 @@ def run_report():
     with open(LOG_FILE) as f:
         lines = f.readlines()
 
-    criticals = [l for l in lines if "[CRITICAL]" in l]
-    errors    = [l for l in lines if "[ERROR]" in l]
-    warnings  = [l for l in lines if "[WARN]" in l]
-    results   = [l for l in lines if "[RESULT]" in l]
-    tests     = [l for l in lines if "[TEST]" in l and "START" in l]
+    criticals = [ln for ln in lines if "[CRITICAL]" in ln]
+    errors    = [ln for ln in lines if "[ERROR]" in ln]
+    warnings  = [ln for ln in lines if "[WARN]" in ln]
+    results   = [ln for ln in lines if "[RESULT]" in ln]
+    tests     = [ln for ln in lines if "[TEST]" in ln and "START" in ln]
 
     print(f"\nLog-Datei:   {LOG_FILE}")
     print(f"Zeilen:      {len(lines)}")
@@ -509,29 +512,29 @@ def run_report():
 
     if criticals:
         print("\n─── KRITISCHE EREIGNISSE ───────────────────────────────────────────")
-        for l in criticals:
-            print(" ", l.rstrip())
+        for ln in criticals:
+            print(" ", ln.rstrip())
 
     if errors:
         print("\n─── FEHLER ─────────────────────────────────────────────────────────")
-        for l in errors:
-            print(" ", l.rstrip())
+        for ln in errors:
+            print(" ", ln.rstrip())
 
     if results:
         print("\n─── TESTERGEBNISSE ─────────────────────────────────────────────────")
-        for l in results:
-            print(" ", l.rstrip())
+        for ln in results:
+            print(" ", ln.rstrip())
 
     # Temperatur-Statistik
     cpu_temps, gpu_temps = [], []
-    for l in lines:
-        m = re.search(r"CPU: ([\d.]+)°C", l)
+    for ln in lines:
+        m = re.search(r"CPU: ([\d.]+)°C", ln)
         if m:
             try:
                 cpu_temps.append(float(m.group(1)))
             except ValueError:
                 pass
-        m = re.search(r"GPU: ([\d.]+)°C", l)
+        m = re.search(r"GPU: ([\d.]+)°C", ln)
         if m:
             try:
                 gpu_temps.append(float(m.group(1)))
@@ -539,7 +542,7 @@ def run_report():
                 pass
 
     if cpu_temps:
-        print(f"\n─── TEMPERATUREN ───────────────────────────────────────────────────")
+        print("\n─── TEMPERATUREN ───────────────────────────────────────────────────")
         print(f"  CPU: min={min(cpu_temps):.1f}°C  max={max(cpu_temps):.1f}°C  avg={sum(cpu_temps)/len(cpu_temps):.1f}°C")
     if gpu_temps:
         print(f"  GPU: min={min(gpu_temps):.1f}°C  max={max(gpu_temps):.1f}°C  avg={sum(gpu_temps)/len(gpu_temps):.1f}°C")
@@ -547,7 +550,7 @@ def run_report():
     if os.path.exists(RESULT_FILE):
         with open(RESULT_FILE) as f:
             res = json.load(f)
-        print(f"\n─── TESTERGEBNIS ───────────────────────────────────────────────────")
+        print("\n─── TESTERGEBNIS ───────────────────────────────────────────────────")
         print(f"  Start:   {res.get('start_time','?')}")
         print(f"  Ende:    {res.get('end_time','?')}")
         print(f"  Fehler:  {res.get('failure','Keiner — Test abgeschlossen oder abgebrochen')}")

@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 # -----------------------------------------
 # 📦 Tutorial Plugin für das DiskTool System
 # -----------------------------------------
@@ -13,6 +15,8 @@ addon_meta = {
 
     # 🔽 Embedded HTML template – automatically extracted
     "html": """
+    {# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+       SPDX-License-Identifier: GPL-3.0-or-later -#}
     {% extends 'disks/base.html' %}
     {% block title %}Tutorial Plugin – {{ device }}{% endblock %}
     {% block content %}

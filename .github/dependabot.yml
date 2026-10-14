@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Dependency update pull requests (OpenSSF Scorecard: Dependency-Update-Tool).
 # New versions wait a week before Dependabot proposes them, so a compromised
 # release is usually caught and pulled before it reaches FleetPilot.

@@ -1,5 +1,8 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Tools for tests, linting, audits and the release SBOM (CI only).
 pytest
+coverage
 pip-audit
 bandit
 ruff

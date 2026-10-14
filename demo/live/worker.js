@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+   SPDX-License-Identifier: GPL-3.0-or-later */
 /* FleetPilot live demo: runs FleetPilot (Python) with Pyodide in this worker. */
 const PYODIDE = 'https://cdn.jsdelivr.net/pyodide/v0.28.3/full/';
 importScripts(PYODIDE + 'pyodide.js');

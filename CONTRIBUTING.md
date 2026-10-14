@@ -18,14 +18,14 @@ Reports in English or German are fine; issues are usually answered within a few 
 4. Run the checks locally:
    ```bash
    pip install --require-hashes -r requirements-lock.txt -r requirements-dev-lock.txt
-   python -m pytest -q
-   ruff check --select F821,F811,F823,F632,F601,F707,E9 --exclude FleetPilotCS,FleetPilotAndroid .
+   python -m coverage run -m pytest -q && python -m coverage report   # tests, and coverage must not drop
+   ruff check .                                                     # coding standard
    ```
 5. Open a pull request against `main` and describe what changes for users and how you tested it.
 
 `main` is protected: every change goes through a pull request, and CI must pass before it is merged. CI runs the tests on Python 3.11–3.13, a linter, Bandit, pip-audit, CodeQL, the fuzzers, and a test that boots the live demo.
 
-By contributing you agree that your contribution is licensed under the project's license, [GPL-3.0](LICENSE).
+By contributing you agree that your contribution is licensed under the project's license, [GPL-3.0-or-later](LICENSE).
 
 ## Sign-off (DCO)
 
@@ -53,10 +53,19 @@ All Python dependencies, with exact versions and hashes, are in `requirements-lo
 - **Bug fixes come with a test** that fails without the fix whenever that is practical.
 - Code that talks to devices is tested against recorded or emulated output. See `test_routers.py` and the emulated lab in `demo/live/lab`.
 - Parsers for data from the network belong in the fuzzer (`fuzz/fuzz_parsers.py`).
+- **Coverage must not drop.** CI measures statement and branch coverage and fails below the floor in `.coveragerc`, which is raised as coverage grows. The goal is 90% of statements and 80% of branches.
 
 ## Coding style
 
-- **Code:** Python 3.11+, following the style of the surrounding code (PEP 8, 120 columns). Templates use the shared components in `templates/_macros.html` and the styles in `static/style.css`.
+- **Python:** Python 3.11+ following [PEP 8](https://peps.python.org/pep-0008/), enforced by [ruff](https://docs.astral.sh/ruff/) with the rules in `ruff.toml`; CI fails on any finding. Lines up to 120 columns. Follow the style of the surrounding code. A rare, justified exception is marked where it happens: `# noqa: <rule>  (reason)`.
+- **Warnings are errors:** the test suite fails on any warning (`pytest.ini`), including unclosed files and database connections. Fix the cause; silence a third-party warning only in `pytest.ini`, with a comment saying why.
+- **License header:** every source file starts with these two lines, in the file's comment syntax (a test checks this):
+  ```
+  SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+  SPDX-License-Identifier: GPL-3.0-or-later
+  ```
+- **Templates** use the shared components in `templates/_macros.html` and the styles in `static/style.css`. Values inside `<script>` go through `|tojson`.
+- **Shell scripts** use `set -euo pipefail` where possible and quote every variable.
 - **Security rules:**
   - No secrets in code.
   - Parameterized SQL.

@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 name: Dependency review
 
 # Blocks pull requests that add dependencies with known vulnerabilities.

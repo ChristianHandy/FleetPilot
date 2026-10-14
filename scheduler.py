@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 from apscheduler.schedulers.background import BackgroundScheduler
 from updater import run_update
 import json

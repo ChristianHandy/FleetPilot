@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Safe capability discovery for FleetPilot-managed hosts.
 
 Discovery is deliberately passive: it checks only the configured address and a

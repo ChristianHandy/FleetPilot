@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Focused checks for production-hardening additions; does not contact or modify hosts."""
 from pathlib import Path
 import tempfile

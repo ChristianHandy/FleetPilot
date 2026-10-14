@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 # updater.py - Enhanced error handling, better distribution support, and fixed notification propagation
 import os
 import logging
@@ -7,7 +9,7 @@ import time
 import subprocess
 import email_config
 import email_notifier
-from constants import is_localhost, is_windows, get_platform
+from constants import is_localhost, get_platform
 
 SUPPORTED_DISTRIBUTIONS = ['ubuntu', 'debian', 'fedora', 'centos', 'arch', 'windows']
 
@@ -259,7 +261,7 @@ def run_update(host, user, name, log_list, repo_only=False, password=None):
         
         # Connect to the remote host using SSH key or password authentication
         if password:
-            log(f"Connecting with password authentication...")
+            log("Connecting with password authentication...")
             ssh = ssh_helper.create_client(host, username=user, password=password, timeout=30,
                         look_for_keys=False, allow_agent=False)
         else:

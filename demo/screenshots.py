@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Take the README screenshots in demo mode (needs: pip install playwright; playwright install chromium).
 
     python demo/screenshots.py           # writes docs/screenshots/

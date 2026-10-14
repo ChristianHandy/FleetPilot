@@ -15,6 +15,8 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ### Added
 
+- **Enforced coding standard and strict warnings:** ruff (PEP 8, rules in `ruff.toml`) fails CI on any finding, the test suite treats every warning as an error, and CI measures statement and branch coverage with a floor that only goes up.
+- **License headers:** every source file states `SPDX-License-Identifier: GPL-3.0-or-later` and its copyright holder; a test keeps it that way.
 - Pull requests are fuzzed with ClusterFuzzLite (`.clusterfuzzlite/`, Atheris), focused on the changed code.
 - **Signed releases with build provenance**: each release now carries the source archive, the SBOM, `SHA256SUMS` and Sigstore-signed SLSA provenance (`gh attestation verify`). It is assembled as a draft and published in one step.
 - **Hardened CI**:
@@ -32,6 +34,10 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ### Fixed
 
+- **HW Monitor never collected live metrics:** the collector script sent to each host had broken indentation since an earlier clean-up, so it failed on every host and every server showed as unreachable. A test now runs the script.
+- The hardware stress test kept going after the GPU dropped off the bus: the GPU and combined phases set a local `running` flag instead of the global one.
+- SQLite connections opened with `with get_db() as conn:` were committed but never closed, leaking file handles until garbage collection; they are now closed at the end of the block.
+- A test of the network allowlist's lockout guard never checked its result; it does now.
 - SMART data from Proxmox nodes was never read: FleetPilot asked the API for an empty disk name instead of the `devpath` Proxmox reports.
 - In a Proxmox cluster, disks with the same name on different nodes (every node's `sda`) overwrote each other in the SMART registry; they are now stored as `node:sda`.
 - Fan controllers (lm-sensors) showed the sensor limits (`temp1_max`, `temp1_crit`) as extra temperature readings; only measured values are shown now.

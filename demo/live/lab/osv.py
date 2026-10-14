@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The demo's OSV.dev: real vulnerability records, captured when the demo is built.
 
 build_snapshot() asks the real https://api.osv.dev about exactly the package

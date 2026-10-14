@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """FleetPilot audit logging.
 
 Stores a concise, append-only record of security-relevant state changes without
@@ -11,6 +13,7 @@ import json
 import logging
 import os
 import sqlite3
+import db_util
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -43,7 +46,7 @@ def _entry_hash(prev_hash: str, row) -> str:
 
 
 def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn = sqlite3.connect(DB_PATH, timeout=10, factory=db_util.ClosingConnection)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")

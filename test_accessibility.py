@@ -1,4 +1,7 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Accessibility regression tests: settings, page structure, easy language, template hygiene."""
+import pathlib
 import glob
 import re
 
@@ -65,7 +68,7 @@ def test_easy_language_simplifies_menu_and_explains_pages(client):
 def test_templates_link_labels_and_name_icon_buttons():
     unnamed, unlinked = [], []
     for path in glob.glob('templates/**/*.html', recursive=True):
-        src = re.sub(r'<script\b.*?</script\b[^>]*>', '', open(path).read(), flags=re.S | re.I)
+        src = re.sub(r'<script\b.*?</script\b[^>]*>', '', pathlib.Path(path).read_text(), flags=re.S | re.I)
         for m in re.finditer(r'<label\b([^>]*)>(.*?)</label>', src, re.S):
             if 'for=' not in m.group(1) and not re.search(r'<(input|select|textarea)', m.group(2)):
                 unlinked.append(path)

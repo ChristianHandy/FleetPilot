@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Test suite for ARP tracker functionality
 Tests MAC address detection, IP change detection, and ARP table parsing

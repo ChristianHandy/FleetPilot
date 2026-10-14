@@ -1,3 +1,5 @@
+{# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+   SPDX-License-Identifier: GPL-3.0-or-later -#}
 {% extends 'disks/base.html' %}
 {% from "_macros.html" import post_button %}{% block title %}Disk Overview{% endblock %}
 {% block nav_extra %}{{ post_button(url_for('toggle_auto'), 'Auto mode: ' ~ ('on' if auto else 'off'), 'btn btn-sm', confirm=(None if auto else 'Turn on auto mode? Every disk attached from now on will be wiped, formatted as ext4 and SMART-tested automatically. Disks attached right now are not touched.')) }}{% endblock %}

@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The emulated network: devices by address, and the log of what FleetPilot did.
 
 FleetPilot's sockets, HTTP calls, SSH sessions, local commands and e-mails arrive

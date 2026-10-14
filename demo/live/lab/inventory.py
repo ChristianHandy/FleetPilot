@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """The demo homelab: which machines, appliances and gadgets exist (RFC 5737 addresses only)."""
 from .machines import Device, Disk, Machine
 from .net import lab

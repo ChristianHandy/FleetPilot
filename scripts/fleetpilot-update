@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 # FleetPilot controlled self-update helper.
 # This file is installed root-owned and called only through a narrowly scoped
 # sudo rule. It deliberately accepts no branch, path, repository, or command

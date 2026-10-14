@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Restricted FleetPilot disk action helper.
 # Invoked through sudo with exactly: MODE FILESYSTEM DEVICE_NAME.
 # It accepts only fixed modes and a safe block-device basename; it never accepts

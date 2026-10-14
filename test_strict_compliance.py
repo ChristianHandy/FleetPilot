@@ -1,4 +1,7 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Controls required by strict environments (NIST SP 800-53/800-63B, BSI, DISA STIG, FIPS 140-3)."""
+import pathlib
 import glob
 import re
 import sqlite3
@@ -130,9 +133,9 @@ def test_no_version_disclosure_and_no_third_party_requests():
     csp = r.headers['Content-Security-Policy']
     assert 'https:' not in csp.replace("img-src 'self' data:", '') and "default-src 'self'" in csp
     external = re.compile(r'(src|href)=["\']https?://(?!github\.com)[^"\']+\.(js|css|woff2?)')
-    offenders = [p for p in glob.glob('templates/**/*.html', recursive=True) if external.search(open(p).read())]
+    offenders = [p for p in glob.glob('templates/**/*.html', recursive=True) if external.search(pathlib.Path(p).read_text())]
     assert not offenders, offenders
-    assert not any('fonts.googleapis' in open(p).read() for p in glob.glob('templates/**/*.html', recursive=True))
+    assert not any('fonts.googleapis' in pathlib.Path(p).read_text() for p in glob.glob('templates/**/*.html', recursive=True))
 
 
 def test_session_cookies_are_signed_with_sha256():

@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """An SSH client that runs commands on emulated machines (replaces ssh_helper.create_client)."""
 import io
 
