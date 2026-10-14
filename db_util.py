@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
 """SQLite connections that close when their ``with`` block ends.
 
 ``sqlite3.Connection`` used as a context manager only commits or rolls back; it
