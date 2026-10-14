@@ -1,15 +1,13 @@
 # Left out of release tarballs, which community-scripts.org and other packagers
 # install from. The git repository and install.sh keep everything.
-/.github export-ignore
+# The workflows, tests, fuzzers and security documents stay in the tarball:
+# OpenSSF Scorecard analyses the tarball (without .github it finds no
+# workflows), and packagers can run the tests from it.
 /FleetPilotAndroid export-ignore
 /FleetPilotCS export-ignore
 /docs/screenshots export-ignore
-/docs/security export-ignore
 /docs/user-guides export-ignore
-/test_*.py export-ignore
-/conftest.py export-ignore
 /demo export-ignore
-/fuzz export-ignore
 
 *.sh text eol=lf
 scripts/* text eol=lf
