@@ -18,7 +18,7 @@ Last review: October 2026 (v1.7.x).
 |---|---|---|
 | Web interface and `/api/` (HTTPS 443) | Usually LAN only; sometimes published through a reverse proxy | Anyone on the network before sign-in; users after |
 | `/metrics`, CheckMK endpoint | Token-protected | Monitoring systems |
-| Public status page | Optional, unauthenticated, read-only | Anyone it is published to |
+| Public status page (`/status`) | Always on, unauthenticated, read-only: host and service names and their state, no addresses or controls | Anyone who can reach FleetPilot (it is exempt from the network allowlist) |
 | Output of managed devices (SSH, TR-064 SOAP/XML, JSON APIs) | Parsed by FleetPilot | A compromised or hostile device on the LAN |
 | Uploads (host images, SMART imports, backup restores) | Admin or operator only | Signed-in users |
 | Plugins / add-ons | Run in-process | Admins who install them |
@@ -53,6 +53,7 @@ Last review: October 2026 (v1.7.x).
 
 - Plugins run with FleetPilot's privileges; only install plugins you trust.
 - Trust on first use accepts the first host key; use strict host keys where this matters.
+- The public status page `/status` tells anyone who can reach FleetPilot the names of your hosts and published services and whether they are up. Do not expose FleetPilot to networks where that is sensitive.
 - Single maintainer: no second human review of changes (see [GOVERNANCE.md](../../GOVERNANCE.md)).
 
 ## How to report

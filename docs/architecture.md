@@ -55,7 +55,7 @@ flowchart LR
 | **Admin** | Same; sensitive actions ask for the password again | Operator actions plus: add/edit/delete hosts, routers and endpoints (with their credentials), users and roles, security settings, notifications, proxy routes, FleetPilot updates, backups and restores of FleetPilot's data |
 | **API token client** | Bearer token (hashed at rest, expiring, read-only or read/write) | The `/api/` endpoints with the rights of the token's owner; never a browser session |
 | **Prometheus / CheckMK** | Monitoring token (separate from user accounts) | Read `/metrics` and the CheckMK agent data |
-| **Public status page visitor** | None | Read the service status page, if enabled (no private addresses) |
+| **Public status page visitor** | None | Read the service status page `/status` (names and states only, no addresses) |
 | **Managed host** | FleetPilot authenticates to it with its own SSH key (or a stored password) | Answers commands: OS detection, package lists, updates, SMART, sensors, shutdown. Host keys are trusted on first use, or strictly checked |
 | **Appliance / router** | API key, token or user account stored encrypted | Answers status, update, backup and power requests |
 | **External services** | Outbound HTTPS only | GitHub (update check), OSV.dev (package names and versions for the CVE scan), notification services and SMTP. All optional; offline mode turns the internet ones off |

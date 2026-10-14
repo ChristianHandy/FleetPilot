@@ -6,6 +6,8 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ### Security
 
+- Fan, disk and CheckMK pages put names and the monitoring token into inline JavaScript as JSON now (`|tojson`); a test checks every template for unencoded values in scripts.
+- A new test sends a request without signing in to every route, add-on routes included, and fails if anything but the short list of public pages answers.
 - Fixes for CodeQL's security-extended findings:
   - **Proxmox, Veeam and Duplicati:** API paths now only use names the device itself reported (node, guest type, power action, job, disk). A request can no longer put arbitrary text into the URL; before, the node and guest type from the form went into the Proxmox API path unchecked.
   - **Logs:** host, device and path names have their line breaks escaped, so they cannot forge log entries.
@@ -15,6 +17,7 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ### Added
 
+- Project documents for the OpenSSF silver level: a [code of conduct](CODE_OF_CONDUCT.md) (Contributor Covenant 2.1), a [roadmap](ROADMAP.md), code review standards in CONTRIBUTING.md, continuity rules in GOVERNANCE.md, and a [security assurance case](docs/security/assurance-case.md).
 - Pull requests are fuzzed with ClusterFuzzLite (`.clusterfuzzlite/`, Atheris), focused on the changed code.
 - **Signed releases with build provenance**: each release now carries the source archive, the SBOM, `SHA256SUMS` and Sigstore-signed SLSA provenance (`gh attestation verify`). It is assembled as a draft and published in one step.
 - **Hardened CI**:
