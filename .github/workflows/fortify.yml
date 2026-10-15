@@ -1,0 +1,82 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Fortify scan
+
+# Static analysis (SAST) with OpenText Fortify Hosted / Software Security Center and
+# ScanCentral SAST, plus Debricked SCA when a token is set. Results go to SSC and to
+# GitHub code scanning.
+#
+# Configure in Settings → Secrets and variables → Actions:
+#   variable SSC_URL          https://your-ssc.example/ssc
+#   secret   SSC_TOKEN        an SSC CIToken
+#   secret   SC_SAST_TOKEN    the ScanCentral SAST client_auth_token
+#   secret   DEBRICKED_TOKEN  optional: also run a Debricked scan
+#   variable SSC_APPVERSION   optional: "Application:Version" (default: <repository>:<branch>)
+# Without SSC_URL and SSC_TOKEN the job only prints a notice, so forks and Dependabot
+# pull requests (which get no secrets) stay green.
+#
+# This follows the steps of fortify/github-action/without-artifacts v3.1.1, with the setup
+# action and the fcli version pinned instead of following the latest release.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '22 13 * * 0'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fortify:
+    name: Fortify SAST (SSC)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read            # check out the code
+      security-events: write    # publish the results to GitHub code scanning
+    env:
+      SSC_URL: ${{ vars.SSC_URL }}
+      SSC_TOKEN: ${{ secrets.SSC_TOKEN }}
+      SC_SAST_TOKEN: ${{ secrets.SC_SAST_TOKEN }}
+      DEBRICKED_TOKEN: ${{ secrets.DEBRICKED_TOKEN }}
+      SSC_APPVERSION: ${{ vars.SSC_APPVERSION || format('{0}:{1}', github.repository, github.head_ref || github.ref_name) }}
+      FCLI_BOOTSTRAP_VERSION: v3.28.1
+    steps:
+      - name: Fortify is not configured
+        if: env.SSC_URL == '' || env.SSC_TOKEN == ''
+        run: echo "::notice::Fortify scan skipped. Set the SSC_URL variable and the SSC_TOKEN and SC_SAST_TOKEN secrets to enable it."
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.SSC_URL != '' && env.SSC_TOKEN != ''
+        with:
+          persist-credentials: false
+
+      - name: Fortify data directory
+        if: env.SSC_URL != '' && env.SSC_TOKEN != ''
+        run: |
+          mkdir -p "$RUNNER_TEMP/fortify-data"
+          echo "FORTIFY_DATA_DIR=$RUNNER_TEMP/fortify-data" >> "$GITHUB_ENV"
+
+      - name: Set up fcli
+        if: env.SSC_URL != '' && env.SSC_TOKEN != ''
+        uses: fortify/github-action/setup@0540f6aefd95d12a5fbed40f406d825fad64330e # v3.1.1
+        with:
+          fcli: bootstrapped
+          export-path: false
+
+      - name: Run Fortify scan
+        if: env.SSC_URL != '' && env.SSC_TOKEN != ''
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SAST_EXPORT_EXTRA_OPTS: --publish=true
+          DEBRICKED_EXPORT_EXTRA_OPTS: --publish=true
+        run: |
+          cd "$FORTIFY_DATA_DIR"
+          "$FCLI_CMD" action run ci
