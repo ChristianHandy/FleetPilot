@@ -176,6 +176,12 @@ Extend FleetPilot with custom disk tools and integrations via the addon system. 
 
 ---
 
+## Android App (beta)
+
+`FleetPilotAndroid/` is a native Android app (Kotlin, Jetpack Compose) for your phone: dashboard, servers, VMs, hardware monitor and fans, with Wake-on-LAN, shutdown, VM power actions and fan control. It signs in with a personal API token and pins FleetPilot's self-signed certificate after you confirm its fingerprint. Get the signed APK from the [releases](https://github.com/ChristianHandy/FleetPilot/releases); setup is in the [user guide](docs/user-guide.md#android-app-beta).
+
+---
+
 ## Home Assistant Integration
 
 `integrations/home-assistant/` contains a Home Assistant custom component that shows SMART health for disks on your servers as sensors, binary sensors and self-test buttons. It runs inside Home Assistant on its own and reads the same `smartctl` data as FleetPilot's SMART pages. See [its README](integrations/home-assistant/README.md) for installation.

@@ -16,7 +16,7 @@ Installing FleetPilot is covered in the **[installation guide](installation.md)*
 - [6. Operations](#6-operations): [Scheduled shutdown](#scheduled-shutdown) · [CheckMK](#checkmk) · [System monitor](#system-monitor) · [FleetPilot update](#fleetpilot-update)
 - [7. System](#7-system): [Update Settings](#update-settings) · [Email Config](#email-config) · [Proxy services](#proxy-services) · [Production status](#production-status) · [Security center](#security-center) · [Notifications](#notifications) · [Audit trail](#audit-trail) · [Backups](#backups) · [Plugins](#plugins)
 - [8. Account](#8-account): [My Profile](#my-profile) · [Sign-in & security](#sign-in--security) · [Two-factor sign-in](#two-factor-sign-in) · [Accessibility](#accessibility) · [User Management](#user-management)
-- [9. Integrations](#9-integrations): API tokens and REST API · Prometheus · Home Assistant · public status page
+- [9. Integrations](#9-integrations): API tokens and REST API · Android app · Prometheus · Home Assistant · public status page
 - [10. Security notes](#10-security-notes)
 - [11. Frequently asked questions](#11-frequently-asked-questions)
 
@@ -363,7 +363,17 @@ Create a token under **Account → Sign-in & security → API tokens**: give it 
 curl -H "Authorization: Bearer fp_..." https://fleetpilot.example/api/me
 ```
 
-Useful endpoints (all JSON): `/api/me`, `/api/hosts`, `/api/smart/summary`, `/api/smart/disks`, `/api/routers`, `/api/backup/servers`, `/api/hw_overview`, `/api/monitor/latest`, `/api/registry/servers`. Tokens only work for `/api/` addresses, never for the web pages; read-only tokens are refused for anything but reading.
+Useful endpoints (all JSON): `/api/me`, `/api/hosts`, `/api/vms`, `/api/smart/summary`, `/api/smart/disks`, `/api/routers`, `/api/backup/servers`, `/api/hw/live`, `/api/fans/devices`, `/api/vulnerabilities`, `/api/monitor/latest`, `/api/registry/servers`. With a read/write token: `POST /api/hosts/<name>/wol` and `/shutdown` (operators), `/api/vms/<id>/action` (admins), `/api/fans/<id>/set_fan` (operators). Tokens only work for `/api/` addresses, never for the web pages; read-only tokens are refused for anything but reading.
+
+### Android app (beta)
+
+The FleetPilot app for Android 8.0 and newer shows the dashboard, servers, virtual machines, the HW monitor and fans, and can wake and shut down servers, start and stop VMs and set fan speeds. Download the APK from the [releases](https://github.com/ChristianHandy/FleetPilot/releases) (look for *Android app*) and install it; Android asks you to allow installing apps from your browser or file manager.
+
+1. Create an API token as described above. A *read-only* token only shows; a *read/write* token also allows the actions your role permits (operators: wake, shut down, fans; admins: also VMs).
+2. Open the app, enter your FleetPilot address (for example `https://192.168.1.62`) and the token.
+3. FleetPilot uses its own certificate, which Android does not know. The app shows the certificate's SHA-256 fingerprint: compare it with the one your browser shows for FleetPilot, or with `sudo openssl x509 -in /etc/fleetpilot/tls/fullchain.pem -noout -fingerprint -sha256` on the server, then tap **Trust and sign in**. The app then accepts only this certificate.
+
+The app needs FleetPilot 1.7.1 or newer. To sign out, tap the arrow at the top right; revoke the token in FleetPilot if the phone is lost.
 
 ### Prometheus
 
