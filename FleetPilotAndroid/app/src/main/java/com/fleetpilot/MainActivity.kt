@@ -9,6 +9,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,13 +20,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
-import com.fleetpilot.data.api.PrefsKeys
-import com.fleetpilot.data.api.dataStore
 import com.fleetpilot.ui.screens.*
 import com.fleetpilot.ui.theme.*
 import com.fleetpilot.viewmodel.*
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -41,9 +38,9 @@ class MainActivity : ComponentActivity() {
 
 sealed class Screen(val route: String, val label: String, val icon: ImageVector) {
     object Dashboard : Screen("dashboard", "Dashboard", Icons.Default.Dashboard)
-    object Hosts : Screen("hosts", "Server", Icons.Default.Dns)
+    object Hosts : Screen("hosts", "Servers", Icons.Default.Dns)
     object VMs : Screen("vms", "VMs", Icons.Default.Computer)
-    object HwMonitor : Screen("hw", "HW Monitor", Icons.Default.Memory)
+    object HwMonitor : Screen("hw", "Hardware", Icons.Default.Memory)
     object Fans : Screen("fans", "Fans", Icons.Default.Air)
 }
 
@@ -54,16 +51,16 @@ val bottomNavItems = listOf(
 @Composable
 fun FleetPilotApp() {
     val authViewModel: AuthViewModel = viewModel()
-    val loginState by authViewModel.loginState.collectAsState()
-    val authToken by authViewModel.authToken.collectAsState(initial = null)
+    // "" until the stored value has been read, so the sign-in screen does not flash.
+    val authToken by authViewModel.authToken.collectAsState(initial = "")
 
-    // Check if already logged in
-    val isLoggedIn = authToken != null
-
-    if (!isLoggedIn && loginState !is LoginState.Success) {
-        LoginScreen(viewModel = authViewModel, onLoginSuccess = {})
-    } else {
-        MainApp(authViewModel = authViewModel)
+    when (authToken) {
+        "" -> Box(Modifier.fillMaxSize().background(FPBackground))
+        null -> LoginScreen(viewModel = authViewModel)
+        else -> {
+            LaunchedEffect(authToken) { authViewModel.refreshMe() }
+            MainApp(authViewModel = authViewModel)
+        }
     }
 }
 
@@ -73,16 +70,17 @@ fun MainApp(authViewModel: AuthViewModel) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
+    val me by authViewModel.me.collectAsState()
 
     Scaffold(
         containerColor = FPBackground,
         topBar = {
             TopAppBar(
-                title = { Text("⚡ FleetPilot", color = FPPrimary) },
+                title = { Text("FleetPilot", color = FPPrimary) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = FPSurface),
                 actions = {
                     IconButton(onClick = { authViewModel.logout() }) {
-                        Icon(Icons.Default.Logout, "Abmelden", tint = FPMuted)
+                        Icon(Icons.AutoMirrored.Filled.Logout, "Sign out", tint = FPMuted)
                     }
                 }
             )
@@ -123,23 +121,23 @@ fun MainApp(authViewModel: AuthViewModel) {
         ) {
             composable(Screen.Dashboard.route) {
                 val vm: DashboardViewModel = viewModel()
-                DashboardScreen(vm)
+                DashboardScreen(vm, me)
             }
             composable(Screen.Hosts.route) {
                 val vm: HostsViewModel = viewModel()
-                HostsScreen(vm)
+                HostsScreen(vm, me)
             }
             composable(Screen.VMs.route) {
                 val vm: VmViewModel = viewModel()
-                VmScreen(vm)
+                VmScreen(vm, me)
             }
             composable(Screen.HwMonitor.route) {
                 val vm: HwViewModel = viewModel()
-                HwMonitorScreen(vm)
+                HwMonitorScreen(vm, me)
             }
             composable(Screen.Fans.route) {
                 val vm: FanViewModel = viewModel()
-                FanScreen(vm)
+                FanScreen(vm, me)
             }
         }
     }

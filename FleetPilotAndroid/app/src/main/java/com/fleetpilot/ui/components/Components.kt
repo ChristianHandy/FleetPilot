@@ -135,7 +135,7 @@ fun SectionHeader(title: String, icon: ImageVector? = null) {
 
 // ── Loading / Error States ────────────────────────────────────────────────────
 @Composable
-fun LoadingState(message: String = "Laden...") {
+fun LoadingState(message: String = "Loading…") {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             CircularProgressIndicator(color = FPPrimary)
@@ -155,7 +155,7 @@ fun ErrorState(message: String, onRetry: (() -> Unit)? = null) {
             if (onRetry != null) {
                 Spacer(Modifier.height(16.dp))
                 Button(onClick = onRetry, colors = ButtonDefaults.buttonColors(containerColor = FPPrimaryVariant)) {
-                    Text("Erneut versuchen")
+                    Text("Try again")
                 }
             }
         }
@@ -176,10 +176,10 @@ fun ConfirmDialog(
         title = { Text(title, color = FPOnBackground) },
         text = { Text(message, color = FPMuted) },
         confirmButton = {
-            TextButton(onClick = onConfirm) { Text("Bestätigen", color = FPError) }
+            TextButton(onClick = onConfirm) { Text("Confirm", color = FPError) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Abbrechen", color = FPMuted) }
+            TextButton(onClick = onDismiss) { Text("Cancel", color = FPMuted) }
         }
     )
 }

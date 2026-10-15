@@ -4,167 +4,178 @@ package com.fleetpilot.data.models
 
 import com.google.gson.annotations.SerializedName
 
-// JSON shapes of the FleetPilotCS REST API (ASP.NET, camelCase). Every field has a
-// default so a missing field never crashes the app.
+// JSON shapes of FleetPilot's REST API (/api/...), as returned for a personal API token.
+// Every field has a default and lists are read through non-null accessors, so a
+// missing or null field never crashes the app.
 
-// ── Authentication ───────────────────────────────────────────────────────────
-data class LoginRequest(val username: String, val password: String)
-
-data class LoginResponse(
-    val token: String = "",
+// ── Account ──────────────────────────────────────────────────────────────────
+data class Me(
     val username: String = "",
-    val role: String = "",
-    val expires: String? = null,
-)
-
-// ── Dashboard ────────────────────────────────────────────────────────────────
-data class HostCounts(val total: Int = 0, val online: Int = 0, val offline: Int = 0)
-
-data class DashboardSummary(
-    @SerializedName("hosts") private val _hosts: HostCounts? = null,
-    val vmEndpoints: Int = 0,
-    val backupServers: Int = 0,
-    val hwServers: Int = 0,
-    val activeAlerts: Int = 0,
-    val fanControllers: Int = 0,
-    val lastUpdated: String? = null,
+    @SerializedName("roles") private val _roles: List<String>? = null,
+    val auth: String = "",
+    val scope: String = "read",
 ) {
-    val hosts: HostCounts get() = _hosts ?: HostCounts()
+    val roles: List<String> get() = _roles ?: emptyList()
+    val canWrite: Boolean get() = scope == "write"
+    val isOperator: Boolean get() = canWrite && roles.any { it == "operator" || it == "admin" }
+    val isAdmin: Boolean get() = canWrite && "admin" in roles
+}
+
+/** The answer of host, VM and fan actions. */
+data class ActionResult(
+    val ok: Boolean = false,
+    val message: String? = null,
+    val error: String? = null,
+    val output: String? = null,
+) {
+    val text: String get() = message ?: error ?: output ?: if (ok) "Done" else "Failed"
 }
 
 // ── Hosts ────────────────────────────────────────────────────────────────────
-data class ServerHost(
-    val id: Int = 0,
+data class Host(
     val name: String = "",
-    val address: String = "",
-    val user: String = "root",
+    val host: String = "",
+    val user: String = "",
     val port: Int = 22,
-    val mac: String? = null,
-    val description: String? = null,
-    val group: String? = null,
-    val location: String? = null,
-    val environment: String? = null,
-    val criticality: String? = null,
-    val lastSeen: String? = null,
-    val isOnline: Boolean = false,
+    val environment: String = "",
+    val os: String = "",
+    val description: String = "",
+    val group: String = "",
+    /** manageable | web_only | unreachable | unknown */
+    val state: String = "unknown",
+    @SerializedName("can_wake") val canWake: Boolean = false,
+) {
+    val reachable: Boolean get() = state == "manageable" || state == "web_only"
+}
+
+// ── Virtual machines ─────────────────────────────────────────────────────────
+data class Vm(
+    val vmid: Int? = null,
+    val name: String? = null,
+    val status: String = "unknown",
+    val node: String = "",
+    val type: String = "qemu",
+    val cpu: Double? = null,
+    val cpus: Int? = null,
+    val mem: Long? = null,
+    val maxmem: Long? = null,
+    val uptime: Long? = null,
 )
 
-data class HostStatus(
-    val id: Int = 0,
-    val name: String = "",
-    val address: String = "",
-    val isOnline: Boolean = false,
-    val lastSeen: String? = null,
-)
-
-data class ExecuteRequest(val command: String, val timeoutSeconds: Int = 30)
-
-data class ExecuteResponse(
-    val success: Boolean = false,
-    val output: String? = null,
-    val error: String? = null,
-    val exitCode: Int? = null,
-)
-
-// ── Virtual machines (Proxmox) ───────────────────────────────────────────────
 data class VmEndpoint(
     val id: Int = 0,
     val name: String = "",
-    val address: String = "",
-    val port: Int = 8006,
-    val type: String = "proxmox",
-    val node: String? = null,
-)
-
-data class EndpointRef(val id: Int = 0, val name: String = "")
-
-data class VmInfo(
-    val vmId: String = "",
-    val name: String = "",
-    val status: String = "",
-    val cpus: Int = 0,
-    val maxMem: Long = 0,
-    val mem: Long = 0,
-    val disk: Long = 0,
-    val uptime: Double = 0.0,
-    val type: String = "qemu",
-    val node: String = "",
-    val tags: String? = null,
-    val cpuUsage: Double? = null,
-)
-
-data class AllVmsResponse(
-    @SerializedName("endpoint") private val _endpoint: EndpointRef? = null,
-    @SerializedName("vms") private val _vms: List<VmInfo>? = null,
-) {
-    val endpoint: EndpointRef get() = _endpoint ?: EndpointRef()
-    val vms: List<VmInfo> get() = _vms ?: emptyList()
-}
-
-data class VmActionRequest(val action: String)
-
-// ── HW Monitor ───────────────────────────────────────────────────────────────
-data class FanData(
-    val name: String = "",
-    val rpm: Double? = null,
-    val dutyCycle: Double? = null,
-    val temp: Double? = null,
-)
-
-data class LiveMetrics(
-    val cpuTemp: Double? = null,
-    val cpuUsage: Double? = null,
-    val gpuTemp: Double? = null,
-    val gpuUsage: Double? = null,
-    val gpuVendor: String? = null,
-    val ramUsedMb: Long? = null,
-    val ramTotalMb: Long? = null,
-    val netRxKbps: Double? = null,
-    val netTxKbps: Double? = null,
-    val diskReadKbps: Double? = null,
-    val diskWriteKbps: Double? = null,
-    @SerializedName("fans") private val _fans: List<FanData>? = null,
-    val isOnline: Boolean = false,
+    val platform: String = "",
+    @SerializedName("vms") private val _vms: List<Vm>? = null,
     val error: String? = null,
 ) {
-    val fans: List<FanData> get() = _fans ?: emptyList()
+    val vms: List<Vm> get() = _vms ?: emptyList()
 }
+
+data class VmsResponse(@SerializedName("endpoints") private val _endpoints: List<VmEndpoint>? = null) {
+    val endpoints: List<VmEndpoint> get() = _endpoints ?: emptyList()
+}
+
+// ── HW Monitor ───────────────────────────────────────────────────────────────
+data class HwFan(val name: String? = null, val label: String? = null, val rpm: Double? = null)
 
 data class HwServer(
     val id: Int = 0,
     val name: String = "",
-    val address: String = "",
-    val port: Int = 22,
-    val sshUser: String = "root",
-    val stressTestRunning: Boolean = false,
-    val lastSeen: String? = null,
-    @SerializedName("metrics") private val _metrics: LiveMetrics? = null,
+    val ip: String = "",
+    val reachable: Int? = null,
+    @SerializedName("cpu_pct") val cpuPct: Double? = null,
+    @SerializedName("cpu_temp") val cpuTemp: Double? = null,
+    @SerializedName("ram_used_mb") val ramUsedMb: Long? = null,
+    @SerializedName("ram_total_mb") val ramTotalMb: Long? = null,
+    @SerializedName("net_rx_kbps") val netRxKbps: Double? = null,
+    @SerializedName("net_tx_kbps") val netTxKbps: Double? = null,
+    @SerializedName("gpu_temp") val gpuTemp: Double? = null,
+    @SerializedName("gpu_vendor") val gpuVendor: String? = null,
+    @SerializedName("stress_running") val stressRunning: Int? = null,
+    @SerializedName("stress_phase") val stressPhase: String? = null,
+    @SerializedName("fans") private val _fans: List<HwFan>? = null,
 ) {
-    val metrics: LiveMetrics get() = _metrics ?: LiveMetrics()
+    val online: Boolean get() = reachable == 1
+    val stressTestRunning: Boolean get() = stressRunning == 1
+    val fans: List<HwFan> get() = _fans ?: emptyList()
 }
 
-data class HwAlert(
-    val id: Int = 0,
-    val serverId: Int = 0,
-    val alertType: String = "",
-    val message: String = "",
-    val acknowledged: Boolean = false,
-    val ackNote: String? = null,
-    val createdAt: String? = null,
-)
-
-data class AckAlertRequest(val alertId: Int, val note: String?)
+data class HwAction(val action: String)
 
 // ── Fan controllers ──────────────────────────────────────────────────────────
-data class FanController(
+data class FanDevice(
     val id: Int = 0,
     val name: String = "",
-    val hostId: Int = 0,
-    val controllerType: String = "lm_sensors",
-    val matchString: String? = null,
-    val lastPolled: String? = null,
+    val host: String = "",
+    @SerializedName("controller_type") val controllerType: String = "",
+    val enabled: Int = 1,
 )
 
-data class FanSetRequest(val channel: String, val dutyCycle: Int)
+data class FanReading(val label: String = "", val rpm: Int? = null, val percent: Double? = null)
 
-data class SimpleResult(val success: Boolean = false, val error: String? = null)
+data class TempReading(val label: String = "", val value: Double? = null)
+
+/** A fan channel that can be set: a sysfs PWM node, or a controller channel. */
+data class PwmNode(val path: String = "", val label: String? = null, val percent: Int? = null, val channel: Int? = null)
+
+data class FanStatus(
+    val ok: Boolean = false,
+    val error: String? = null,
+    @SerializedName("fans") private val _fans: List<FanReading>? = null,
+    @SerializedName("temperatures") private val _temps: List<TempReading>? = null,
+    @SerializedName("pwm_nodes") private val _pwm: List<PwmNode>? = null,
+) {
+    val fans: List<FanReading> get() = _fans ?: emptyList()
+    val temperatures: List<TempReading> get() = _temps ?: emptyList()
+    val pwmNodes: List<PwmNode> get() = _pwm ?: emptyList()
+}
+
+// ── Dashboard sources ────────────────────────────────────────────────────────
+data class SmartSummary(
+    val total: Int = 0,
+    @SerializedName("counts") private val _counts: Map<String, Int>? = null,
+    @SerializedName("active_alerts") val activeAlerts: Int = 0,
+) {
+    val counts: Map<String, Int> get() = _counts ?: emptyMap()
+    val problems: Int get() = (counts["WARNING"] ?: 0) + (counts["CRITICAL"] ?: 0) + (counts["FAILED"] ?: 0)
+}
+
+data class VulnSummary(
+    val total: Int = 0,
+    val critical: Int = 0,
+    val high: Int = 0,
+    val fixable: Int = 0,
+    @SerializedName("last_scan") val lastScan: String? = null,
+)
+
+data class VulnResponse(@SerializedName("summary") private val _summary: VulnSummary? = null) {
+    val summary: VulnSummary get() = _summary ?: VulnSummary()
+}
+
+data class Router(val name: String = "", val online: Boolean = false, val updates: Int? = null)
+
+data class RoutersResponse(@SerializedName("routers") private val _routers: List<Router>? = null) {
+    val routers: List<Router> get() = _routers ?: emptyList()
+}
+
+data class BackupServer(
+    val name: String = "",
+    @SerializedName("server_type") val serverType: String = "",
+    @SerializedName("last_status") val lastStatus: String? = null,
+    val enabled: Int = 1,
+)
+
+/** What the dashboard shows, collected from several endpoints. Null means "not available". */
+data class DashboardSummary(
+    val hostsTotal: Int = 0,
+    val hostsReachable: Int = 0,
+    val vmsRunning: Int? = null,
+    val vmsTotal: Int? = null,
+    val disks: SmartSummary? = null,
+    val vulnerabilities: VulnSummary? = null,
+    val routersOnline: Int? = null,
+    val routersTotal: Int? = null,
+    val backupProblems: Int? = null,
+    val backupTotal: Int? = null,
+)

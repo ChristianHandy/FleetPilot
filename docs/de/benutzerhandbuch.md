@@ -365,7 +365,17 @@ Ein Token erstellen Sie unter **Konto → Anmeldung & Sicherheit → API tokens*
 curl -H "Authorization: Bearer fp_..." https://fleetpilot.example/api/me
 ```
 
-Nützliche Endpunkte (alle JSON): `/api/me`, `/api/hosts`, `/api/smart/summary`, `/api/smart/disks`, `/api/routers`, `/api/backup/servers`, `/api/hw_overview`, `/api/monitor/latest`, `/api/registry/servers`. Tokens gelten nur für `/api/`-Adressen, nie für die Webseiten; Nur-Lese-Tokens werden für alles außer Lesen abgewiesen.
+Nützliche Endpunkte (alle JSON): `/api/me`, `/api/hosts`, `/api/vms`, `/api/smart/summary`, `/api/smart/disks`, `/api/routers`, `/api/backup/servers`, `/api/hw/live`, `/api/fans/devices`, `/api/vulnerabilities`, `/api/monitor/latest`, `/api/registry/servers`. Mit einem Lese-/Schreib-Token: `POST /api/hosts/<name>/wol` und `/shutdown` (Operatoren), `/api/vms/<id>/action` (Admins), `/api/fans/<id>/set_fan` (Operatoren). Tokens gelten nur für `/api/`-Adressen, nie für die Webseiten; Nur-Lese-Tokens werden für alles außer Lesen abgewiesen.
+
+### Android-App (Beta)
+
+Die FleetPilot-App für Android 8.0 und neuer zeigt Dashboard, Server, virtuelle Maschinen, den HW-Monitor und Lüfter und kann Server wecken und herunterfahren, VMs starten und stoppen und Lüfter einstellen. Laden Sie die APK unter [Releases](https://github.com/ChristianHandy/FleetPilot/releases) herunter (*Android app*) und installieren Sie sie; Android fragt, ob der Browser oder Dateimanager Apps installieren darf.
+
+1. Erstellen Sie wie oben ein API-Token. Ein *read-only*-Token zeigt nur an; ein *read/write*-Token erlaubt zusätzlich, was Ihre Rolle darf (Operatoren: wecken, herunterfahren, Lüfter; Admins: auch VMs).
+2. Öffnen Sie die App, geben Sie die FleetPilot-Adresse (zum Beispiel `https://192.168.1.62`) und das Token ein.
+3. FleetPilot nutzt ein eigenes Zertifikat, das Android nicht kennt. Die App zeigt den SHA-256-Fingerabdruck: Vergleichen Sie ihn mit dem, den Ihr Browser für FleetPilot anzeigt, oder mit `sudo openssl x509 -in /etc/fleetpilot/tls/fullchain.pem -noout -fingerprint -sha256` auf dem Server, und tippen Sie dann **Trust and sign in**. Danach akzeptiert die App nur dieses Zertifikat.
+
+Die App braucht FleetPilot 1.7.1 oder neuer. Abmelden über den Pfeil oben rechts; geht das Telefon verloren, widerrufen Sie das Token in FleetPilot.
 
 ### Prometheus
 
