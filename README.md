@@ -45,8 +45,8 @@ It combines remote update management, disk health monitoring, VM controller inte
 | Category | Capabilities |
 |---|---|
 | **Dashboard** | Fully customizable widget layout (drag & drop, per-user persistence) |
-| **Host Management** | Linux & Windows servers, tags, environments, DHCP/MAC tracking |
-| **Remote Updates** | SSH-based updates for Ubuntu, Debian, Fedora, Arch, Windows (winget) |
+| **Host Management** | Linux servers, and Windows 10/11 (incl. LTSC 2019–2024) and Windows Server 2016–2025 with their support end dates ([details](WINDOWS_SUPPORT.md)); tags, environments, DHCP/MAC tracking |
+| **Remote Updates** | SSH-based updates for Ubuntu, Debian, Fedora, Arch and Windows (Windows Update and winget) |
 | **Vulnerability scan** | Known CVEs in the packages of every Linux server (Debian, Ubuntu, Proxmox, TrueNAS, Raspberry Pi OS, Alpine, Rocky, Alma) via [OSV.dev](https://osv.dev), Docker images via Trivy, pfSense/OPNsense `pkg audit` and FleetPilot itself; severity, fixed version, daily scan and alerts |
 | **VM Controllers** | Proxmox integration with retry/backoff, VM status overview |
 | **Storage Controllers** | TrueNAS and custom storage system management |

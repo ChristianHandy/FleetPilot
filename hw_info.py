@@ -14,6 +14,7 @@ Usage:
 """
 
 import safe_errors
+import windows_host
 import sqlite3
 import db_util
 import json
@@ -344,12 +345,16 @@ class HwInfoCollector:
                 connect_kwargs['password'] = password
             client = ssh_helper.create_client(**connect_kwargs)
 
-            # Feed the collection script on stdin so nothing is written to a shared /tmp path.
-            stdin, stdout, stderr = client.exec_command(
-                'python3 - 2>/dev/null', timeout=30
-            )
-            stdin.write(_COLLECT_SCRIPT)
-            stdin.channel.shutdown_write()
+            _, probe, _ = client.exec_command(windows_host.DETECT_COMMAND, timeout=15)
+            if probe.read().decode(errors='replace').strip().lower() == 'windows':
+                _, stdout, _ = client.exec_command(windows_host.HW_COMMAND, timeout=60)
+            else:
+                # Feed the collection script on stdin so nothing is written to a shared /tmp path.
+                stdin, stdout, stderr = client.exec_command(
+                    'python3 - 2>/dev/null', timeout=30
+                )
+                stdin.write(_COLLECT_SCRIPT)
+                stdin.channel.shutdown_write()
             output = stdout.read().decode(errors='replace').strip()
             client.close()
 

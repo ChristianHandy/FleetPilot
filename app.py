@@ -37,6 +37,7 @@ import account_security
 import safe_errors
 import notify
 import router_manager
+import windows_host
 from updater import run_update
 import scheduler
 import disktool_core
@@ -2614,9 +2615,12 @@ def edit_host(orig_name):
         user = sanitize_input(request.form.get("user", ""), max_len=64)
         mac  = sanitize_input(request.form.get("mac", ""), max_len=17)
         if new_name:
+            # Start from the stored host: the form does not show every field (custom image,
+            # detected OS, reachability, timestamps), and those must survive an edit.
+            host_data = dict(hosts.get(orig_name, {}))
             if new_name != orig_name:
                 hosts.pop(orig_name, None)
-            host_data = {
+            host_data.update({
                 "host": host,
                 "user": user,
                 "mac": mac,
@@ -2629,10 +2633,7 @@ def edit_host(orig_name):
                 "port":        max(1, min(65535, int(request.form.get("port", 22) or 22))),
                 "ssh_key":     sanitize_input(request.form.get("ssh_key", ""), max_len=512),
                 "tags":        [sanitize_input(t, max_len=32) for t in request.form.get("tags", "").split(",") if t.strip()][:20],
-                # Preserve timestamps
-                "last_update": hosts.get(orig_name, {}).get("last_update"),
-                "last_seen":   hosts.get(orig_name, {}).get("last_seen"),
-            }
+            })
             # Multiboot: parse OS profiles from form (issue #36)
             os_names    = request.form.getlist("os_name")
             os_types    = request.form.getlist("os_type")
@@ -2649,6 +2650,8 @@ def edit_host(orig_name):
                 if not any(p["default"] for p in os_profiles):
                     os_profiles[0]["default"] = True
             host_data["os_profiles"] = os_profiles
+            if os_profiles:      # the profile chosen by hand decides the OS type
+                host_data["os_type"] = next(p["type"] for p in os_profiles if p["default"])
             hosts[new_name] = host_data
             save_hosts(hosts, discover_names=[new_name])
             cache_invalidate('hosts')
@@ -2720,6 +2723,23 @@ def install_key(name):
                 password=password, timeout=10
             )
             
+            # Windows: OpenSSH reads administrators' keys from ProgramData, not the profile.
+            _, probe, _ = ssh.exec_command(windows_host.DETECT_COMMAND, timeout=15)
+            if probe.read().decode(errors="replace").strip().lower() == "windows":
+                try:
+                    _, out, err = ssh.exec_command(windows_host.install_key_command(pubkey), timeout=30)
+                    output = out.read().decode(errors="replace")
+                    if "installed:" in output:
+                        success = True
+                    else:
+                        error = "Could not install the key: " + (err.read().decode(errors="replace").strip()[-300:]
+                                                                 or output.strip()[-300:] or "no answer")
+                except ValueError as e:
+                    error = str(e)
+                finally:
+                    ssh.close()
+                return render_template("install_key.html", name=name, error=error, success=success)
+
             # Security: Use SFTP to safely write the key file instead of shell commands
             try:
                 sftp = ssh.open_sftp()
@@ -2822,15 +2842,15 @@ def detect_os(name):
     else:
         try:
             connect_kwargs = {"hostname": ip, "username": user, "port": port, "timeout": 8}
-            ssh = ssh_helper.create_client(**{k: connect_kwargs[k] for k in ["hostname","port","username","timeout"]})
             if ssh_key:
                 connect_kwargs["key_filename"] = ssh_key
-            ssh.connect(**connect_kwargs)
-            # Try /etc/os-release first
-            _, stdout, _ = ssh.exec_command("cat /etc/os-release 2>/dev/null || uname -a", timeout=5)
-            output = stdout.read().decode("utf-8", errors="replace")
-            ssh.close()
-            os_info = _parse_os_release(output)
+            elif h.get("password"):
+                connect_kwargs["password"] = h["password"]
+            ssh = ssh_helper.create_client(**connect_kwargs)
+            try:
+                os_info = _detect_remote_os(ssh)
+            finally:
+                ssh.close()
         except Exception as e:
             return jsonify({"ok": False, "error": _error_message(e)}), 500
     # Update host os_profiles
@@ -2840,9 +2860,25 @@ def detect_os(name):
     new_profiles = [p for p in existing if not p.get("auto_detected")]
     new_profiles.insert(0, profile)
     h["os_profiles"] = new_profiles
+    h["os_type"] = os_info["type"]
+    if os_info.get("windows"):
+        h["windows"] = os_info["windows"]
+    else:
+        h.pop("windows", None)
     hosts[name] = h
     save_hosts(hosts)
     return jsonify({"ok": True, "os": os_info}), 200
+
+
+def _detect_remote_os(ssh) -> dict:
+    """{name, type, version} of the system behind an SSH connection; Windows adds a "windows" dict."""
+    _, stdout, _ = ssh.exec_command(windows_host.DETECT_COMMAND, timeout=15)
+    if stdout.read().decode("utf-8", errors="replace").strip().lower() == "windows":
+        _, stdout, _ = ssh.exec_command(windows_host.INFO_COMMAND, timeout=30)
+        win = windows_host.parse_info(stdout.read().decode("utf-8", errors="replace"))
+        return {"name": win["name"], "type": "windows", "version": win["version"], "windows": win}
+    _, stdout, _ = ssh.exec_command("cat /etc/os-release 2>/dev/null || uname -a", timeout=5)
+    return _parse_os_release(stdout.read().decode("utf-8", errors="replace"))
 
 
 def _parse_os_release(text: str) -> dict:
@@ -2877,6 +2913,15 @@ def _parse_os_release(text: str) -> dict:
     if not name:
         name = os_type.capitalize()
     return {"name": name, "type": os_type, "version": version}
+
+
+def _host_os_type(host: dict) -> str:
+    """linux | windows | proxmox | unraid | macos: detected type, else the default OS profile's type."""
+    if host.get("os_type"):
+        return host["os_type"]
+    profiles = host.get("os_profiles") or []
+    default = next((p for p in profiles if p.get("default")), profiles[0] if profiles else {})
+    return default.get("type") or "linux"
 
 
 @app.route("/hosts/upload_image/<name>", methods=["POST"])
@@ -6529,7 +6574,7 @@ def host_shutdown(name):
     if name not in hosts:
         return jsonify({'ok': False, 'error': 'Host not found'}), 404
     host = hosts[name]
-    os_type = host.get('os_type', 'linux')
+    os_type = _host_os_type(host)
     host_ip = host.get('host', '')
     
     # ── Unraid: GraphQL mutation ──────────────────────────────────────────────
@@ -6588,7 +6633,7 @@ def host_shutdown(name):
         
         # Choose shutdown command based on OS type
         if os_type == 'windows':
-            cmd = 'shutdown /s /t 30 /c "FleetPilot shutdown"'
+            cmd = windows_host.SHUTDOWN_COMMAND
         elif os_type == 'proxmox':
             cmd = 'shutdown -h now'
         elif os_type == 'unraid':

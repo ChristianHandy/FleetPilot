@@ -9,6 +9,7 @@ import time
 import subprocess
 import email_config
 import email_notifier
+import windows_host
 from constants import is_localhost, get_platform
 
 SUPPORTED_DISTRIBUTIONS = ['ubuntu', 'debian', 'fedora', 'centos', 'arch', 'windows']
@@ -27,8 +28,8 @@ WINDOWS_WINGET_UPDATE = (
     "}"
 )
 
-# Remote Windows detection command
-WINDOWS_DETECTION_COMMAND = 'powershell.exe -Command "Write-Output \'windows\'" 2>&1 || echo \'\''
+# Prints "windows" on Windows, whether the OpenSSH default shell is cmd.exe or PowerShell.
+WINDOWS_DETECTION_COMMAND = windows_host.DETECT_COMMAND
 
 def get_update_command(distro, repo_only=False, run_as_root=False):
     """
@@ -226,6 +227,67 @@ def run_local_update(name, log_list, repo_only, log_func):
             error_message = "\n".join(error_details)
             email_notifier.send_error_notification(name, error_message)
 
+def _run_windows_update(ssh, repo_only, log):
+    """Windows: name the release, install Windows updates as SYSTEM, then (full update) apps via winget.
+
+    Returns the problems found; an empty list means success.
+    """
+    problems = []
+    _, out, _ = ssh.exec_command(windows_host.INFO_COMMAND, timeout=60)
+    try:
+        info = windows_host.parse_info(out.read().decode('utf-8', errors='replace'))
+        log(f"{info['name']}, build {info['version']} ({info['channel']})")
+        if info['support_status'] == 'ended':
+            log(f"⚠ Microsoft ended support for this release on {info['support_end']}: it gets no security updates. "
+                "Upgrade to a supported release.")
+        elif info['support_status'] == 'ending':
+            log(f"⚠ Microsoft ends support for this release on {info['support_end']}.")
+        if info['support_note']:
+            log(f"⚠ {info['support_note']}")
+    except (ValueError, KeyError):
+        log("Could not read the Windows version; continuing.")
+
+    for command in windows_host.upload_commands(windows_host.UPDATE_WORKER):
+        _, out, err = ssh.exec_command(command, timeout=60)
+        if out.channel.recv_exit_status() != 0:
+            detail = err.read().decode('utf-8', errors='replace').strip().splitlines()
+            return [f"Could not prepare Windows Update ({detail[-1] if detail else 'unknown error'}). "
+                    "The SSH account must be an administrator."]
+
+    log("Installing Windows updates (as SYSTEM, through a one-off scheduled task)...")
+    _, out, err = ssh.exec_command(windows_host.update_command(install=True), timeout=None)
+    result = None
+    for line in iter(out.readline, ''):
+        parsed = windows_host.parse_result(line)
+        if parsed is not None:
+            result = parsed
+        elif line.strip():
+            log(line.rstrip())
+    if result is None:
+        detail = err.read().decode('utf-8', errors='replace').strip().splitlines()
+        problems.append(f"Windows Update gave no result ({detail[-1] if detail else 'no output'})")
+    else:
+        if result.get('error'):
+            problems.append(f"Windows Update: {result['error']}")
+        if result.get('failed'):
+            problems.append(f"{result['failed']} Windows update(s) failed to install")
+        if result.get('mode') == 'install':
+            log(f"Windows updates installed: {result.get('installed', 0)}")
+        if result.get('reboot'):
+            log("⚠ Windows needs a restart to finish installing updates.")
+
+    if not repo_only:
+        log("Updating applications with winget...")
+        _, out, _ = ssh.exec_command(windows_host.WINGET_COMMAND, timeout=None)
+        for line in iter(out.readline, ''):
+            if line.strip():
+                log(line.rstrip())
+        code = out.channel.recv_exit_status()
+        if code != 0:
+            log(f"⚠ winget finished with exit code {code}; some applications may not have been updated.")
+    return problems
+
+
 def run_update(host, user, name, log_list, repo_only=False, password=None):
     """
     Run system update on a remote host via SSH or locally via subprocess.
@@ -276,8 +338,14 @@ def run_update(host, user, name, log_list, repo_only=False, password=None):
         result = stdout.read().decode().strip().lower()
         
         if result == 'windows':
-            distro = 'windows'
             log("Detected Windows operating system")
+            for problem in _run_windows_update(ssh, repo_only, log):
+                log(f"✗ {problem}")
+                error_occurred = True
+                error_details.append(problem)
+            if not error_occurred:
+                log(f"✓ Update completed successfully for {name}")
+            return
         else:
             # Try Linux detection
             log("Detecting Linux distribution...")

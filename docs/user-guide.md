@@ -119,7 +119,7 @@ Credentials are stored encrypted. More details and the required rights per syste
 
 ### Update Dashboard
 
-Updates for all managed hosts in one place: Debian/Ubuntu (`apt`), Fedora/RHEL (`dnf`/`yum`), Arch (`pacman`) and Windows (`winget`).
+Updates for all managed hosts in one place: Debian/Ubuntu (`apt`), Fedora/RHEL (`dnf`/`yum`), Arch (`pacman`) and Windows (Windows Update, plus `winget` for applications on a full update).
 
 - Select one or more hosts and start the update. **Update Progress** shows the live output per host.
 - **Update History** lists every run with its result and duration.
@@ -431,7 +431,11 @@ The repository also contains a separate custom integration, `integrations/home-a
 
 **A host shows offline but works.** FleetPilot checks the SSH port. Check the port in the host settings and any firewall between FleetPilot and the host.
 
-**Can I manage Windows PCs?** Yes: enable the OpenSSH server on Windows, add the host with a Windows OS profile. Updates use `winget`; shutdown and Wake-on-LAN work.
+**Can I manage Windows PCs and servers?** Yes, every release Microsoft still supports:
+- Windows 10 and 11, including LTSC 2019, 2021 and 2024 and the IoT editions
+- Windows Server 2016 to 2025, including Server Core
+
+Enable the OpenSSH server, add the host with an administrator account and click **Detect OS**. FleetPilot then shows the release and its support end date. It installs Windows updates (without restarting) and application updates through winget where installed. Shutdown, Wake-on-LAN, the hardware overview and SMART (with smartmontools) work as well. Setup for each version: [WINDOWS_SUPPORT.md](../WINDOWS_SUPPORT.md).
 
 **Can two FleetPilot instances back each other up?** Yes: data sync replicates all data from a primary to a secondary instance. Set the same `SYNC_TOKEN` on both.
 

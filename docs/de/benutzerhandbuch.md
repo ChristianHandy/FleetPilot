@@ -121,7 +121,7 @@ Zugangsdaten werden verschlüsselt gespeichert. Einzelheiten und die nötigen Re
 
 ### Update-Übersicht
 
-Updates für alle verwalteten Hosts an einer Stelle: Debian/Ubuntu (`apt`), Fedora/RHEL (`dnf`/`yum`), Arch (`pacman`) und Windows (`winget`).
+Updates für alle verwalteten Hosts an einer Stelle: Debian/Ubuntu (`apt`), Fedora/RHEL (`dnf`/`yum`), Arch (`pacman`) und Windows (Windows Update, beim vollständigen Update zusätzlich `winget` für Anwendungen).
 
 - Einen oder mehrere Hosts auswählen und das Update starten. **Update Progress** zeigt die Ausgabe je Host live.
 - **Update History** listet jeden Lauf mit Ergebnis und Dauer.
@@ -433,7 +433,11 @@ Das Repository enthält außerdem eine eigene Integration, `integrations/home-as
 
 **Ein Host wird als offline angezeigt, funktioniert aber.** FleetPilot prüft den SSH-Port. Prüfen Sie den Port in den Host-Einstellungen und eine Firewall zwischen FleetPilot und dem Host.
 
-**Kann ich Windows-PCs verwalten?** Ja: den OpenSSH-Server unter Windows einschalten und den Host mit einem Windows-OS-Profil anlegen. Updates nutzen `winget`; Herunterfahren und Wake-on-LAN funktionieren.
+**Kann ich Windows-PCs und -Server verwalten?** Ja, alle Versionen, die Microsoft noch unterstützt:
+- Windows 10 und 11, auch LTSC 2019, 2021 und 2024 und die IoT-Editionen
+- Windows Server 2016 bis 2025, auch Server Core
+
+Den OpenSSH-Server einschalten, den Host mit einem Administratorkonto anlegen und **Detect OS** klicken. FleetPilot zeigt dann die Version und ihr Support-Ende. Es installiert Windows-Updates (ohne Neustart) und, wo vorhanden, Anwendungsupdates über winget. Herunterfahren, Wake-on-LAN, die Hardwareübersicht und SMART (mit smartmontools) funktionieren ebenfalls. Einrichtung je Version: [WINDOWS_SUPPORT.md](../../WINDOWS_SUPPORT.md).
 
 **Können sich zwei FleetPilot-Instanzen gegenseitig absichern?** Ja: Die Datensynchronisation spiegelt alle Daten von einer primären auf eine sekundäre Instanz. Setzen Sie auf beiden dasselbe `SYNC_TOKEN`.
 

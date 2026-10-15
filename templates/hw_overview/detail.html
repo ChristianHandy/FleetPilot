@@ -249,7 +249,7 @@ function render(rawHw) {
     storHtml += `<div class="disk-row">
       <div class="disk-icon">${icon}</div>
       <div style="flex:1;">
-        <div class="disk-name">/dev/${disk.name} <span class="disk-type disk-${typeClass}">${disk.type || 'DISK'}</span></div>
+        <div class="disk-name">${hw.platform === 'windows' ? '' : '/dev/'}${disk.name} <span class="disk-type disk-${typeClass}">${disk.type || 'DISK'}</span></div>
         <div class="disk-size">${disk.size || ''} ${disk.model ? '· ' + disk.model : ''} ${disk.serial ? '· S/N: ' + disk.serial : ''}</div>
       </div>
     </div>`;
