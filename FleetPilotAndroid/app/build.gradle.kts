@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)   // AGP 9 compiles Kotlin itself; this adds the Compose compiler
 }
 
 android {
     namespace = "com.fleetpilot"
-    compileSdk = 35
+    compileSdk = 37   // the AndroidX libraries need it; targetSdk decides runtime behaviour
 
     defaultConfig {
         applicationId = "com.fleetpilot"
@@ -26,11 +26,7 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"
-    }
 }
 
 dependencies {
