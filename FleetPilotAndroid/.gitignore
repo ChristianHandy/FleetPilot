@@ -1,0 +1,7 @@
+# Android and Gradle build output, machine-specific SDK path, heap dumps
+.gradle/
+build/
+/local.properties
+*.hprof
+.idea/
+*.iml
