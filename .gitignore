@@ -51,3 +51,7 @@ FleetPilotCS/obj/
 .coverage.*
 htmlcov/
 coverage.xml
+
+# Built apps belong in GitHub releases, not in the repository
+*.apk
+*.aab
