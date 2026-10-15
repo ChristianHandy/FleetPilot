@@ -17,6 +17,12 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ### Added
 
+- **Windows PCs and servers, every release Microsoft still supports**, all over OpenSSH (see [WINDOWS_SUPPORT.md](WINDOWS_SUPPORT.md)):
+  - covers Windows 10/11 (including LTSC 2019/2021/2024 and IoT) and Windows Server 2016, 2019, 2022 and 2025 (Desktop or Core)
+  - **Detect OS** names the exact release and edition and shows Microsoft's support end date; the host list warns about ended support
+  - updates use the built-in Windows Update Agent, run once as SYSTEM through a scheduled task (Windows does not let an SSH session install updates), never restart the machine, and work with WSUS, LTSC and Server Core; a full update also runs `winget upgrade` where winget exists
+  - hardware overview and SMART (with smartmontools for Windows) for Windows hosts; **Install SSH key** puts the key where Windows OpenSSH reads it for administrators
+  - all commands are encoded PowerShell, so they work with cmd.exe or PowerShell as the SSH shell
 - **Android app (beta)**, now working with FleetPilot itself:
   - signs in with a personal API token
   - trusts FleetPilot's self-signed certificate after you confirm its fingerprint, and then only that certificate
@@ -43,6 +49,8 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ### Fixed
 
+- Windows hosts were detected as Linux, could not be shut down (FleetPilot sent the Linux `shutdown -h now`), and updates failed when the SSH shell was PowerShell or the PowerShell Gallery was unreachable.
+- Editing a host dropped every field the form does not show (custom image, reachability state, detected OS) and, when it was renamed, its last-update and last-seen times.
 - **HW Monitor never collected live metrics:** the collector script sent to each host had broken indentation since an earlier clean-up, so it failed on every host and every server showed as unreachable. A test now runs the script.
 - The hardware stress test kept going after the GPU dropped off the bus: the GPU and combined phases set a local `running` flag instead of the global one.
 - SQLite connections opened with `with get_db() as conn:` were committed but never closed, leaking file handles until garbage collection; they are now closed at the end of the block.

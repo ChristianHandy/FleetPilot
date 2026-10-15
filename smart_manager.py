@@ -24,6 +24,7 @@ import shutil
 import logging
 
 import safe_errors
+import windows_host
 import subprocess
 import threading
 from pathlib import Path
@@ -513,7 +514,7 @@ def collect_ssh_host_disks(host_name: str, host_ip: str, user: str,
                            port: int = 22, password: str = None,
                            key_path: str = None) -> List[Dict]:
     """
-    Connect to a remote Linux host via SSH, run lsblk + smartctl,
+    Connect to a remote host via SSH (Linux: lsblk + smartctl; Windows: smartmontools for Windows),
     and import all disks into the SMART registry.
     Returns list of imported disk dicts.
     """
@@ -538,23 +539,38 @@ def collect_ssh_host_disks(host_name: str, host_ip: str, user: str,
 
     results = []
     try:
-        # Discover disks via lsblk
-        _, stdout, _ = ssh.exec_command("lsblk -J -d -o NAME,SIZE,MODEL,TYPE 2>/dev/null", timeout=10)
-        raw = stdout.read().decode(errors="replace")
-        try:
-            devices = [d["name"] for d in json.loads(raw).get("blockdevices", [])
-                       if d.get("type") == "disk"
-                       and re.fullmatch(r"[A-Za-z0-9_-]{1,64}", str(d.get("name", "")))]
-        except Exception:
-            devices = []
+        _, probe, _ = ssh.exec_command(windows_host.DETECT_COMMAND, timeout=15)
+        windows = probe.read().decode(errors="replace").strip().lower() == "windows"
+        smartctl = None
+        if windows:
+            # smartmontools for Windows names disks like Linux (sda, nvme0) and runs without sudo.
+            _, stdout, _ = ssh.exec_command(windows_host.SMARTCTL_SCAN_COMMAND, timeout=30)
+            smartctl, devices = windows_host.parse_smartctl_scan(stdout.read().decode(errors="replace"))
+            if not smartctl:
+                logger.info("[smart_manager] %s: smartmontools is not installed on this Windows host",
+                            safe_errors.log_text(host_name))
+        else:
+            # Discover disks via lsblk
+            _, stdout, _ = ssh.exec_command("lsblk -J -d -o NAME,SIZE,MODEL,TYPE 2>/dev/null", timeout=10)
+            raw = stdout.read().decode(errors="replace")
+            try:
+                devices = [d["name"] for d in json.loads(raw).get("blockdevices", [])
+                           if d.get("type") == "disk"
+                           and re.fullmatch(r"[A-Za-z0-9_-]{1,64}", str(d.get("name", "")))]
+            except Exception:
+                devices = []
+
+        def smartctl_output(dev, option, timeout):
+            command = (windows_host.smartctl_command(smartctl, option, dev) if windows
+                       else f"sudo smartctl {option} /dev/{dev} 2>/dev/null")
+            _, out, _ = ssh.exec_command(command, timeout=timeout)
+            return out.read().decode(errors="replace")
 
         for dev in devices:
             try:
                 # Get SMART info
-                _, so, _ = ssh.exec_command(f"sudo smartctl -a /dev/{dev} 2>/dev/null", timeout=20)
-                smart_out = so.read().decode(errors="replace")
-                _, si, _ = ssh.exec_command(f"sudo smartctl -i /dev/{dev} 2>/dev/null", timeout=10)
-                info_out = si.read().decode(errors="replace")
+                smart_out = smartctl_output(dev, "-a", 20)
+                info_out = smartctl_output(dev, "-i", 10)
 
                 serial, model, size_gb = None, None, None
                 for line in info_out.splitlines():

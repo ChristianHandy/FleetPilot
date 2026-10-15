@@ -5,6 +5,7 @@
 A machine answers the shell commands FleetPilot sends over SSH (or runs locally, for
 the FleetPilot machine itself) with output in the format of the real tools.
 """
+import base64
 import json
 import math
 import random
@@ -377,10 +378,10 @@ class Machine(Device):
 
     def _shell(self, cmd, stdin, user):
         windows = self.os == "windows"
-        if "Write-Output 'windows'" in cmd or "Write-Output \\'windows\\'" in cmd:
-            return 0, "windows\n" if windows else "", ""
         if windows:
             return self._windows(cmd)
+        if cmd.startswith("powershell.exe"):
+            return 127, "", "bash: powershell.exe: command not found\n"
         if "@@fp:pkg" in cmd and "dpkg-query" in cmd:
             return 0, self._inventory(), ""
         m = re.match(r"trivy image .*?'?([\w./:-]+)'? 2>/dev/null$", cmd)
@@ -626,7 +627,56 @@ class Machine(Device):
         self._log("update", f"{self.label}: {count} packages upgraded")
         return 0, "\n".join(lines) + "\n", ""
 
+    WINDOWS_UPDATES = [
+        ("2026-10 Cumulative Update for Windows 11 Version 24H2 for x64-based Systems (KB5066835)", "5066835", True),
+        ("2026-10 .NET 8.0.21 Security Update for x64 Client (KB5066970)", "5066970", True),
+        ("Security Intelligence Update for Microsoft Defender Antivirus - KB2267602 (Version 1.439.211.0)",
+         "2267602", False),
+    ]
+
+    def _powershell(self, script):
+        """Windows PowerShell scripts FleetPilot sends (-EncodedCommand), recognised by their first line."""
+        marker = script.split("\n", 1)[0].strip()
+        if marker == "# fleetpilot:detect":
+            return 0, "windows\r\n", ""
+        if marker == "# fleetpilot:windows-info":
+            return 0, json.dumps({"caption": "Microsoft Windows 11 Pro", "edition": "Professional",
+                                  "display_version": "24H2", "release_id": "2009", "build": 26100, "ubr": 6899,
+                                  "installation": "Client", "arch": "64-Bit", "hostname": self.name.upper(),
+                                  "last_boot": "2026-10-14T07:12:03.0000000+02:00"}) + "\r\n", ""
+        if marker == "# fleetpilot:upload":
+            return 0, "", ""
+        if marker == "# fleetpilot:run-as-system":
+            pending = getattr(self, "windows_updates", list(self.WINDOWS_UPDATES))
+            install = "-Mode install" in script
+            lines = ["Searching for updates...", f"Found {len(pending)} update(s)."] + [f"  {t}" for t, _, _ in pending]
+            if install and pending:
+                lines += ["Downloading...", "Installing..."] + [f"{t}: installed" for t, _, _ in pending]
+                self._log("update", f"{self.label}: {len(pending)} Windows updates installed")
+            result = {"ok": True, "mode": "install" if install else "check", "installed": len(pending) if install else 0,
+                      "failed": 0, "reboot": bool(install and pending), "error": None,
+                      "updates": [{"title": t, "kb": kb, "severity": "Important" if sec else "", "security": sec,
+                                   "size": 0} for t, kb, sec in pending]}
+            if install:
+                self.windows_updates = []
+            return 0, "\r\n".join(lines + ["@@fp:result " + json.dumps(result)]) + "\r\n", ""
+        if marker == "# fleetpilot:winget":
+            return self._windows("winget upgrade --all")
+        if marker == "# fleetpilot:windows-hw":
+            hw = self._hw_info()
+            hw.update({"platform": "windows", "os": "Windows 11 Pro", "kernel": "10.0.26100", "arch": "64-Bit",
+                       "hostname": self.name.upper(), "gpus_lspci": "", "pcie_devices": "", "packages": "",
+                       "shell": "", "network": [dict(hw["network"][0], name="Ethernet", driver="Realtek PCIe 2.5GbE")],
+                       "disks": [dict(d, name=f"PhysicalDrive{i}") for i, d in enumerate(hw["disks"])]})
+            return 0, json.dumps(hw) + "\r\n", ""
+        if marker == "# fleetpilot:smartctl-scan":
+            return 0, "", ""        # smartmontools is not installed on this PC
+        return 1, "", "The term is not recognized as the name of a cmdlet.\r\n"
+
     def _windows(self, cmd):
+        if cmd.startswith("powershell.exe") and "-EncodedCommand " in cmd:
+            encoded = cmd.rsplit(" ", 1)[1]
+            return self._powershell(base64.b64decode(encoded).decode("utf-16-le"))
         if "winget upgrade" in cmd or "Get-WindowsUpdate" in cmd:
             lines = ["Name                         Id                          Version   Available Source",
                      "-" * 86]

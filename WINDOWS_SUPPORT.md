@@ -1,316 +1,109 @@
-# Windows Support for FleetPilot
+# Managing Windows PCs and servers
 
-## Overview
+FleetPilot manages Windows machines over OpenSSH, like Linux hosts. Nothing else has to be installed on them. FleetPilot itself runs on Linux (a VM, an LXC container or a Raspberry Pi).
 
-The FleetPilot now supports managing Windows systems for both system updates (Windows Update) and software updates (winget). This document provides detailed information about Windows support implementation and usage.
+## Supported Windows versions
 
-## Features
+Every Windows release that Microsoft still services, as of October 2026. FleetPilot shows each host's release and support status, and the update log warns before support ends.
 
-### Windows System Updates
-- Automatic Windows Update installation via PowerShell
-- Uses PSWindowsUpdate module for comprehensive update management
-- Automatically installs required modules if not present
-- No-reboot option to prevent automatic restarts
-- Repository-only mode for system updates without software packages
+| Release | Editions | Build | Microsoft support ends |
+|---|---|---|---|
+| Windows 11 25H2 | Home, Pro | 26200 | 2027-10-12 |
+| | Enterprise, Education | 26200 | 2028-10-10 |
+| Windows 11 24H2 | Enterprise, Education | 26100 | 2027-10-12 |
+| Windows 11 23H2 | Enterprise, Education | 22631 | 2026-11-10 |
+| Windows 11 Enterprise LTSC 2024 | Enterprise LTSC | 26100 | 2029-10-09 |
+| | IoT Enterprise LTSC | 26100 | 2034-10-10 |
+| Windows 10 Enterprise LTSC 2021 | Enterprise LTSC | 19044 | 2027-01-12 |
+| | IoT Enterprise LTSC | 19044 | 2032-01-13 |
+| Windows 10 Enterprise LTSC 2019 | Enterprise LTSC, IoT Enterprise LTSC | 17763 | 2029-01-09 |
+| Windows 10 22H2 | all, with Extended Security Updates (ESU) | 19045 | ESU for organisations until 2028-10-10 |
+| Windows Server 2025 | Standard, Datacenter (Desktop Experience or Server Core) | 26100 | 2034-10-10 |
+| Windows Server 2022 | Standard, Datacenter (Desktop Experience or Server Core) | 20348 | 2031-10-14 |
+| Windows Server 2019 | Standard, Datacenter (Desktop Experience or Server Core) | 17763 | 2029-01-09 |
+| Windows Server 2016 | Standard, Datacenter (Desktop Experience or Server Core) | 14393 | 2027-01-12 |
 
-### Windows Software Updates
-- Software package updates via Windows Package Manager (winget)
-- Updates all installed applications in one command
-- Automatic acceptance of source and package agreements
-- Silent installation for unattended operations
-- Full update mode combines both system and software updates
+Older releases still work as far as their tools allow. FleetPilot marks them **Support ended**:
+- Windows 11 24H2 Home and Pro, Windows 10 22H2 without ESU and Windows 10 LTSB 2016 ended in October 2025 or October 2026.
+- Windows Server 23H2 (Annual Channel) ended in October 2025.
 
-## Prerequisites
+The dates come from Microsoft's lifecycle pages and are kept in [`windows_host.py`](windows_host.py).
 
-### For Local Windows Management
-1. **Operating System**: Windows 10 (1809+) or Windows 11, Windows Server 2016+
-2. **PowerShell**: Version 5.0 or later (included by default)
-3. **Administrator Privileges**: Required for installing updates
-4. **Execution Policy**: Set to allow script execution
-   ```powershell
-   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-   ```
-5. **Python**: Python 3.8+ installed and in PATH
-6. **Winget** (Optional but recommended): Included in Windows 11, available for Windows 10
+## What works
 
-### For Remote Windows Management
-1. All prerequisites for local management, plus:
-2. **OpenSSH Server**: Configured and running on the Windows host
-3. **SSH Key Authentication**: Set up between dashboard and Windows host
-4. **Network Connectivity**: SSH port (22) accessible from dashboard host
+| Feature | How it works on Windows |
+|---|---|
+| **OS detection** | **Detect OS** on the host shows the exact release, for example *Windows 11 Enterprise LTSC 2024* or *Windows Server 2022 Standard (Server Core)*. It also shows the build and the support status. |
+| **Windows updates** | Through the Windows Update Agent that every release includes:<ul><li>It follows WSUS or Windows Update for Business policies.</li><li>It works on Server Core and LTSC, and needs no PowerShell Gallery module.</li><li>Windows does not let an SSH session install updates, so FleetPilot runs the installation once as SYSTEM through a scheduled task. It shows the progress live and removes the task afterwards.</li><li>FleetPilot never restarts the machine; it tells you when a restart is needed.</li></ul> |
+| **Application updates** | **Full update** also runs `winget upgrade --all` where winget is installed: Windows 10/11 through the App Installer. LTSC and Server usually have no winget, which is reported and is not an error. **Repository-only update** installs Windows updates only. |
+| **Shut down** | `shutdown /s /t 30`, so logged-in users get a 30-second warning. |
+| **Wake-on-LAN** | As for any host with a MAC address. Enable it in the firmware and the network adapter's power settings. |
+| **Hardware overview** | CPU, memory modules, mainboard and BIOS, GPUs, network adapters and disks, read through CIM. |
+| **SMART** | With [smartmontools for Windows](https://www.smartmontools.org/wiki/Download#InstalltheWindowspackage) installed, FleetPilot reads disk health like on Linux. Without it, the hardware overview still shows each disk's health status. |
+| **Vulnerability scan** | Not for Windows: there is no package-level vulnerability data. Keep Windows Update running; FleetPilot installs the missing updates. |
 
-## Installation on Windows
+All commands are PowerShell 5.1 scripts sent as `-EncodedCommand`. They work whether the OpenSSH default shell is `cmd.exe` or PowerShell, and nothing from a form reaches the command line.
 
-### Step 1: Install Python
-Download and install Python from https://www.python.org/downloads/
-- Check "Add Python to PATH" during installation
+## Setting up a Windows machine
 
-### Step 2: Clone the Repository
+### 1. OpenSSH server
+
+**Windows 10 1809 and later, Windows 11, LTSC 2019/2021/2024, Server 2019/2022:** in PowerShell as administrator:
+
 ```powershell
-git clone https://github.com/ChristianHandy/fleetpilot.git
-cd fleetpilot
-```
-
-### Step 3: Create Virtual Environment
-```powershell
-python -m venv venv
-venv\Scripts\activate
-```
-
-### Step 4: Install Dependencies
-```powershell
-pip install -r requirements.txt
-```
-
-### Step 5: Configure Environment
-```powershell
-# Copy example environment file
-copy .env.example .env
-
-# Generate a secure secret key
-python -c "import secrets; print(secrets.token_hex(32))"
-
-# Edit .env with your favorite editor
-notepad .env
-```
-
-Set the following variables:
-- `SECRET_KEY`: Use the generated secure key
-- `DASHBOARD_USERNAME`: Your admin username
-- `DASHBOARD_PASSWORD`: A secure password
-
-### Step 6: Run the Dashboard
-```powershell
-# Run as Administrator for Windows Update support
-python app.py
-```
-
-Open your browser to `http://localhost:5000` and log in.
-
-## Usage
-
-### Managing Local Windows System
-
-1. **Add Localhost as a Host**:
-   - Navigate to `/hosts` in the dashboard
-   - Click "Add Host"
-   - Fill in:
-     - Display name: "Local Windows Server"
-     - Host: `localhost` or `127.0.0.1`
-     - User: (any value, ignored for localhost)
-   - Click Save
-
-2. **Run Updates**:
-   - From the dashboard, click on your host
-   - Choose update type:
-     - **Repo Update** (Purple button): Windows system updates only
-     - **Full Update** (Blue button): System updates + software updates via winget
-
-3. **Monitor Progress**:
-   - Updates run in the background
-   - View real-time logs on the progress page
-   - Email notifications available (if configured)
-
-### Managing Remote Windows Systems
-
-#### Step 1: Install OpenSSH Server on Windows
-```powershell
-# Check if OpenSSH Server is installed
-Get-WindowsCapability -Online | Where-Object Name -like 'OpenSSH.Server*'
-
-# Install if not present
 Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
-
-# Start the service
+Set-Service -Name sshd -StartupType Automatic
 Start-Service sshd
-
-# Set service to start automatically
-Set-Service -Name sshd -StartupType 'Automatic'
-
-# Configure firewall
-New-NetFirewallRule -Name sshd -DisplayName 'OpenSSH Server (sshd)' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22
 ```
 
-#### Step 2: Add Remote Windows Host to Dashboard
-1. Navigate to `/hosts`
-2. Click "Add Host"
-3. Fill in:
-   - Display name: "Remote Windows Server"
-   - Host: IP address or hostname
-   - User: Windows administrator username
-4. Click Save
+**Windows Server 2025** includes the OpenSSH server; only enable it:
 
-#### Step 3: Install SSH Key
-1. Click "Install SSH key" next to the host
-2. Enter the Windows administrator password
-3. Wait for key installation to complete
-
-#### Step 4: Run Updates
-- Same as local management - use Repo Update or Full Update buttons
-
-## Update Types
-
-### Repository-Only Update (Repo Update)
-**What it does**:
-- Installs Windows system updates only
-- Uses PSWindowsUpdate PowerShell module
-- No software package updates
-
-**Command executed**:
 ```powershell
-Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -ErrorAction SilentlyContinue
-Install-Module PSWindowsUpdate -Force -ErrorAction SilentlyContinue
-Import-Module PSWindowsUpdate
-Get-WindowsUpdate -AcceptAll -Install -AutoReboot:$false
+Set-Service -Name sshd -StartupType Automatic
+Start-Service sshd
 ```
 
-**Use cases**:
-- Regular security patching
-- Critical updates only
-- Systems where software updates are managed separately
+**Windows Server 2016 and Windows 10 LTSB 2016** have no built-in OpenSSH. Install [Win32-OpenSSH from Microsoft's GitHub releases](https://github.com/PowerShell/Win32-OpenSSH/releases) (MSI package).
 
-### Full System Update (Full Update)
-**What it does**:
-- Installs Windows system updates
-- Updates all installed software via winget
-- Comprehensive system maintenance
+The installer opens port 22 in the Windows firewall for all profiles. Restrict it to the network FleetPilot is in if the machine moves between networks.
 
-**Command executed**:
+### 2. An administrator account
+
+FleetPilot needs an account in the local **Administrators** group: installing updates and shutting down require it. A dedicated local account is a good choice, for example `fleetpilot`.
+
+### 3. SSH key (recommended)
+
+After adding the host (step 4), use **Install SSH key** on it and enter the account's password once. FleetPilot puts its key where Windows OpenSSH reads it: for administrators that is `C:\ProgramData\ssh\administrators_authorized_keys` (readable only by Administrators and SYSTEM), not the `.ssh` folder in the profile.
+
+To do it by hand instead:
+
 ```powershell
-# Windows Update
-Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -ErrorAction SilentlyContinue
-Install-Module PSWindowsUpdate -Force -ErrorAction SilentlyContinue
-Import-Module PSWindowsUpdate
-Get-WindowsUpdate -AcceptAll -Install -AutoReboot:$false
-
-# Software Updates
-if (Get-Command winget -ErrorAction SilentlyContinue) {
-    winget upgrade --all --accept-source-agreements --accept-package-agreements --silent
-}
+Add-Content -Path C:\ProgramData\ssh\administrators_authorized_keys -Value 'ssh-ed25519 AAAA... fleetpilot'
+icacls.exe C:\ProgramData\ssh\administrators_authorized_keys /inheritance:r /grant 'Administrators:F' /grant 'SYSTEM:F'
 ```
 
-**Use cases**:
-- Complete system maintenance
-- Monthly update cycles
-- Keeping all software up to date
+A password works too: enter it when you add the host.
 
-## Technical Details
+### 4. Add the host in FleetPilot
 
-### Platform Detection
-The dashboard automatically detects Windows systems:
-- **Local detection**: Uses `platform.system()` to identify Windows
-- **Remote detection**: Attempts PowerShell command execution to identify Windows
-- **Fallback**: Falls back to Linux detection if Windows detection fails
+1. **Hosts → Add host**, with the address, the account and the port (22).
+2. Open the host and click **Detect OS**: FleetPilot shows the Windows release and its support status.
+3. Run **Repository-only update** (Windows updates only) or **Full update** (Windows updates and winget).
 
-### Update Execution
-- **Local**: Uses `subprocess.Popen()` with PowerShell commands
-- **Remote**: Uses SSH with PowerShell command execution
-- **Real-time logging**: Output streamed to dashboard in real-time
-- **Error handling**: Comprehensive error detection and notification
+## What FleetPilot leaves on the machine
 
-### Security Considerations
-1. **Administrator Privileges**: Required for Windows Update installation
-2. **Execution Policy**: Must allow PowerShell script execution
-3. **Automatic Module Installation**: PSWindowsUpdate installed automatically if needed
-4. **No Automatic Reboot**: Updates installed without automatic restart
-5. **SSH Security**: Uses standard SSH authentication for remote systems
+| Where | What | When |
+|---|---|---|
+| `C:\ProgramData\FleetPilot\` | `update.ps1`, `update.log` and `update.json` of the last update | Overwritten by the next update. Only SYSTEM and Administrators can write here, because the script runs as SYSTEM. |
+| Task Scheduler | *FleetPilot Windows Update* | Only while an update runs |
 
 ## Troubleshooting
 
-### Issue: "Execution policy does not allow running scripts"
-**Solution**:
-```powershell
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
-
-### Issue: "PSWindowsUpdate module not found"
-**Solution**: The dashboard automatically installs it, but you can install manually:
-```powershell
-Install-Module -Name PSWindowsUpdate -Force
-```
-
-### Issue: "winget not found"
-**Solution**: 
-- Windows 11: Winget is pre-installed, update Microsoft Store if needed
-- Windows 10: Install App Installer from Microsoft Store
-- Alternative: Download from https://github.com/microsoft/winget-cli/releases
-
-### Issue: "Access denied" errors during update
-**Solution**: Ensure the dashboard is running with Administrator privileges:
-```powershell
-# Right-click PowerShell and select "Run as Administrator"
-python app.py
-```
-
-### Issue: Remote Windows host connection fails
-**Solution**:
-1. Verify OpenSSH Server is running: `Get-Service sshd`
-2. Check firewall allows port 22: `Test-NetConnection -ComputerName localhost -Port 22`
-3. Verify SSH key authentication works: `ssh username@hostname`
-
-### Issue: Updates appear to hang
-**Solution**: Windows Update can take significant time. Check progress in:
-- Dashboard logs (real-time updates)
-- Windows Update history (`Get-WindowsUpdateLog` or Settings > Update & Security)
-
-## Limitations
-
-1. **Disk Management**: Disk tools are Linux-only and not supported on Windows
-2. **Sudo Commands**: Linux-specific sudo commands not applicable to Windows
-3. **Distribution Detection**: Windows hosts show as "windows" distribution
-4. **Reboot Handling**: Automatic reboots are disabled; manual reboot may be needed
-5. **Local Execution**: Running the dashboard on Windows is supported but primarily designed for Linux
-
-## Supported Windows Versions
-
-- ✅ Windows 11 (all editions)
-- ✅ Windows 10 version 1809 and later
-- ✅ Windows Server 2019 and later
-- ✅ Windows Server 2016 (with latest updates)
-- ⚠️ Windows 10 earlier than 1809 (limited support)
-- ❌ Windows 7, 8, 8.1 (not supported)
-
-## FAQ
-
-**Q: Can I run the dashboard on Windows to manage Linux systems?**
-A: Yes! The dashboard runs on Windows and can manage both Linux and Windows hosts.
-
-**Q: Do I need winget for Windows updates?**
-A: No, winget is only for software package updates. System updates use PSWindowsUpdate which is automatically installed.
-
-**Q: Will updates reboot my system automatically?**
-A: No, the `-AutoReboot:$false` flag prevents automatic reboots. You can reboot manually when convenient.
-
-**Q: Can I schedule automatic Windows updates?**
-A: Yes, use the Update Settings page to configure automatic updates on a schedule (daily, weekly, monthly).
-
-**Q: How do I update only specific software packages?**
-A: Currently, the dashboard updates all packages. For selective updates, use winget directly on the Windows system.
-
-**Q: Is there a dry-run mode to preview updates?**
-A: Not currently. Consider testing on a non-production system first.
-
-## Contributing
-
-Windows support is new! If you encounter issues or have suggestions:
-1. Check existing issues: https://github.com/ChristianHandy/fleetpilot/issues
-2. Open a new issue with:
-   - Windows version
-   - Error messages
-   - Steps to reproduce
-   - Expected vs actual behavior
-
-## See Also
-
-- [README.md](README.md) - Main documentation
-- [LOCALHOST_EXAMPLE.md](LOCALHOST_EXAMPLE.md) - Managing local servers
-- [IMPLEMENTATION_NOTES.md](IMPLEMENTATION_NOTES.md) - Technical implementation details
-- [SECURITY.md](SECURITY.md) - Security considerations
-
-## Version History
-
-- **v1.0** (2026-01-07): Initial Windows support implementation
-  - Windows Update via PSWindowsUpdate
-  - Software updates via winget
-  - Local and remote Windows host support
-  - Cross-platform compatibility maintained
+| Problem | Cause and fix |
+|---|---|
+| *Could not prepare Windows Update … The SSH account must be an administrator* | The account is not in the local Administrators group, or (with UAC) it is a domain account without administrator rights on this machine. |
+| *Windows Update: 0x8024402C* or similar | The machine cannot reach Windows Update or its WSUS server. Check the proxy and the WSUS address. |
+| The update runs for a long time without output | Large cumulative updates download silently. FleetPilot waits up to 2 hours, then stops the task. |
+| *winget is not installed on this system* | Normal on LTSC and Server: only Windows updates are installed. |
+| Detect OS shows "Linux" | The SSH login lands in WSL or another shell without `powershell.exe`. Set the OpenSSH default shell back to `cmd.exe` or PowerShell. |
+| Server 2016 updates are slow | Server 2016's cumulative updates are large and install slowly; that is normal. |

@@ -162,6 +162,13 @@
         {{ p.name }}{% if p.default %} &#x2605;{% endif %}
       </span>
       {% endfor %}
+      {% if h.windows and h.windows.support_end %}
+      {% set w = h.windows %}
+      <span class="badge {{ {'ended': 'badge-red', 'ending': 'badge-amber'}.get(w.support_status, 'badge-gray') }}"
+            title="{{ w.channel }}{% if w.support_note %} · {{ w.support_note }}{% endif %}">
+        {% if w.support_status == 'ended' %}Support ended {{ w.support_end }}{% else %}Supported until {{ w.support_end }}{% endif %}
+      </span>
+      {% endif %}
     </div>
     {% endif %}
 

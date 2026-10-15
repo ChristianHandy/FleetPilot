@@ -50,6 +50,11 @@ out["unprefixed"] = sorted(set(re.findall(r'(?:href|src|action)="(/(?!FleetPilot
 
 call("POST", "/update/docker-01", {})
 out["update"] = "Update completed successfully for docker-01" in call("GET", "/progress/docker-01")[3]
+call("POST", "/update/win-desk", {})
+win_progress = call("GET", "/progress/win-desk")[3]
+out["win_update"] = all(t in win_progress for t in ("Windows 11 Pro 24H2", "Windows updates installed: 3",
+                                                     "upgrades installed", "Update completed successfully for win-desk"))
+out["win_detect"] = json.loads(call("GET", "/hosts/detect_os/win-desk", accept="application/json")[2])["os"]["name"]
 out["wol"] = (call("POST", "/hosts/lab-01/wol", {}, "application/json")[0], net.lab.find("lab-01").state)
 status, _, text, _ = call("POST", "/vm/1/action", {"node": "pve-02", "vmid": "108", "action": "start",
                                                    "rtype": "qemu"}, "application/json")
@@ -78,6 +83,8 @@ def test_demo_lab_runs_fleetpilot_against_emulated_devices():
     assert out["vm"] and out["router"] and out["storage"]
     assert out["unprefixed"] == [], "links the demo's path rewriting missed: %s" % out["unprefixed"]
     assert out["update"]
+    assert out["win_update"], "the emulated Windows PC was not updated"
+    assert out["win_detect"] == "Windows 11 Pro 24H2"
     assert out["wol"] == [200, "booting"]
     assert out["vm_start"] is True
     assert any("nas:sda" in subject for subject in out["outbox"]), out["outbox"]
