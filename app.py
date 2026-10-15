@@ -4494,6 +4494,32 @@ def vm_detail(ep_id):
                            ep=ep, vms=vms, jobs=jobs, nodes=nodes, error=error)
 
 
+_VM_FIELDS = ('vmid', 'name', 'status', 'node', 'type', 'cpu', 'cpus', 'mem', 'maxmem', 'uptime')
+
+
+@app.route("/api/vms")
+@login_required
+def api_vms():
+    """VM endpoints and their guests (Proxmox VMs and containers), for API clients and the app."""
+    endpoints = []
+    for ep in vm_controller.list_endpoints():
+        item = {'id': ep['id'], 'name': ep['name'], 'platform': ep['platform'], 'vms': [], 'error': None}
+        if ep['platform'] == 'proxmox':
+            try:
+                item['vms'] = [{k: vm.get(k) for k in _VM_FIELDS} for vm in vm_controller.get_all_vms(ep['id'])]
+            except Exception as exc:
+                item['error'] = _error_message(exc, 'Loading this endpoint')
+        endpoints.append(item)
+    return jsonify({'endpoints': endpoints})
+
+
+@app.route("/api/vms/<int:ep_id>/action", methods=["POST"])
+@login_required
+def api_vm_action(ep_id):
+    """Power action on a Proxmox guest (form fields node, vmid, rtype, action); admins only."""
+    return vm_action(ep_id)
+
+
 @app.route("/vm/<int:ep_id>/action", methods=["POST"])
 @login_required
 def vm_action(ep_id):
@@ -5866,6 +5892,13 @@ def fc_set_fan(dev_id):
     return jsonify(result)
 
 
+@app.route('/api/fans/<int:dev_id>/set_fan', methods=['POST'])
+@operator_required
+def api_fc_set_fan(dev_id):
+    """Set a fan speed (form fields channel, mode, speed) from API clients and the app."""
+    return fc_set_fan(dev_id)
+
+
 @app.route('/fans/<int:dev_id>/install', methods=['POST'])
 @admin_required
 @_csrf_exempt_safe
@@ -6285,6 +6318,11 @@ def api_hosts_list():
             'environment': h.get('environment', ''),
             'os': h.get('os', ''),
             'tags': h.get('tags', []),
+            'description': h.get('description', ''),
+            'group': h.get('group', ''),
+            # manageable | web_only | unreachable | unknown, from the last reachability check
+            'state': (h.get('management') or {}).get('state', 'unknown'),
+            'can_wake': bool(h.get('mac')),
         })
     return jsonify(result)
 

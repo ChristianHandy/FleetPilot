@@ -46,9 +46,9 @@ fun FleetPilotTheme(content: @Composable () -> Unit) {
 
 // ── Status Colors ─────────────────────────────────────────────────────────────
 fun statusColor(status: String): Color = when (status.lowercase()) {
-    "running", "online", "ok", "passed" -> FPSuccess
-    "stopped", "offline", "failed" -> FPError
-    "paused", "suspended", "warning" -> FPWarning
+    "running", "online", "ok", "passed", "reachable", "manageable" -> FPSuccess
+    "stopped", "offline", "failed", "unreachable" -> FPError
+    "paused", "suspended", "warning", "web only" -> FPWarning
     else -> FPMuted
 }
 

@@ -32,7 +32,7 @@ Thumbs.db
 *.log
 version_check.json
 email_settings.json
-data/
+/data/
 
 # .NET build output
 FleetPilotCS/bin/

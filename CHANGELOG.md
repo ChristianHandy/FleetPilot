@@ -17,6 +17,12 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ### Added
 
+- **Android app (beta)**, now working with FleetPilot itself:
+  - signs in with a personal API token
+  - trusts FleetPilot's self-signed certificate after you confirm its fingerprint, and then only that certificate
+  - shows the dashboard, servers, VMs, HW monitor and fans
+  - wakes and shuts down servers, runs VM power actions and sets fan speeds, within the token's scope and your role
+  - the API gains `GET /api/vms`, `POST /api/vms/<id>/action` and `POST /api/fans/<id>/set_fan`, and `/api/hosts` now reports each host's state
 - **Enforced coding standard and strict warnings:** ruff (PEP 8, rules in `ruff.toml`) fails CI on any finding, the test suite treats every warning as an error, and CI measures statement and branch coverage with a floor that only goes up.
 - **License headers:** every source file states `SPDX-License-Identifier: GPL-3.0-or-later` and its copyright holder; a test keeps it that way.
 - Project documents for the OpenSSF silver level: a [code of conduct](CODE_OF_CONDUCT.md) (Contributor Covenant 2.1), a [roadmap](ROADMAP.md), code review standards in CONTRIBUTING.md, continuity rules in GOVERNANCE.md, and a [security assurance case](docs/security/assurance-case.md).
