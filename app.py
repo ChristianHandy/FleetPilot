@@ -2777,7 +2777,7 @@ def install_key(name):
             finally:
                 ssh.close()
         except Exception as e:
-            error = f"Connection error: {e}"
+            error = f"Connection error: {ssh_helper.describe_error(e)}"
     return render_template("install_key.html", name=name, error=error, success=success)
 
 # ARP-based IP change detection routes

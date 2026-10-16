@@ -249,6 +249,13 @@ def plain_text(line: str) -> str:
     return line.rsplit('\r', 1)[-1]
 
 
+def describe_error(exc: BaseException) -> str:
+    """A readable reason for a failed SSH operation; timeouts and EOF carry no message of their own."""
+    if isinstance(exc, TimeoutError):
+        return "the host did not answer in time"
+    return str(exc) or type(exc).__name__
+
+
 def output_lines(stdout):
     """Yield an SSH command's output line by line as plain text, decoded leniently (one stray byte must not end
     an update)."""

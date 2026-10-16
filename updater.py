@@ -412,7 +412,7 @@ def run_update(host, user, name, log_list, repo_only=False, password=None):
         error_details.append(f"SSH error: {str(e)}")
     except Exception as e:
         # Timeouts carry no message; name them so the log is never just "Error updating x:".
-        detail = "the host did not answer in time" if isinstance(e, TimeoutError) else (str(e) or type(e).__name__)
+        detail = ssh_helper.describe_error(e)
         error_msg = f"✗ Error updating {name}: {detail}"
         log(error_msg)
         error_occurred = True
