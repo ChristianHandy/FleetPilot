@@ -119,7 +119,18 @@ Credentials are stored encrypted. More details and the required rights per syste
 
 ### Update Dashboard
 
-Updates for all managed hosts in one place: Debian/Ubuntu (`apt`), Fedora/RHEL (`dnf`/`yum`), Arch (`pacman`) and Windows (Windows Update, plus `winget` for applications on a full update).
+Updates for all managed hosts in one place:
+
+| Package manager | Distributions |
+|---|---|
+| `apt` | Debian, Ubuntu, Linux Mint, Pop!_OS, Raspberry Pi OS, Kali, Zorin, Devuan and other Debian/Ubuntu derivatives, Proxmox VE |
+| `dnf` (`yum` on CentOS 7 and Amazon Linux 2) | Fedora, RHEL, Rocky Linux, AlmaLinux, Oracle Linux, CentOS Stream, Amazon Linux |
+| `zypper` | openSUSE Leap, SLES; Tumbleweed and Slowroll get `zypper dup` |
+| `pacman` | Arch, Manjaro, EndeavourOS, Garuda, Artix, CachyOS (the keyring is refreshed first) |
+| `apk`, `xbps`, `eopkg`, `swupd` | Alpine, Void, Solus, Clear Linux |
+| Windows Update | Windows, plus `winget` for applications on a full update |
+
+FleetPilot recognises a distribution by `ID` and `ID_LIKE` in `/etc/os-release`, so derivatives that are not listed work too. It logs in as root or uses `sudo` (or `doas`, as on Alpine) without a password prompt, and waits for another running package manager (unattended-upgrades, cloud-init) instead of failing. NixOS, Fedora Atomic/CoreOS, openSUSE MicroOS and other image-based systems update themselves; FleetPilot says so instead of running a package manager.
 
 - Select one or more hosts and start the update. **Update Progress** shows the live output per host.
 - **Update History** lists every run with its result and duration.

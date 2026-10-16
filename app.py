@@ -37,6 +37,7 @@ import account_security
 import safe_errors
 import notify
 import router_manager
+import linux_distro
 import windows_host
 from updater import run_update
 import scheduler
@@ -6635,15 +6636,17 @@ def host_shutdown(name):
         client = ssh_helper.create_client(**connect_kwargs)
         
         # Choose shutdown command based on OS type
+        # Non-root logins need sudo or doas (without a prompt); Alpine and other busybox systems only have poweroff.
+        sudo = '' if ssh_user == 'root' else '$SUDO -n '
         if os_type == 'windows':
             cmd = windows_host.SHUTDOWN_COMMAND
-        elif os_type == 'proxmox':
-            cmd = 'shutdown -h now'
         elif os_type == 'unraid':
             # Unraid uses /sbin/shutdown
-            cmd = '/sbin/shutdown -h now'
+            cmd = f'{sudo}/sbin/shutdown -h now'
         else:
-            cmd = 'shutdown -h now'
+            cmd = f'{sudo}shutdown -h now 2>/dev/null || {sudo}poweroff'
+        if sudo and os_type != 'windows':
+            cmd = f'{linux_distro.ELEVATE}; {cmd}'
         
         stdin, stdout, stderr = client.exec_command(cmd, timeout=10)
         exit_code = stdout.channel.recv_exit_status()

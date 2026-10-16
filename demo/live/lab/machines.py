@@ -396,13 +396,13 @@ class Machine(Device):
             return self._python(stdin)
         if "cat /etc/os-release | grep '^ID='" in cmd:
             return 0, OS_RELEASE.get(self.os, ("", self.os, ""))[1] + "\n", ""
-        if re.search(r"apt-get (?:-\S+ )*(dist-)?upgrade|apt upgrade|dnf upgrade|yum update|pacman -Syu", cmd):
+        if re.search(r"apt-get (?:-o \S+ |-\S+ )*(dist-)?upgrade|apt upgrade|dnf upgrade|yum update|pacman -Syu", cmd):
             return self._upgrade(cmd)
-        if re.match(r"(sudo )?apt-get (?:-\S+ )*update\b", cmd):
+        if re.match(r"(sudo )?apt-get (?:-o \S+ |-\S+ )*update\b", cmd):
             return 0, ("Hit:1 http://deb.debian.org/debian trixie InRelease\n"
                        "Hit:2 http://security.debian.org/debian-security trixie-security InRelease\n"
                        "Reading package lists...\n"), ""
-        if re.match(r"(sudo )?apt-get (?:-\S+ )*autoremove\b", cmd):
+        if re.match(r"(sudo )?apt-get (?:-o \S+ |-\S+ )*autoremove\b", cmd):
             return 0, "Reading package lists...\n0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n", ""
         if cmd in ("ip neigh", "arp -n", "arp -a"):
             return 0, self._neighbours(cmd), ""
