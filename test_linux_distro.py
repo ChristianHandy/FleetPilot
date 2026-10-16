@@ -87,3 +87,13 @@ def test_updater_uses_id_like_and_names_the_family():
     assert 'apt-get' in cmd
     assert updater._distro_name(info) == 'Linux Mint 22 (apt)'
     assert 'rocky' in updater.SUPPORTED_DISTRIBUTIONS and 'windows' in updater.SUPPORTED_DISTRIBUTIONS
+
+
+def test_terminal_codes_are_stripped_from_update_output():
+    import ssh_helper
+    # Captured from zypper on openSUSE and from sudo on Arch Linux (systemd OSC 3008 markers).
+    assert ssh_helper.plain_text("\x1b[22;27;39;49mNothing to do.\x1b[0m\r\n") == 'Nothing to do.'
+    arch = ("\x1b]3008;start=cf4b;user=fpadmin;hostname=fp-test-arch\x1b\\:: Starting full system upgrade..."
+            "\x1b[?25h\x1b]3008;end=cf4b\x1b\\")
+    assert ssh_helper.plain_text(arch) == ':: Starting full system upgrade...'
+    assert ssh_helper.plain_text('0% [Working]\r100% [Done]\n') == '100% [Done]'

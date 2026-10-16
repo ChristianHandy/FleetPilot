@@ -16,6 +16,7 @@ Security design:
 
 import os
 import logging
+import re
 import time
 import paramiko
 from typing import Optional
@@ -237,8 +238,20 @@ def quick_exec(
         client.close()
 
 
+# Terminal control sequences that package managers write to a pty: colours (zypper, pacman), cursor moves,
+# and OSC sequences such as systemd's OSC 3008 context markers that sudo emits since systemd 257.
+_TERMINAL_CODES = re.compile(r'\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-?]*[ -/]*[@-~]|\x1b[@-Z\\-_]')
+
+
+def plain_text(line: str) -> str:
+    """``line`` without terminal control sequences; of a line redrawn with carriage returns, its final state."""
+    line = _TERMINAL_CODES.sub('', line.rstrip('\r\n'))
+    return line.rsplit('\r', 1)[-1]
+
+
 def output_lines(stdout):
-    """Yield an SSH command's output line by line, decoded leniently (one stray byte must not end an update)."""
+    """Yield an SSH command's output line by line as plain text, decoded leniently (one stray byte must not end
+    an update)."""
     raw = stdout.channel.makefile('rb')
     for line in iter(raw.readline, b''):
-        yield line.decode('utf-8', errors='replace')
+        yield plain_text(line.decode('utf-8', errors='replace')) + '\n'
