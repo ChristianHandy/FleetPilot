@@ -356,6 +356,17 @@ def test_create_client_retries_one_dropped_handshake_but_not_bad_credentials(tmp
     assert calls.count('auth') == 1
 
 
+def test_install_key_names_an_error_without_a_message(operator, monkeypatch):
+    # Windows 11 right after setup: "Timeout opening channel", then errors without text ("Connection error:").
+    client, store = operator
+    def fail(**k):
+        raise EOFError()
+    monkeypatch.setattr(fp.ssh_helper, 'create_client', fail)
+    monkeypatch.setattr(fp, 'get_local_public_key', lambda: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK487dxjagbGh7n0Y8gMV9S1b85RQbfDGhSuffb+9XHi x')
+    page = client.post('/hosts/install_key/desk', data={'password': 'x'}).get_data(as_text=True)
+    assert 'Connection error: EOFError' in page
+
+
 def test_a_dropped_handshake_is_retried(monkeypatch):
     # Windows' sshd dropped the handshake (EOFError) while the machine was installing updates.
     host, attempts = WindowsHost(), []
