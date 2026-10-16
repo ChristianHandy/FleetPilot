@@ -69,7 +69,16 @@ Start-Service sshd
 
 **Windows Server 2016 and Windows 10 LTSB 2016** have no built-in OpenSSH. Install [Win32-OpenSSH from Microsoft's GitHub releases](https://github.com/PowerShell/Win32-OpenSSH/releases) (MSI package).
 
-The installer opens port 22 in the Windows firewall for all profiles. Restrict it to the network FleetPilot is in if the machine moves between networks.
+On **Windows Server**, the firewall rule `OpenSSH-Server-In-TCP` allows port 22 on all network profiles.
+
+On **Windows 10 and 11** it allows port 22 only for **Private** networks, and Windows puts a newly connected network into the **Public** profile, so FleetPilot's connection times out. Either mark the network as private or allow SSH from FleetPilot's network:
+
+```powershell
+Get-NetConnectionProfile                                    # NetworkCategory: Public or Private
+Set-NetConnectionProfile -InterfaceAlias Ethernet -NetworkCategory Private
+# or keep it public and allow SSH only from the local network:
+Set-NetFirewallRule -Name OpenSSH-Server-In-TCP -Profile Any -RemoteAddress LocalSubnet
+```
 
 ### 2. An administrator account
 
@@ -110,4 +119,5 @@ A password works too: enter it when you add the host.
 | The update runs for a long time without output | Large cumulative updates download and install silently, and slow disks make that take hours. FleetPilot waits up to 2 hours and then stops waiting, but never stops Windows: the installation continues as SYSTEM. Run the update again later; FleetPilot follows the running installation and shows its result. |
 | *winget is not installed on this system* | Normal on LTSC and Server: only Windows updates are installed. |
 | Detect OS shows "Linux" | The SSH login lands in WSL or another shell without `powershell.exe`. Set the OpenSSH default shell back to `cmd.exe` or PowerShell. |
+| Connecting times out, although `sshd` is running (Windows 10/11) | The firewall rule for SSH covers only Private networks, and the network is Public. See [step 1](#1-openssh-server). |
 | Server 2016 updates are slow | Server 2016's cumulative updates are large and install slowly; that is normal. |
