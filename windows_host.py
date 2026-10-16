@@ -229,12 +229,12 @@ if ((Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue).State -eq 
   Remove-Item $b64, $log, $json -ErrorAction SilentlyContinue
   $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}" -Mode __MODE__ -Dir "{1}"' -f $script, $dir)
   $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
-  $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes __MINUTES__)
+  $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 24)
   Register-ScheduledTask -TaskName $task -Action $action -Principal $principal -Settings $settings -Force | Out-Null
 }
 try {
   if ((Get-ScheduledTask -TaskName $task).State -ne 'Running') { Start-ScheduledTask -TaskName $task }
-  $shown = 0; $deadline = (Get-Date).AddMinutes(__MINUTES__)
+  $shown = 0; $deadline = (Get-Date).AddMinutes(__MINUTES__); $keep = $false
   while ($true) {
     Start-Sleep -Seconds 3
     if (Test-Path $log) {
@@ -243,15 +243,21 @@ try {
       $shown = $lines.Count
     }
     if (Test-Path $json) { break }
-    if ((Get-Date) -gt $deadline) { Stop-ScheduledTask -TaskName $task; throw 'Windows Update did not finish in time.' }
+    if ((Get-Date) -gt $deadline) {
+      # Stopping Windows in the middle of a cumulative update is worse than waiting: leave it running.
+      $keep = $true
+      Write-Output ('__MARKER__' + (@{ ok = $false; mode = 'running'; error = 'still installing after __MINUTES__ minutes. ' +
+        'Windows continues in the background; run the update again later to follow it and see the result.' } | ConvertTo-Json -Compress))
+      break
+    }
     if ((Get-ScheduledTask -TaskName $task).State -eq 'Ready' -and -not (Test-Path $json)) {
       Start-Sleep -Seconds 3
       if (-not (Test-Path $json)) { throw 'Windows Update stopped without a result.' }
     }
   }
-  Write-Output ('__MARKER__' + (Get-Content -Path $json -Raw -Encoding UTF8).Trim())
+  if (-not $keep) { Write-Output ('__MARKER__' + (Get-Content -Path $json -Raw -Encoding UTF8).Trim()) }
 } finally {
-  Unregister-ScheduledTask -TaskName $task -Confirm:$false -ErrorAction SilentlyContinue
+  if (-not $keep) { Unregister-ScheduledTask -TaskName $task -Confirm:$false -ErrorAction SilentlyContinue }
 }
 """
 

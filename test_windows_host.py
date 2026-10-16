@@ -126,7 +126,7 @@ def test_upload_rebuilds_the_worker_and_locks_the_folder():
     data = ''.join(re.search(r"'([A-Za-z0-9+/=]{20,})'\)$", s).group(1) for s in scripts)
     assert base64.b64decode(data) == b'\xef\xbb\xbf' + wh.UPDATE_WORKER.encode('utf-8')
     runner = _decode(wh.update_command(True, minutes=45))
-    assert '-Mode install' in runner and 'New-TimeSpan -Minutes 45' in runner and wh.RESULT_MARKER in runner
+    assert '-Mode install' in runner and 'AddMinutes(45)' in runner and wh.RESULT_MARKER in runner
     assert "-UserId 'SYSTEM'" in runner and 'Unregister-ScheduledTask' in runner
     assert '-Mode check' in _decode(wh.update_command(False))
 
@@ -270,6 +270,12 @@ def test_windows_update_problems_are_reported():
     assert problems == ['Windows Update: 0x80240022', '1 Windows update(s) failed to install']
     assert updater._run_windows_update(WindowsHost(result={}), True, log.append)[0].startswith(
         'Windows Update gave no result')
+    # Past the wait limit the runner leaves Windows installing and says so (seen on slow Ceph storage).
+    running = {'ok': False, 'mode': 'running', 'error': 'still installing after 120 minutes. Windows continues ...'}
+    assert updater._run_windows_update(WindowsHost(result=running), True, log.append) == [
+        'Windows Update: still installing after 120 minutes. Windows continues ...']
+    runner = _decode(wh.update_command(True))
+    assert 'Stop-ScheduledTask' not in runner and '-Hours 24' in runner
 
 
 def test_windows_output_in_the_oem_code_page_does_not_end_the_update():

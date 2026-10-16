@@ -107,7 +107,7 @@ A password works too: enter it when you add the host.
 |---|---|
 | *Could not prepare Windows Update … The SSH account must be an administrator* | The account is not in the local Administrators group, or (with UAC) it is a domain account without administrator rights on this machine. |
 | *Windows Update: 0x8024402C* or similar | The machine cannot reach Windows Update or its WSUS server. Check the proxy and the WSUS address. |
-| The update runs for a long time without output | Large cumulative updates download silently. FleetPilot waits up to 2 hours, then stops the task. |
+| The update runs for a long time without output | Large cumulative updates download and install silently, and slow disks make that take hours. FleetPilot waits up to 2 hours and then stops waiting, but never stops Windows: the installation continues as SYSTEM. Run the update again later; FleetPilot follows the running installation and shows its result. |
 | *winget is not installed on this system* | Normal on LTSC and Server: only Windows updates are installed. |
 | Detect OS shows "Linux" | The SSH login lands in WSL or another shell without `powershell.exe`. Set the OpenSSH default shell back to `cmd.exe` or PowerShell. |
 | Server 2016 updates are slow | Server 2016's cumulative updates are large and install slowly; that is normal. |
