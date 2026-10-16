@@ -313,6 +313,14 @@ def test_powershell_clixml_errors_become_readable_text():
     assert '(Get-ScheduledTask -TaskName $task).State' not in runner       # a vanished task must not throw
 
 
+def test_apt_waits_for_another_package_manager():
+    # A fresh Ubuntu 22.04 failed with exit code 100: cloud-init's first-boot dist-upgrade held the dpkg lock.
+    for repo_only in (True, False):
+        cmd, _ = updater.get_update_command('ubuntu', repo_only=repo_only)
+        parts = [part for part in cmd.split('&&')]
+        assert all('-o DPkg::Lock::Timeout=600' in part for part in parts)
+
+
 def test_a_timeout_is_named_in_the_update_log(monkeypatch):
     # A busy Windows sshd timed out with an empty message: the log read "Error updating w22core:".
     def slow(*a, **k):

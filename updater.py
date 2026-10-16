@@ -32,6 +32,9 @@ WINDOWS_WINGET_UPDATE = (
 # Prints "windows" on Windows, whether the OpenSSH default shell is cmd.exe or PowerShell.
 WINDOWS_DETECTION_COMMAND = windows_host.DETECT_COMMAND
 
+APT_LOCK_TIMEOUT = 600   # seconds
+
+
 def get_update_command(distro, repo_only=False, run_as_root=False):
     """
     Get the update command for a given Linux distribution or Windows.
@@ -49,11 +52,14 @@ def get_update_command(distro, repo_only=False, run_as_root=False):
     """
     sudo = '' if run_as_root else 'sudo '
     if distro in ['ubuntu', 'debian']:
+        # Wait for unattended-upgrades or cloud-init's first-boot upgrade to release the dpkg lock
+        # instead of failing at once (apt before 1.9.11 ignores the option).
+        apt = f"{sudo}DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout={APT_LOCK_TIMEOUT}"
         if repo_only:
-            cmd = f"{sudo}DEBIAN_FRONTEND=noninteractive apt-get update && {sudo}DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -o Dpkg::Options::='--force-confold'"
+            cmd = f"{apt} update && {apt} upgrade -y -o Dpkg::Options::='--force-confold'"
             desc = "repository-only update (preserving config files)"
         else:
-            cmd = f"{sudo}DEBIAN_FRONTEND=noninteractive apt-get update && {sudo}DEBIAN_FRONTEND=noninteractive apt-get upgrade -y && {sudo}DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y"
+            cmd = f"{apt} update && {apt} upgrade -y && {apt} dist-upgrade -y"
             desc = "full system update"
     
     elif distro == 'fedora':
