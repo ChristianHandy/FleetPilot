@@ -6647,10 +6647,17 @@ def host_shutdown(name):
         
         stdin, stdout, stderr = client.exec_command(cmd, timeout=10)
         exit_code = stdout.channel.recv_exit_status()
+        detail = (windows_host.error_text(stderr.read().decode(errors='replace')) or
+                  stdout.read().decode(errors='replace').strip())
         client.close()
-        
+
         app.logger.info('SSH shutdown sent to %s (%s), exit_code=%s', safe_errors.log_text(name),
                         safe_errors.log_text(ssh_host), exit_code)
+        # -1: the connection closed without an exit status, as when the host goes down at once.
+        # Anything else is a refusal, e.g. Windows' 1115 "a system shutdown is in progress".
+        if exit_code > 0:
+            return jsonify({'ok': False, 'error': f'{name} refused to shut down (exit code {exit_code})'
+                                                  + (f': {detail[-300:]}' if detail else '')}), 502
         return jsonify({'ok': True, 'message': f'{name} is shutting down via SSH.'})
     except Exception as e:
         app.logger.error('Shutdown failed for %s: %s', safe_errors.log_text(name), safe_errors.log_text(e))

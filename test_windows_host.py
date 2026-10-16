@@ -210,6 +210,8 @@ class WindowsHost:
         self.commands.append(command)
         if not command.startswith(wh.POWERSHELL):
             if command.startswith('shutdown '):
+                if getattr(self, 'shutting_down', False):     # Windows refuses while a restart is under way
+                    return None, Stream('', 1115), Stream('Das System wird bereits heruntergefahren.(1115)\r\n', 1115)
                 return None, Stream(''), Stream('')
             return None, Stream('', 1), Stream(f"'{command.split()[0]}' is not recognized\r\n", 1)
         script = _decode(command)
@@ -386,6 +388,13 @@ def test_detect_os_recognises_windows_and_shutdown_uses_windows_commands(operato
 
     assert client.post('/hosts/desk/shutdown').get_json()['ok']
     assert host.commands[-1] == wh.SHUTDOWN_COMMAND
+
+    # Seen on Server 2022: during a restart's update servicing sshd still answers, but shutdown.exe refuses.
+    host.shutting_down = True
+    response = client.post('/hosts/desk/shutdown')
+    assert response.status_code == 502 and not response.get_json()['ok']
+    assert response.get_json()['error'] == ('desk refused to shut down (exit code 1115): '
+                                            'Das System wird bereits heruntergefahren.(1115)')
 
 
 def test_editing_a_host_keeps_what_the_form_does_not_show(operator):
