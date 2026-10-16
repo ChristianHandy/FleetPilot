@@ -389,6 +389,17 @@ def run_update(host, user, name, log_list, repo_only=False, password=None):
                 log(f"Errors: {errors}")
                 error_details.append(f"Error output: {errors}")
         
+        # Like on Windows, say when the host needs a restart (new kernel, or an OpenSSH upgrade whose
+        # running sshd now resets connections). FleetPilot never restarts a host itself.
+        check = linux_distro.reboot_check_command(os_release, run_as_root=run_as_root)
+        if check:
+            try:
+                _, out, _ = ssh.exec_command(check, timeout=60)
+                if linux_distro.REBOOT_MARKER in out.read().decode('utf-8', errors='replace'):
+                    log(f"⚠ {name} needs a restart to finish the update (new kernel or system libraries).")
+            except Exception as exc:   # a failed check must not turn a good update into a failure
+                logging.info("Restart check on %s failed: %s", name, exc)
+
     except paramiko.AuthenticationException:
         error_msg = f"✗ Authentication failed for {name}. Check SSH keys or credentials."
         log(error_msg)

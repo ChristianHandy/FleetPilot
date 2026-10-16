@@ -45,6 +45,30 @@ def _wait_while(condition: str) -> str:
             f"sleep 5; done; ")
 
 
+# Prints REBOOT_MARKER when the system needs a restart to use what was installed (kernel, libc, sshd ...).
+REBOOT_MARKER = '@@fp:reboot-required'
+_KERNEL_GONE = '[ -d "/lib/modules/$(uname -r)" ] || [ -d "/usr/lib/modules/$(uname -r)" ] || echo {m}'
+REBOOT_CHECKS = {
+    'apt': '[ -f /var/run/reboot-required ] && echo {m}',
+    # needs-restarting -r exits 1 when a reboot is needed (dnf-utils / dnf5 plugin); missing tool: no answer.
+    'dnf': ('if command -v needs-restarting >/dev/null 2>&1; then needs-restarting -r >/dev/null 2>&1; '
+            'r=$?; else dnf needs-restarting -r >/dev/null 2>&1; r=$?; fi; [ "$r" = 1 ] && echo {m}'),
+    'zypper': '{sudo}zypper needs-rebooting >/dev/null 2>&1; [ $? = 102 ] && echo {m}',
+    'pacman': _KERNEL_GONE, 'apk': _KERNEL_GONE, 'xbps': _KERNEL_GONE,
+}
+
+
+def reboot_check_command(info: Dict[str, str], run_as_root: bool = False) -> Optional[str]:
+    """Shell command that prints REBOOT_MARKER if the system needs a restart, or None if unknown."""
+    family, _ = identify(info)
+    check = REBOOT_CHECKS.get(family)
+    if not check:
+        return None
+    sudo = '' if run_as_root else '$SUDO '
+    cmd = check.format(m=REBOOT_MARKER, sudo=sudo) + '; true'
+    return cmd if run_as_root or '$SUDO' not in cmd else f'{ELEVATE}; {cmd}'
+
+
 def parse_os_release(text: str) -> Dict[str, str]:
     """KEY=value pairs of an os-release file, unquoted."""
     info = {}
@@ -106,9 +130,14 @@ def _command(family, distro, info, repo_only, sudo):
         # dnf keeps changed configuration files (new ones become .rpmnew). CentOS 7 / Amazon Linux 2 only have yum.
         # dnf resolves first and takes its lock only for the transaction: started while dnf-automatic or
         # cloud-init is upgrading, it then fails with "rpm exception: package not installed". Wait first.
-        cmd = (f"{_wait_while('pgrep -x dnf >/dev/null || pgrep -x dnf5 >/dev/null || pgrep -x yum >/dev/null')}"
-               f"if command -v dnf >/dev/null 2>&1; then {sudo}dnf -y upgrade --refresh; "
-               f"else {sudo}yum -y upgrade; fi")
+        # Waiting first is not enough: cloud-init runs "dnf makecache" and then "dnf upgrade", and a run started
+        # in between still collides. So after a failure, wait again and run once more: a fresh run re-resolves
+        # and finishes what the interrupted transaction left.
+        wait = _wait_while('pgrep -x dnf >/dev/null || pgrep -x dnf5 >/dev/null || pgrep -x yum >/dev/null')
+        upgrade = (f"if command -v dnf >/dev/null 2>&1; then {sudo}dnf -y upgrade --refresh; "
+                   f"else {sudo}yum -y upgrade; fi")
+        cmd = (f"{wait}{upgrade} || {{ echo 'The upgrade failed; trying once more...'; sleep 10; "
+               f"{wait}{upgrade}; }}")
         return cmd, (repo if repo_only else full)
     if family == 'zypper':
         zypper = f"{sudo}env ZYPP_LOCK_TIMEOUT={APT_LOCK_TIMEOUT} zypper --non-interactive"

@@ -99,3 +99,34 @@ def test_terminal_codes_are_stripped_from_update_output():
     assert ssh_helper.plain_text('0% [Working]\r100% [Done]\n') == '100% [Done]'
     # apk saves and restores the cursor (ESC 7 / ESC 8) around its progress text.
     assert ssh_helper.plain_text('\x1b7[syncing disks...]\x1b8OK: 206 packages\n') == '[syncing disks...]OK: 206 packages'
+
+
+def test_dnf_runs_once_more_after_colliding_with_another_dnf():
+    # Rocky 9: cloud-init runs "dnf makecache" then "dnf upgrade"; FleetPilot's dnf started in between and
+    # failed with "rpm exception: package not installed". A second run after waiting succeeds.
+    cmd, _ = ld.update_command(os_release('rocky', 'rhel centos fedora'))
+    assert cmd.count('dnf -y upgrade --refresh') == 2 and "trying once more" in cmd
+
+
+@pytest.mark.parametrize('distro,like,expected', [
+    ('ubuntu', 'debian', '/var/run/reboot-required'), ('rocky', 'rhel fedora', 'needs-restarting -r'),
+    ('opensuse-leap', 'suse', 'zypper needs-rebooting'), ('arch', '', '/usr/lib/modules/$(uname -r)'),
+    ('alpine', '', '/lib/modules/$(uname -r)'),
+])
+def test_restart_checks(distro, like, expected):
+    cmd = ld.reboot_check_command(os_release(distro, like), run_as_root=True)
+    assert expected in cmd and ld.REBOOT_MARKER in cmd
+    assert ld.reboot_check_command(os_release('solus')) is None
+
+
+def test_restart_check_scripts_run_in_a_real_shell(tmp_path):
+    import shutil
+    import subprocess
+    if not shutil.which('sh'):
+        pytest.skip('no sh')
+    # On this machine the running kernel's modules exist, so the kernel check stays quiet; all scripts must
+    # parse and exit 0 whatever they find.
+    for family_os in (os_release('arch'), os_release('ubuntu', 'debian'), os_release('rocky', 'rhel')):
+        cmd = ld.reboot_check_command(family_os, run_as_root=True)
+        result = subprocess.run(['sh', '-c', cmd], capture_output=True, text=True, timeout=30)
+        assert result.returncode == 0, (cmd, result.stderr)
