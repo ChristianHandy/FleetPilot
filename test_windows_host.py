@@ -300,10 +300,28 @@ def test_a_timeout_is_named_in_the_update_log(monkeypatch):
     def slow(*a, **k):
         raise TimeoutError()
     monkeypatch.setattr(updater.ssh_helper, 'create_client', slow)
+    monkeypatch.setattr(updater.time, 'sleep', lambda s: None)
     monkeypatch.setattr(updater.email_config, 'get_error_notifications_enabled', lambda: False)
     log = []
     updater.run_update('192.0.2.80', 'Administrator', 'w22core', log)
     assert any(line.endswith('✗ Error updating w22core: the host did not answer in time') for line in log)
+
+
+def test_a_dropped_handshake_is_retried(monkeypatch):
+    # Windows' sshd dropped the handshake (EOFError) while the machine was installing updates.
+    host, attempts = WindowsHost(), []
+    def flaky(*a, **k):
+        attempts.append(1)
+        if len(attempts) < 3:
+            raise EOFError()
+        return host
+    monkeypatch.setattr(updater.ssh_helper, 'create_client', flaky)
+    monkeypatch.setattr(updater.time, 'sleep', lambda s: None)
+    monkeypatch.setattr(updater.email_config, 'get_error_notifications_enabled', lambda: False)
+    log = []
+    updater.run_update('192.0.2.80', 'Administrator', 'w22gui', log, repo_only=True)
+    assert len(attempts) == 3 and any('Connection attempt 1 failed (EOFError); retrying' in line for line in log)
+    assert any('Update completed successfully for w22gui' in line for line in log)
 
 
 def test_run_update_detects_windows_in_any_ssh_shell(monkeypatch):

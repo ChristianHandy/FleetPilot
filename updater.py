@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright the FleetPilot contributors
 # SPDX-License-Identifier: GPL-3.0-or-later
 # updater.py - Enhanced error handling, better distribution support, and fixed notification propagation
+import functools
 import os
 import logging
 import paramiko
@@ -288,6 +289,10 @@ def _run_windows_update(ssh, repo_only, log):
     return problems
 
 
+CONNECT_ATTEMPTS = 3
+CONNECT_RETRY_DELAY = 10
+
+
 def run_update(host, user, name, log_list, repo_only=False, password=None):
     """
     Run system update on a remote host via SSH or locally via subprocess.
@@ -324,11 +329,23 @@ def run_update(host, user, name, log_list, repo_only=False, password=None):
         # Connect to the remote host using SSH key or password authentication
         if password:
             log("Connecting with password authentication...")
-            ssh = ssh_helper.create_client(host, username=user, password=password, timeout=30,
-                        look_for_keys=False, allow_agent=False)
+            connect = functools.partial(ssh_helper.create_client, host, username=user, password=password,
+                                        timeout=30, look_for_keys=False, allow_agent=False)
         else:
             # SSH key authentication (key must be configured beforehand)
-            ssh = ssh_helper.create_client(host, username=user, timeout=30)
+            connect = functools.partial(ssh_helper.create_client, host, username=user, timeout=30)
+        # A host busy installing updates (Windows' sshd in particular) can drop or stall a handshake.
+        for attempt in range(1, CONNECT_ATTEMPTS + 1):
+            try:
+                ssh = connect()
+                break
+            except paramiko.AuthenticationException:
+                raise
+            except (EOFError, TimeoutError, OSError, paramiko.SSHException) as e:
+                if attempt == CONNECT_ATTEMPTS:
+                    raise
+                log(f"Connection attempt {attempt} failed ({str(e) or type(e).__name__}); retrying in {CONNECT_RETRY_DELAY} s...")
+                time.sleep(CONNECT_RETRY_DELAY)
         log(f"Connected to {name}")
         
         # Detect the operating system and distribution
