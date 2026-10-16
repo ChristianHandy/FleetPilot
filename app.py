@@ -2734,7 +2734,7 @@ def install_key(name):
                         success = True
                         key_file = output.split("installed:", 1)[1].strip().splitlines()[0]
                     else:
-                        error = "Could not install the key: " + (err.read().decode(errors="replace").strip()[-300:]
+                        error = "Could not install the key: " + (windows_host.error_text(err.read().decode(errors="replace"))[-300:]
                                                                  or output.strip()[-300:] or "no answer")
                 except ValueError as e:
                     error = str(e)

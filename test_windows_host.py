@@ -295,6 +295,21 @@ def test_windows_output_in_the_oem_code_page_does_not_end_the_update():
         assert _decode(command).split('\n')[1] == wh.UTF8_OUTPUT       # marker line first, then UTF-8 output
 
 
+def test_powershell_clixml_errors_become_readable_text():
+    # Captured from Server 2022 (German): stderr of a redirected PowerShell is CLIXML, progress records included.
+    raw = ('#< CLIXML\r\n<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04">'
+           '<Obj S="progress" RefId="0"><MS><PR N="Record"><AV>Module werden f\u00fcr erstmalige Verwendung vorbereitet.'
+           '</AV></PR></MS></Obj><S S="Error">Get-ScheduledTask : Es wurden keine MSFT_ScheduledTask-Objekte '
+           'gefunden_x000D__x000A_</S><S S="Error">In Zeile:38 Zeichen:10_x000D__x000A_</S>'
+           '<S S="Error"> _x000D__x000A_</S></Objs>')
+    assert wh.error_text(raw) == ('Get-ScheduledTask : Es wurden keine MSFT_ScheduledTask-Objekte gefunden\n'
+                                  'In Zeile:38 Zeichen:10')
+    assert wh.error_text('  Access denied.\r\n') == 'Access denied.'
+    runner = _decode(wh.update_command(True))
+    assert "$ProgressPreference = 'SilentlyContinue'" in runner and '} catch {' in runner
+    assert '(Get-ScheduledTask -TaskName $task).State' not in runner       # a vanished task must not throw
+
+
 def test_a_timeout_is_named_in_the_update_log(monkeypatch):
     # A busy Windows sshd timed out with an empty message: the log read "Error updating w22core:".
     def slow(*a, **k):

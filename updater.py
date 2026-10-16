@@ -251,7 +251,7 @@ def _run_windows_update(ssh, repo_only, log):
     for command in windows_host.upload_commands(windows_host.UPDATE_WORKER):
         _, out, err = ssh.exec_command(command, timeout=60)
         if out.channel.recv_exit_status() != 0:
-            detail = err.read().decode('utf-8', errors='replace').strip().splitlines()
+            detail = windows_host.error_text(err.read().decode('utf-8', errors='replace')).splitlines()
             return [f"Could not prepare Windows Update ({detail[-1] if detail else 'unknown error'}). "
                     "The SSH account must be an administrator."]
 
@@ -265,7 +265,7 @@ def _run_windows_update(ssh, repo_only, log):
         elif line.strip():
             log(line.rstrip())
     if result is None:
-        detail = err.read().decode('utf-8', errors='replace').strip().splitlines()
+        detail = windows_host.error_text(err.read().decode('utf-8', errors='replace')).splitlines()
         problems.append(f"Windows Update gave no result ({detail[-1] if detail else 'no output'})")
     else:
         if result.get('error'):

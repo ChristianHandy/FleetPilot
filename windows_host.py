@@ -15,6 +15,7 @@ Desktop Experience.
   one-off scheduled task under SYSTEM and FleetPilot follows its log.
 """
 import base64
+import html
 import json
 import re
 from datetime import date
@@ -26,17 +27,21 @@ RESULT_MARKER = '@@fp:result '
 
 
 # Console output is in the OEM code page by default (850 on German Windows: "ü" is byte 0x81). UTF-8 without a BOM
-# keeps update titles and adapter names intact and leaves the first line ("windows") unprefixed.
-UTF8_OUTPUT = '[Console]::OutputEncoding = New-Object Text.UTF8Encoding'
+# keeps update titles and adapter names intact and leaves the first line ("windows") unprefixed. Without progress
+# records PowerShell has nothing to serialise as CLIXML onto stderr ("Preparing modules for first use").
+UTF8_OUTPUT = "[Console]::OutputEncoding = New-Object Text.UTF8Encoding; $ProgressPreference = 'SilentlyContinue'"
 
 
 def ps(script: str) -> str:
     """A command line that runs ``script`` in Windows PowerShell from cmd.exe or PowerShell, writing UTF-8."""
     first, newline, rest = script.partition('\n')
-    if first.startswith('# fleetpilot:'):      # keep the marker line first (the demo lab dispatches on it)
-        script = f'{first}\n{UTF8_OUTPUT}\n{rest}'
-    else:
-        script = f'{UTF8_OUTPUT}\n{script}'
+    if not first.startswith('# fleetpilot:'):  # the marker line stays first (the demo lab dispatches on it)
+        first, rest = '', script
+    # cmd.exe allows 8191 characters and every script character costs about 2.7 in base64 of UTF-16:
+    # drop indentation and comment lines (no script uses here-strings, where this would change text).
+    body = [line.strip() for line in rest.splitlines()]
+    body = [line for line in body if line and not line.startswith('#')]
+    script = '\n'.join(([first] if first else []) + [UTF8_OUTPUT] + body)
     return POWERSHELL + base64.b64encode(script.encode('utf-16-le')).decode('ascii')
 
 
@@ -233,7 +238,7 @@ if ((Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue).State -eq 
   Register-ScheduledTask -TaskName $task -Action $action -Principal $principal -Settings $settings -Force | Out-Null
 }
 try {
-  if ((Get-ScheduledTask -TaskName $task).State -ne 'Running') { Start-ScheduledTask -TaskName $task }
+  if ((Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue).State -ne 'Running') { Start-ScheduledTask -TaskName $task }
   $shown = 0; $deadline = (Get-Date).AddMinutes(__MINUTES__); $keep = $false
   while ($true) {
     Start-Sleep -Seconds 3
@@ -250,12 +255,19 @@ try {
         'Windows continues in the background; run the update again later to follow it and see the result.' } | ConvertTo-Json -Compress))
       break
     }
-    if ((Get-ScheduledTask -TaskName $task).State -eq 'Ready' -and -not (Test-Path $json)) {
+    # Another runner (e.g. one left behind by a lost SSH session) may already have removed the finished task.
+    $state = (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue).State
+    if ($state -ne 'Running' -and $state -ne 'Queued') {
       Start-Sleep -Seconds 3
-      if (-not (Test-Path $json)) { throw 'Windows Update stopped without a result.' }
+      if (-not (Test-Path $json)) {
+        $code = (Get-ScheduledTaskInfo -TaskName $task -ErrorAction SilentlyContinue).LastTaskResult
+        throw ('Windows Update stopped without a result (task result 0x{0:X}).' -f [int64]$code)
+      }
     }
   }
   if (-not $keep) { Write-Output ('__MARKER__' + (Get-Content -Path $json -Raw -Encoding UTF8).Trim()) }
+} catch {
+  Write-Output ('__MARKER__' + (@{ ok = $false; mode = 'error'; error = $_.Exception.Message } | ConvertTo-Json -Compress))
 } finally {
   if (-not $keep) { Unregister-ScheduledTask -TaskName $task -Confirm:$false -ErrorAction SilentlyContinue }
 }
@@ -282,6 +294,16 @@ def update_command(install: bool, minutes: int = 120) -> str:
     script = (RUNNER_SCRIPT.replace('__MODE__', 'install' if install else 'check')
               .replace('__MINUTES__', str(int(minutes))).replace('__MARKER__', RESULT_MARKER))
     return ps(script)
+
+
+def error_text(stderr: str) -> str:
+    """Readable text from a PowerShell stderr stream, which arrives as CLIXML when it is redirected."""
+    if '#< CLIXML' not in stderr:
+        return stderr.strip()
+    parts = re.findall(r'<S S="Error">(.*?)</S>', stderr, flags=re.S)
+    text = ''.join(html.unescape(p) for p in parts)
+    text = re.sub(r'_x([0-9A-Fa-f]{4})_', lambda m: chr(int(m.group(1), 16)), text)
+    return '\n'.join(line.rstrip() for line in text.splitlines() if line.strip())
 
 
 def parse_result(line: str) -> Optional[Dict]:
