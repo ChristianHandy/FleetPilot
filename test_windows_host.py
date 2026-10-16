@@ -325,6 +325,29 @@ def test_a_timeout_is_named_in_the_update_log(monkeypatch):
     assert any(line.endswith('✗ Error updating w22core: the host did not answer in time') for line in log)
 
 
+def test_create_client_retries_one_dropped_handshake_but_not_bad_credentials(tmp_path, monkeypatch):
+    # Windows' sshd answered "No existing session" to FleetPilot's shutdown while finishing a restart.
+    import paramiko
+    import ssh_helper
+    calls = []
+    def connect(self, **kw):
+        calls.append(kw['hostname'])
+        if len(calls) == 1:
+            raise paramiko.SSHException('No existing session')
+    monkeypatch.setattr(paramiko.SSHClient, 'connect', connect)
+    monkeypatch.setattr(ssh_helper, 'HANDSHAKE_RETRY_DELAY', 0)
+    ssh_helper.create_client('192.0.2.84', known_hosts_path=str(tmp_path / 'kh'))
+    assert calls == ['192.0.2.84', '192.0.2.84']
+
+    def refuse(self, **kw):
+        calls.append('auth')
+        raise paramiko.AuthenticationException('wrong password')
+    monkeypatch.setattr(paramiko.SSHClient, 'connect', refuse)
+    with pytest.raises(paramiko.AuthenticationException):
+        ssh_helper.create_client('192.0.2.84', known_hosts_path=str(tmp_path / 'kh'))
+    assert calls.count('auth') == 1
+
+
 def test_a_dropped_handshake_is_retried(monkeypatch):
     # Windows' sshd dropped the handshake (EOFError) while the machine was installing updates.
     host, attempts = WindowsHost(), []

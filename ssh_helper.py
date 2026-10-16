@@ -16,6 +16,7 @@ Security design:
 
 import os
 import logging
+import time
 import paramiko
 from typing import Optional
 
@@ -77,6 +78,31 @@ class _TOFUPolicy(paramiko.MissingHostKeyPolicy):
             logger.warning("SSH: Could not save host key for %s: %s", hostname, exc)
 
 
+HANDSHAKE_RETRY_DELAY = 3
+
+
+def _new_client(kh_path: str) -> paramiko.SSHClient:
+    client = paramiko.SSHClient()
+
+    # Load existing known hosts
+    if os.path.exists(kh_path):
+        try:
+            client.load_host_keys(kh_path)
+        except Exception as exc:
+            logger.warning("SSH: Could not load known_hosts from %s: %s", kh_path, exc)
+
+    # Also load system-wide known_hosts for additional trust anchors
+    client.load_system_host_keys()
+
+    # Unknown hosts: trust on first use, or refuse them in strict mode
+    # (FLEETPILOT_SSH_STRICT_HOST_KEYS=true; host keys must be added to known_hosts in advance).
+    if strict_host_keys():
+        client.set_missing_host_key_policy(paramiko.RejectPolicy())
+    else:
+        client.set_missing_host_key_policy(_TOFUPolicy(kh_path))
+    return client
+
+
 def create_client(
     hostname: str,
     port: int = 22,
@@ -117,24 +143,7 @@ def create_client(
     """
     kh_path = known_hosts_path or _get_known_hosts_path()
 
-    client = paramiko.SSHClient()
-
-    # Load existing known hosts
-    if os.path.exists(kh_path):
-        try:
-            client.load_host_keys(kh_path)
-        except Exception as exc:
-            logger.warning("SSH: Could not load known_hosts from %s: %s", kh_path, exc)
-
-    # Also load system-wide known_hosts for additional trust anchors
-    client.load_system_host_keys()
-
-    # Unknown hosts: trust on first use, or refuse them in strict mode
-    # (FLEETPILOT_SSH_STRICT_HOST_KEYS=true; host keys must be added to known_hosts in advance).
-    if strict_host_keys():
-        client.set_missing_host_key_policy(paramiko.RejectPolicy())
-    else:
-        client.set_missing_host_key_policy(_TOFUPolicy(kh_path))
+    client = _new_client(kh_path)
 
     connect_kwargs: dict = {
         "hostname": hostname,
@@ -152,7 +161,18 @@ def create_client(
     if key_filename:
         connect_kwargs["key_filename"] = key_filename
 
-    client.connect(**connect_kwargs)
+    try:
+        client.connect(**connect_kwargs)
+    except (paramiko.AuthenticationException, paramiko.BadHostKeyException):
+        raise
+    except (EOFError, paramiko.SSHException) as exc:
+        # A busy server (Windows' sshd while installing updates) drops or garbles a handshake now and
+        # then; one more try fixes that. Unreachable hosts (OSError, timeouts) are not retried.
+        logger.info("SSH: handshake with %s failed (%s), retrying once", hostname, exc or type(exc).__name__)
+        client.close()
+        time.sleep(HANDSHAKE_RETRY_DELAY)
+        client = _new_client(kh_path)
+        client.connect(**connect_kwargs)
     return client
 
 
