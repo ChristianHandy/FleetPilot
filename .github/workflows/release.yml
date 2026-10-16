@@ -2,22 +2,28 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 name: Release
 
-# Publishes a GitHub release for every version tag (v1.2.3). Installers that
-# follow releases (community-scripts.org, fetch_and_deploy_gh_release) only see a
-# new version once a release exists; a tag alone is not enough.
+# Publishes a GitHub release for every version tag (v1.2.3, or v1.2.3-beta.1 for a
+# pre-release). Installers that follow releases (community-scripts.org,
+# fetch_and_deploy_gh_release) only see a new version once a release exists; a tag
+# alone is not enough.
 #
 # Every release carries:
 #   fleetpilot-X.Y.Z.tar.gz                 the source as installed (git archive of the tag)
 #   fleetpilot-X.Y.Z-sbom.cdx.json          CycloneDX SBOM of the locked dependencies
-#   SHA256SUMS                              checksums of both
+#   SHA256SUMS                              checksums of every file of the release
 #   *.sigstore.json / *.intoto.jsonl        signed SLSA build provenance (Sigstore, keyless)
 # Verify with:  gh attestation verify fleetpilot-X.Y.Z.tar.gz --repo ChristianHandy/FleetPilot
+#
+# Files built elsewhere (the signed Android APK) go into a draft release for the
+# tag before the tag is pushed. The workflow then keeps the draft's notes, adds its
+# files to SHA256SUMS and the provenance, and publishes it. Without a draft it
+# creates the release with notes from CHANGELOG.md.
 #
 # The release is assembled as a draft and published at the end, because releases
 # are immutable once published (repository setting).
 on:
   push:
-    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+    tags: ["v[0-9]+.[0-9]+.[0-9]+", "v[0-9]+.[0-9]+.[0-9]+-*"]
 
 permissions: {}
 
@@ -52,36 +58,49 @@ jobs:
             exit 1
           fi
 
-      - name: Stop if the release exists
+      - name: Stop if the release is already published
         id: existing
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          draft="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null || true)"
+          if [ "$draft" = "false" ]; then
             echo "Release $TAG already exists; leaving it as it is."
             echo "skip=true" >> "$GITHUB_OUTPUT"
+          elif [ "$draft" = "true" ]; then
+            echo "Using the draft release $TAG and its files."
+            echo "draft=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Source archive, SBOM and checksums
         if: steps.existing.outputs.skip != 'true'
         env:
+          GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
+          DRAFT: ${{ steps.existing.outputs.draft }}
         run: |
           v="${TAG#v}"
-          git archive --format=tar.gz --prefix="fleetpilot-$v/" -o "fleetpilot-$v.tar.gz" "$TAG"
+          mkdir dist
+          if [ "$DRAFT" = "true" ]; then
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir dist
+            # Files this workflow makes are made again (an earlier run may have left them).
+            rm -f "dist/fleetpilot-$v.tar.gz" "dist/fleetpilot-$v-sbom.cdx.json" dist/SHA256SUMS \
+              "dist/fleetpilot-$v.sigstore.json" "dist/fleetpilot-$v.intoto.jsonl"
+          fi
+          git archive --format=tar.gz --prefix="fleetpilot-$v/" -o "dist/fleetpilot-$v.tar.gz" "$TAG"
           # install.sh installs exactly requirements-lock.txt, so the SBOM describes that file.
           pip install --quiet --require-hashes -r requirements-lock.txt -r requirements-dev-lock.txt
-          cyclonedx-py requirements requirements-lock.txt --of JSON -o "fleetpilot-$v-sbom.cdx.json"
-          sha256sum "fleetpilot-$v.tar.gz" "fleetpilot-$v-sbom.cdx.json" > SHA256SUMS
-          cat SHA256SUMS
+          cyclonedx-py requirements requirements-lock.txt --of JSON -o "dist/fleetpilot-$v-sbom.cdx.json"
+          (cd dist && sha256sum -- * > ../SHA256SUMS) && mv SHA256SUMS dist/
+          cat dist/SHA256SUMS
 
       - name: Signed build provenance
         id: attest
         if: steps.existing.outputs.skip != 'true'
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-checksums: SHA256SUMS
+          subject-checksums: dist/SHA256SUMS
 
       - name: Provenance files for the release
         if: steps.existing.outputs.skip != 'true'
@@ -90,13 +109,13 @@ jobs:
           BUNDLE: ${{ steps.attest.outputs.bundle-path }}
         run: |
           v="${TAG#v}"
-          cp "$BUNDLE" "fleetpilot-$v.sigstore.json"
+          cp "$BUNDLE" "dist/fleetpilot-$v.sigstore.json"
           # The DSSE envelope with the in-toto SLSA provenance, as JSON Lines.
           python -c 'import json, sys; print(json.dumps(json.load(open(sys.argv[1]))["dsseEnvelope"], separators=(",", ":")))' \
-            "$BUNDLE" > "fleetpilot-$v.intoto.jsonl"
+            "$BUNDLE" > "dist/fleetpilot-$v.intoto.jsonl"
 
       - name: Release notes from CHANGELOG.md
-        if: steps.existing.outputs.skip != 'true'
+        if: steps.existing.outputs.skip != 'true' && steps.existing.outputs.draft != 'true'
         env:
           TAG: ${{ github.ref_name }}
         run: |
@@ -116,10 +135,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
+          DRAFT: ${{ steps.existing.outputs.draft }}
         run: |
-          v="${TAG#v}"
-          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft \
-            --title "FleetPilot $TAG" --notes-file notes.md \
-            "fleetpilot-$v.tar.gz" "fleetpilot-$v-sbom.cdx.json" SHA256SUMS \
-            "fleetpilot-$v.sigstore.json" "fleetpilot-$v.intoto.jsonl"
-          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          case "$TAG" in
+            *-*) channel=(--prerelease) ;;
+            *) channel=(--latest) ;;
+          esac
+          if [ "$DRAFT" = "true" ]; then
+            gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber dist/*
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft \
+              --title "FleetPilot $TAG" --notes-file notes.md dist/*
+          fi
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false "${channel[@]}"
