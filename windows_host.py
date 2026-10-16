@@ -197,9 +197,11 @@ try {
     $outcome = $installer.Install()
     $names = @('not started', 'in progress', 'installed', 'installed with errors', 'failed', 'aborted')
     for ($i = 0; $i -lt $todo.Count; $i++) {
-      $code = $outcome.GetUpdateResult($i).ResultCode
+      $one = $outcome.GetUpdateResult($i); $code = $one.ResultCode
       if ($code -eq 2 -or $code -eq 3) { $result.installed++ } else { $result.failed++ }
-      Log ("{0}: {1}" -f $todo.Item($i).Title, $names[$code])
+      # The HRESULT is what Microsoft's documentation and support articles are searchable by.
+      $hr = if ($code -ge 3 -and $one.HResult) { ' (0x{0:X8})' -f $one.HResult } else { '' }
+      Log ("{0}: {1}{2}" -f $todo.Item($i).Title, $names[$code], $hr)
     }
     $result.reboot = [bool]$outcome.RebootRequired
     $result.ok = ($result.failed -eq 0)

@@ -253,8 +253,9 @@ def test_windows_update_installs_as_system_then_runs_winget():
     assert 'Found 2 update(s).' in text and 'Windows updates installed: 2' in text
     assert 'needs a restart' in text and 'Successfully installed Mozilla.Firefox' in text
     markers = [s.split('\n', 1)[0] for s in host.scripts]
-    assert markers == ['# fleetpilot:windows-info', '# fleetpilot:upload', '# fleetpilot:upload',
-                       '# fleetpilot:run-as-system', '# fleetpilot:winget']
+    uploads = len(wh.upload_commands(wh.UPDATE_WORKER))
+    assert markers == (['# fleetpilot:windows-info'] + ['# fleetpilot:upload'] * uploads +
+                       ['# fleetpilot:run-as-system', '# fleetpilot:winget'])
 
 
 def test_windows_update_problems_are_reported():
