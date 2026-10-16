@@ -10,10 +10,12 @@ import time
 import subprocess
 import email_config
 import email_notifier
+import linux_distro
 import windows_host
 from constants import is_localhost, get_platform
 
-SUPPORTED_DISTRIBUTIONS = ['ubuntu', 'debian', 'fedora', 'centos', 'arch', 'windows']
+# Distribution IDs FleetPilot updates; derivatives are also matched through their ID_LIKE.
+SUPPORTED_DISTRIBUTIONS = sorted({i for ids in linux_distro.FAMILIES.values() for i in ids}) + ['windows']
 
 # Windows Update PowerShell commands
 WINDOWS_UPDATE_BASE = (
@@ -32,74 +34,37 @@ WINDOWS_WINGET_UPDATE = (
 # Prints "windows" on Windows, whether the OpenSSH default shell is cmd.exe or PowerShell.
 WINDOWS_DETECTION_COMMAND = windows_host.DETECT_COMMAND
 
-APT_LOCK_TIMEOUT = 600   # seconds
-
-
-def get_update_command(distro, repo_only=False, run_as_root=False):
+def get_update_command(distro, repo_only=False, run_as_root=False, os_release=None):
     """
-    Get the update command for a given Linux distribution or Windows.
-    
+    Get the update command for a Linux distribution or Windows.
+
     Args:
-        distro: Linux distribution name ('ubuntu', 'debian', 'fedora', 'centos', 'arch') or 'windows'
+        distro: os-release ID ('debian', 'rocky', 'opensuse-leap', ...) or 'windows'
         repo_only: If True, only update packages without modifying config files
         run_as_root: If True, omit 'sudo' prefix (already running as root, e.g. Proxmox root SSH login)
-    
+        os_release: parsed os-release data; with it, derivatives are recognised by ID_LIKE
+
     Returns:
         tuple: (command_string, description)
-    
+
     Raises:
         ValueError: If distribution is not supported
     """
-    sudo = '' if run_as_root else 'sudo '
-    if distro in ['ubuntu', 'debian']:
-        # Wait for unattended-upgrades or cloud-init's first-boot upgrade to release the dpkg lock
-        # instead of failing at once (apt before 1.9.11 ignores the option).
-        apt = f"{sudo}DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout={APT_LOCK_TIMEOUT}"
-        if repo_only:
-            cmd = f"{apt} update && {apt} upgrade -y -o Dpkg::Options::='--force-confold'"
-            desc = "repository-only update (preserving config files)"
-        else:
-            cmd = f"{apt} update && {apt} upgrade -y && {apt} dist-upgrade -y"
-            desc = "full system update"
-    
-    elif distro == 'fedora':
-        if repo_only:
-            cmd = f"{sudo}dnf upgrade -y --setopt=tsflags=noscripts"
-            desc = "repository-only update (preserving config files)"
-        else:
-            cmd = f"{sudo}dnf upgrade -y"
-            desc = "full system update"
-    
-    elif distro == 'centos':
-        if repo_only:
-            cmd = f"{sudo}yum update -y --setopt=tsflags=noscripts"
-            desc = "repository-only update (preserving config files)"
-        else:
-            cmd = f"{sudo}yum update -y"
-            desc = "full system update"
-    
-    elif distro == 'arch':
-        if repo_only:
-            cmd = f"{sudo}pacman -Syu --noconfirm --needed"
-            desc = "repository-only update"
-        else:
-            cmd = f"{sudo}pacman -Syu --noconfirm"
-            desc = "full system update"
-    
-    elif distro == 'windows':
+    if distro == 'windows':
         if repo_only:
             # Windows Update via PowerShell (system updates only)
-            cmd = f'powershell.exe -Command "{WINDOWS_UPDATE_BASE}"'
-            desc = "Windows system updates only"
-        else:
-            # Full Windows Update + software updates via winget
-            cmd = f'powershell.exe -Command "{WINDOWS_UPDATE_BASE}; {WINDOWS_WINGET_UPDATE}"'
-            desc = "full Windows system and software updates"
-    
-    else:
-        raise ValueError(f"Unsupported distribution: {distro}")
-    
-    return cmd, desc
+            return f'powershell.exe -Command "{WINDOWS_UPDATE_BASE}"', "Windows system updates only"
+        # Full Windows Update + software updates via winget
+        return (f'powershell.exe -Command "{WINDOWS_UPDATE_BASE}; {WINDOWS_WINGET_UPDATE}"',
+                "full Windows system and software updates")
+    return linux_distro.update_command(os_release or {'ID': distro}, repo_only, run_as_root)
+
+
+def _distro_name(info):
+    family, distro = linux_distro.identify(info)
+    name = info.get('PRETTY_NAME') or distro
+    return f"{name} ({family})" if family else name
+
 
 def run_local_update(name, log_list, repo_only, log_func):
     """
@@ -120,6 +85,7 @@ def run_local_update(name, log_list, repo_only, log_func):
         # Detect the operating system and distribution
         current_platform = get_platform()
         log_func(f"Detecting operating system... Platform: {current_platform}")
+        os_release = {}
         
         if current_platform == 'windows':
             # Windows detection
@@ -133,15 +99,10 @@ def run_local_update(name, log_list, repo_only, log_func):
                     raise FileNotFoundError("The /etc/os-release file is missing. This file is required to detect the Linux distribution.")
                 
                 with open('/etc/os-release', 'r') as f:
-                    for line in f:
-                        if line.startswith('ID='):
-                            # Use split with maxsplit=1 to handle lines with multiple '=' safely
-                            parts = line.strip().split('=', 1)
-                            if len(parts) == 2:
-                                distro = parts[1].strip('"').lower()
-                                break
-                    else:
-                        raise ValueError("Could not find 'ID=' line in /etc/os-release")
+                    os_release = linux_distro.parse_os_release(f.read())
+                distro = os_release.get('ID', '').lower()
+                if not distro:
+                    raise ValueError("Could not find 'ID=' line in /etc/os-release")
             except FileNotFoundError as e:
                 error_msg = f"✗ {str(e)}"
                 log_func(error_msg)
@@ -167,16 +128,16 @@ def run_local_update(name, log_list, repo_only, log_func):
                     email_notifier.send_error_notification(name, "\n".join(error_details))
                 return
         
-        log_func(f"Detected distribution: {distro}")
-        
+        os_release = os_release or {'ID': distro}
+        log_func(f"Detected distribution: {_distro_name(os_release) if distro != 'windows' else distro}")
+
         # Get the update command for this distribution
         try:
-            update_cmd, description = get_update_command(distro, repo_only)
+            update_cmd, description = get_update_command(distro, repo_only, os_release=os_release)
             log_func(f"Running {description}...")
         except ValueError as e:
             error_msg = f"✗ {str(e)}"
             log_func(error_msg)
-            log_func("Supported distributions: Ubuntu, Debian, Fedora, CentOS, Arch, Windows")
             error_occurred = True
             error_details.append(str(e))
             if email_config.get_error_notifications_enabled():
@@ -372,10 +333,11 @@ def run_update(host, user, name, log_list, repo_only=False, password=None):
         else:
             # Try Linux detection
             log("Detecting Linux distribution...")
-            stdin, stdout, stderr = ssh.exec_command("cat /etc/os-release | grep '^ID=' | cut -d'=' -f2 | tr -d '\"'")
-            distro = stdout.read().decode().strip().lower()
+            stdin, stdout, stderr = ssh.exec_command(linux_distro.OS_RELEASE_COMMAND)
+            os_release = linux_distro.parse_os_release(stdout.read().decode('utf-8', errors='replace'))
+            distro = os_release.get('ID', '').lower()
             if distro:
-                log(f"Detected Linux distribution: {distro}")
+                log(f"Detected Linux distribution: {_distro_name(os_release)}")
             else:
                 error_msg = "✗ Could not detect operating system"
                 log(error_msg)
@@ -389,7 +351,8 @@ def run_update(host, user, name, log_list, repo_only=False, password=None):
         # If connecting as root (e.g. Proxmox), skip sudo prefix
         run_as_root = (user == 'root')
         try:
-            update_cmd, description = get_update_command(distro, repo_only, run_as_root=run_as_root)
+            update_cmd, description = get_update_command(distro, repo_only, run_as_root=run_as_root,
+                                                          os_release=os_release)
             if run_as_root:
                 log(f"Running {description} (as root, no sudo)...")
             else:
@@ -397,7 +360,6 @@ def run_update(host, user, name, log_list, repo_only=False, password=None):
         except ValueError as e:
             error_msg = f"✗ {str(e)}"
             log(error_msg)
-            log("Supported distributions: Ubuntu, Debian, Fedora, CentOS, Arch, Windows")
             error_occurred = True
             error_details.append(str(e))
             return
@@ -458,9 +420,7 @@ def get_current_distribution():
     try:
         # Attempting to fetch distribution information
         with open('/etc/os-release', 'r') as file:
-            for line in file:
-                if line.startswith('ID='):
-                    return line.strip().split('=')[1].lower()
+            return linux_distro.parse_os_release(file.read())['ID'].lower()
     except Exception as e:
         logging.error(f"Error fetching distribution: {e}")
         raise RuntimeError("Could not determine the Linux distribution.")

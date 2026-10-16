@@ -121,7 +121,18 @@ Zugangsdaten werden verschlüsselt gespeichert. Einzelheiten und die nötigen Re
 
 ### Update-Übersicht
 
-Updates für alle verwalteten Hosts an einer Stelle: Debian/Ubuntu (`apt`), Fedora/RHEL (`dnf`/`yum`), Arch (`pacman`) und Windows (Windows Update, beim vollständigen Update zusätzlich `winget` für Anwendungen).
+Updates für alle verwalteten Hosts an einer Stelle:
+
+| Paketverwaltung | Distributionen |
+|---|---|
+| `apt` | Debian, Ubuntu, Linux Mint, Pop!_OS, Raspberry Pi OS, Kali, Zorin, Devuan und andere Debian-/Ubuntu-Ableger, Proxmox VE |
+| `dnf` (`yum` unter CentOS 7 und Amazon Linux 2) | Fedora, RHEL, Rocky Linux, AlmaLinux, Oracle Linux, CentOS Stream, Amazon Linux |
+| `zypper` | openSUSE Leap, SLES; Tumbleweed und Slowroll bekommen `zypper dup` |
+| `pacman` | Arch, Manjaro, EndeavourOS, Garuda, Artix, CachyOS (der Keyring wird zuerst aktualisiert) |
+| `apk`, `xbps`, `eopkg`, `swupd` | Alpine, Void, Solus, Clear Linux |
+| Windows Update | Windows, beim vollständigen Update zusätzlich `winget` für Anwendungen |
+
+FleetPilot erkennt eine Distribution an `ID` und `ID_LIKE` in `/etc/os-release`, daher funktionieren auch nicht aufgeführte Ableger. Es meldet sich als root an oder nutzt `sudo` (oder `doas`, wie unter Alpine) ohne Passwortabfrage und wartet auf eine laufende Paketverwaltung (unattended-upgrades, cloud-init), statt abzubrechen. NixOS, Fedora Atomic/CoreOS, openSUSE MicroOS und andere imagebasierte Systeme aktualisieren sich selbst; FleetPilot weist darauf hin, statt eine Paketverwaltung aufzurufen.
 
 - Einen oder mehrere Hosts auswählen und das Update starten. **Update Progress** zeigt die Ausgabe je Host live.
 - **Update History** listet jeden Lauf mit Ergebnis und Dauer.
