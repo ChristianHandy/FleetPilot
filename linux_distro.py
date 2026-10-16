@@ -40,7 +40,9 @@ OS_RELEASE_COMMAND = 'cat /etc/os-release 2>/dev/null || cat /usr/lib/os-release
 
 def _wait_while(condition: str) -> str:
     """Shell prefix that waits (up to APT_LOCK_TIMEOUT) while ``condition`` holds."""
-    return f"for _ in $(seq {APT_LOCK_TIMEOUT // 5}); do {condition} || break; sleep 5; done; "
+    return (f"for _ in $(seq {APT_LOCK_TIMEOUT // 5}); do {condition} || break; "
+            f"[ -n \"$fp_waited\" ] || echo 'Waiting for another package manager to finish...'; fp_waited=1; "
+            f"sleep 5; done; ")
 
 
 def parse_os_release(text: str) -> Dict[str, str]:
