@@ -15,6 +15,7 @@ Desktop Experience.
   one-off scheduled task under SYSTEM and FleetPilot follows its log.
 """
 import base64
+import html
 import json
 import re
 from datetime import date
@@ -25,8 +26,22 @@ WORK_DIR = r'C:\ProgramData\FleetPilot'
 RESULT_MARKER = '@@fp:result '
 
 
+# Console output is in the OEM code page by default (850 on German Windows: "ü" is byte 0x81). UTF-8 without a BOM
+# keeps update titles and adapter names intact and leaves the first line ("windows") unprefixed. Without progress
+# records PowerShell has nothing to serialise as CLIXML onto stderr ("Preparing modules for first use").
+UTF8_OUTPUT = "[Console]::OutputEncoding = New-Object Text.UTF8Encoding; $ProgressPreference = 'SilentlyContinue'"
+
+
 def ps(script: str) -> str:
-    """A command line that runs ``script`` in Windows PowerShell from cmd.exe or PowerShell."""
+    """A command line that runs ``script`` in Windows PowerShell from cmd.exe or PowerShell, writing UTF-8."""
+    first, newline, rest = script.partition('\n')
+    if not first.startswith('# fleetpilot:'):  # the marker line stays first (the demo lab dispatches on it)
+        first, rest = '', script
+    # cmd.exe allows 8191 characters and every script character costs about 2.7 in base64 of UTF-16:
+    # drop indentation and comment lines (no script uses here-strings, where this would change text).
+    body = [line.strip() for line in rest.splitlines()]
+    body = [line for line in body if line and not line.startswith('#')]
+    script = '\n'.join(([first] if first else []) + [UTF8_OUTPUT] + body)
     return POWERSHELL + base64.b64encode(script.encode('utf-16-le')).decode('ascii')
 
 
@@ -52,6 +67,8 @@ REBOOT_COMMAND = 'shutdown /r /t 30 /c "FleetPilot restart"'
 # End of servicing from Microsoft's lifecycle pages, checked October 2026. Windows
 # 10/11 feature updates: (version, end for Home/Pro, end for Enterprise/Education).
 CLIENT = {
+    28000: ('26H1', date(2028, 3, 14), date(2029, 3, 13)),   # new Arm devices only
+    26300: ('26H2', date(2028, 10, 10), date(2029, 10, 9)),
     26200: ('25H2', date(2027, 10, 12), date(2028, 10, 10)),
     26100: ('24H2', date(2026, 10, 13), date(2027, 10, 12)),
     22631: ('23H2', date(2025, 11, 11), date(2026, 11, 10)),
@@ -99,7 +116,7 @@ def identify(info: Dict, today: Optional[date] = None) -> Dict:
     installation = str(info.get('installation') or '')
     caption = str(info.get('caption') or 'Windows').replace('Microsoft ', '').strip()
     server = installation.lower().startswith('server') or edition.startswith('Server')
-    ltsc = not server and re.fullmatch(r'(IoT)?EnterpriseS[NK]?', edition) is not None   # LTSC/LTSB editions
+    ltsc = not server and re.fullmatch(r'(IoT)?EnterpriseS[NK]?(Eval)?', edition) is not None   # LTSC/LTSB editions, also evaluations
     iot = edition.startswith('IoT')
     # Windows 11 still writes "Windows 10" into the registry; the build tells them apart.
     if not server and build >= 22000:
@@ -130,7 +147,9 @@ def identify(info: Dict, today: Optional[date] = None) -> Dict:
         status = 'ending'
     else:
         status = 'supported'
-    name = caption if not release or release in caption else f'{caption} {release}'
+    # Append the release unless the caption already names it ("... LTSC Evaluation" + "LTSC 2024" -> "... 2024").
+    missing = ' '.join(word for word in release.split() if word not in caption.split())
+    name = f'{caption} {missing}' if missing else caption
     if installation == 'Server Core':
         name += ' (Server Core)'
     return {
@@ -178,9 +197,11 @@ try {
     $outcome = $installer.Install()
     $names = @('not started', 'in progress', 'installed', 'installed with errors', 'failed', 'aborted')
     for ($i = 0; $i -lt $todo.Count; $i++) {
-      $code = $outcome.GetUpdateResult($i).ResultCode
+      $one = $outcome.GetUpdateResult($i); $code = $one.ResultCode
       if ($code -eq 2 -or $code -eq 3) { $result.installed++ } else { $result.failed++ }
-      Log ("{0}: {1}" -f $todo.Item($i).Title, $names[$code])
+      # The HRESULT is what Microsoft's documentation and support articles are searchable by.
+      $hr = if ($code -ge 3 -and $one.HResult) { ' (0x{0:X8})' -f $one.HResult } else { '' }
+      Log ("{0}: {1}{2}" -f $todo.Item($i).Title, $names[$code], $hr)
     }
     $result.reboot = [bool]$outcome.RebootRequired
     $result.ok = ($result.failed -eq 0)
@@ -205,16 +226,22 @@ $ErrorActionPreference = 'Stop'
 $dir = 'C:\ProgramData\FleetPilot'
 $script = Join-Path $dir 'update.ps1'; $log = Join-Path $dir 'update.log'; $json = Join-Path $dir 'update.json'
 $b64 = Join-Path $dir 'update.b64'
-[IO.File]::WriteAllBytes($script, [Convert]::FromBase64String([IO.File]::ReadAllText($b64)))
-Remove-Item $b64, $log, $json -ErrorAction SilentlyContinue
 $task = 'FleetPilot Windows Update'
-$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}" -Mode __MODE__ -Dir "{1}"' -f $script, $dir)
-$principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes __MINUTES__)
-Register-ScheduledTask -TaskName $task -Action $action -Principal $principal -Settings $settings -Force | Out-Null
+# A run whose SSH session was lost keeps going as SYSTEM: follow it instead of starting a second one.
+if ((Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue).State -eq 'Running') {
+  Write-Output 'A Windows Update started earlier by FleetPilot is still running; following it.'
+  Remove-Item $b64 -ErrorAction SilentlyContinue
+} else {
+  [IO.File]::WriteAllBytes($script, [Convert]::FromBase64String([IO.File]::ReadAllText($b64)))
+  Remove-Item $b64, $log, $json -ErrorAction SilentlyContinue
+  $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}" -Mode __MODE__ -Dir "{1}"' -f $script, $dir)
+  $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+  $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 24)
+  Register-ScheduledTask -TaskName $task -Action $action -Principal $principal -Settings $settings -Force | Out-Null
+}
 try {
-  Start-ScheduledTask -TaskName $task
-  $shown = 0; $deadline = (Get-Date).AddMinutes(__MINUTES__)
+  if ((Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue).State -ne 'Running') { Start-ScheduledTask -TaskName $task }
+  $shown = 0; $deadline = (Get-Date).AddMinutes(__MINUTES__); $keep = $false
   while ($true) {
     Start-Sleep -Seconds 3
     if (Test-Path $log) {
@@ -223,15 +250,28 @@ try {
       $shown = $lines.Count
     }
     if (Test-Path $json) { break }
-    if ((Get-Date) -gt $deadline) { Stop-ScheduledTask -TaskName $task; throw 'Windows Update did not finish in time.' }
-    if ((Get-ScheduledTask -TaskName $task).State -eq 'Ready' -and -not (Test-Path $json)) {
+    if ((Get-Date) -gt $deadline) {
+      # Stopping Windows in the middle of a cumulative update is worse than waiting: leave it running.
+      $keep = $true
+      Write-Output ('__MARKER__' + (@{ ok = $false; mode = 'running'; error = 'still installing after __MINUTES__ minutes. ' +
+        'Windows continues in the background; run the update again later to follow it and see the result.' } | ConvertTo-Json -Compress))
+      break
+    }
+    # Another runner (e.g. one left behind by a lost SSH session) may already have removed the finished task.
+    $state = (Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue).State
+    if ($state -ne 'Running' -and $state -ne 'Queued') {
       Start-Sleep -Seconds 3
-      if (-not (Test-Path $json)) { throw 'Windows Update stopped without a result.' }
+      if (-not (Test-Path $json)) {
+        $code = (Get-ScheduledTaskInfo -TaskName $task -ErrorAction SilentlyContinue).LastTaskResult
+        throw ('Windows Update stopped without a result (task result 0x{0:X}).' -f [int64]$code)
+      }
     }
   }
-  Write-Output ('__MARKER__' + (Get-Content -Path $json -Raw -Encoding UTF8).Trim())
+  if (-not $keep) { Write-Output ('__MARKER__' + (Get-Content -Path $json -Raw -Encoding UTF8).Trim()) }
+} catch {
+  Write-Output ('__MARKER__' + (@{ ok = $false; mode = 'error'; error = $_.Exception.Message } | ConvertTo-Json -Compress))
 } finally {
-  Unregister-ScheduledTask -TaskName $task -Confirm:$false -ErrorAction SilentlyContinue
+  if (-not $keep) { Unregister-ScheduledTask -TaskName $task -Confirm:$false -ErrorAction SilentlyContinue }
 }
 """
 
@@ -256,6 +296,16 @@ def update_command(install: bool, minutes: int = 120) -> str:
     script = (RUNNER_SCRIPT.replace('__MODE__', 'install' if install else 'check')
               .replace('__MINUTES__', str(int(minutes))).replace('__MARKER__', RESULT_MARKER))
     return ps(script)
+
+
+def error_text(stderr: str) -> str:
+    """Readable text from a PowerShell stderr stream, which arrives as CLIXML when it is redirected."""
+    if '#< CLIXML' not in stderr:
+        return stderr.strip()
+    parts = re.findall(r'<S S="Error">(.*?)</S>', stderr, flags=re.S)
+    text = ''.join(html.unescape(p) for p in parts)
+    text = re.sub(r'_x([0-9A-Fa-f]{4})_', lambda m: chr(int(m.group(1), 16)), text)
+    return '\n'.join(line.rstrip() for line in text.splitlines() if line.strip())
 
 
 def parse_result(line: str) -> Optional[Dict]:
@@ -287,7 +337,7 @@ $ErrorActionPreference = 'SilentlyContinue'
 $os = Get-CimInstance Win32_OperatingSystem; $cs = Get-CimInstance Win32_ComputerSystem
 $cpu = @(Get-CimInstance Win32_Processor); $bb = Get-CimInstance Win32_BaseBoard; $bios = Get-CimInstance Win32_BIOS
 $up = (Get-Date) - $os.LastBootUpTime; $total = [int64]$os.TotalVisibleMemorySize; $free = [int64]$os.FreePhysicalMemory
-$ram = Get-CimInstance Win32_PhysicalMemory | ForEach-Object { '{0} GB {1} MHz {2} {3}' -f ($_.Capacity / 1GB), $_.Speed, $_.Manufacturer, "$($_.PartNumber)".Trim() }
+$ram = Get-CimInstance Win32_PhysicalMemory | ForEach-Object { ('{0} GB {1} MHz {2} {3}' -f ($_.Capacity / 1GB), $_.Speed, $_.Manufacturer, $_.PartNumber -replace '  MHz').Trim() }
 $info = [ordered]@{
   platform = 'windows'; os = $os.Caption -replace '^Microsoft ', ''; kernel = $os.Version; hostname = $env:COMPUTERNAME
   uptime = '{0}d {1}h {2}m' -f $up.Days, $up.Hours, $up.Minutes; arch = $os.OSArchitecture
@@ -297,19 +347,19 @@ $info = [ordered]@{
   memory = [ordered]@{ total_kb = "$total"; free_kb = "$free"; used_kb = "$($total - $free)"
     used_pct = "$([math]::Round(($total - $free) * 100 / [math]::Max($total, 1), 1))"; slots_raw = ($ram -join "`n") }
   motherboard = [ordered]@{ manufacturer = $bb.Manufacturer; product = $bb.Product; version = $bb.Version
-    bios_vendor = $bios.Manufacturer; bios_version = $bios.SMBIOSBIOSVersion; bios_date = "$($bios.ReleaseDate)" }
+    bios_vendor = $bios.Manufacturer; bios_version = $bios.SMBIOSBIOSVersion; bios_date = '{0:MM\/dd\/yyyy}' -f $bios.ReleaseDate }
   gpus = @(Get-CimInstance Win32_VideoController | ForEach-Object { [ordered]@{ vendor = $_.AdapterCompatibility
     name = $_.Name; driver = $_.DriverVersion; vram_total_mb = "$([math]::Round($_.AdapterRAM / 1MB))" } })
   network = @(Get-NetAdapter -Physical | ForEach-Object {
     $ips = @(Get-NetIPAddress -InterfaceIndex $_.ifIndex)
-    [ordered]@{ name = $_.Name; mac = $_.MacAddress; speed_mbps = "$([math]::Round($_.Speed / 1e6))"
+    [ordered]@{ name = $_.Name; mac = $_.MacAddress -replace '-', ':'; speed_mbps = "$([math]::Round($_.Speed / 1e6))"
       state = "$($_.Status)".ToLower(); driver = $_.InterfaceDescription
       ipv4 = (($ips | Where-Object AddressFamily -eq 'IPv4').IPAddress -join ', ')
       ipv6 = (($ips | Where-Object { $_.AddressFamily -eq 'IPv6' -and $_.IPAddress -notlike 'fe80*' }).IPAddress -join ', ') } })
   disks = @(Get-PhysicalDisk | ForEach-Object { [ordered]@{ name = "PhysicalDrive$($_.DeviceId)"
     size = '{0:N0} GB' -f ($_.Size / 1GB); model = $_.FriendlyName; serial = "$($_.SerialNumber)".Trim()
     transport = "$($_.BusType)"; rotational = ("$($_.MediaType)" -eq 'HDD'); health = "$($_.HealthStatus)"
-    type = $(if ("$($_.BusType)" -eq 'NVMe') { 'NVMe' } elseif ("$($_.MediaType)" -eq 'HDD') { 'HDD' } else { 'SSD' }) } })
+    type = $(if ("$($_.BusType)" -eq 'NVMe') { 'NVMe' } else { "$($_.MediaType)" -replace 'Unspecified' }) } })
   virtualization = $(if ($cs.Model -match 'Virtual|VMware|KVM|QEMU|Standard PC') { $cs.Model } else { 'bare-metal' })
 }
 $info | ConvertTo-Json -Depth 4 -Compress

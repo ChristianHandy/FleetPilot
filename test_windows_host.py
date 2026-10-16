@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Windows PCs and servers: version and support status, encoded PowerShell, updates, power, inventory."""
 import base64
+import io
 import json
 import os
 import re
@@ -29,6 +30,15 @@ def info(caption, edition, build, installation='Client', display='', ubr=1000):
 
 
 @pytest.mark.parametrize('fields,name,channel,end,status', [
+    (info('Microsoft Windows 11 Enterprise Evaluation', 'EnterpriseEval', 26300, display='26H2'),
+     'Windows 11 Enterprise Evaluation 26H2', 'General Availability', '2029-10-09', 'supported'),
+    (info('Microsoft Windows 11 Pro', 'Professional', 26300, display='26H2'), 'Windows 11 Pro 26H2',
+     'General Availability', '2028-10-10', 'supported'),
+    (info('Microsoft Windows 11 Home', 'Core', 28000, display='26H1'), 'Windows 11 Home 26H1',
+     'General Availability', '2028-03-14', 'supported'),
+    # Microsoft's evaluation ISOs report the edition with an "Eval" suffix.
+    (info('Microsoft Windows 11 IoT Enterprise LTSC Evaluation', 'IoTEnterpriseSEval', 26100, display='24H2'),
+     'Windows 11 IoT Enterprise LTSC Evaluation 2024', 'Long-Term Servicing Channel', '2034-10-10', 'supported'),
     (info('Microsoft Windows 11 Home', 'Core', 26200, display='25H2'), 'Windows 11 Home 25H2',
      'General Availability', '2027-10-12', 'supported'),
     (info('Microsoft Windows 11 Pro', 'Professional', 26100, display='24H2'), 'Windows 11 Pro 24H2',
@@ -116,7 +126,7 @@ def test_upload_rebuilds_the_worker_and_locks_the_folder():
     data = ''.join(re.search(r"'([A-Za-z0-9+/=]{20,})'\)$", s).group(1) for s in scripts)
     assert base64.b64decode(data) == b'\xef\xbb\xbf' + wh.UPDATE_WORKER.encode('utf-8')
     runner = _decode(wh.update_command(True, minutes=45))
-    assert '-Mode install' in runner and 'New-TimeSpan -Minutes 45' in runner and wh.RESULT_MARKER in runner
+    assert '-Mode install' in runner and 'AddMinutes(45)' in runner and wh.RESULT_MARKER in runner
     assert "-UserId 'SYSTEM'" in runner and 'Unregister-ScheduledTask' in runner
     assert '-Mode check' in _decode(wh.update_command(False))
 
@@ -160,20 +170,25 @@ def test_powershell_scripts_parse(tmp_path, name):
 # ── A Windows host behind SSH ────────────────────────────────────────────────
 
 class Channel:
-    def __init__(self, code):
-        self.code = code
+    def __init__(self, code, data=b''):
+        self.code, self.data = code, data
 
     def recv_exit_status(self):
         return self.code
 
+    def makefile(self, mode='r'):
+        return io.BytesIO(self.data)
+
 
 class Stream:
     def __init__(self, text, code=0):
+        data = text if isinstance(text, bytes) else text.encode()
+        text = data.decode('utf-8', errors='replace')
         self.lines = text.splitlines(keepends=True)
-        self.text, self.channel = text, Channel(code)
+        self.text, self.data, self.channel = text, data, Channel(code, data)
 
     def read(self):
-        return self.text.encode()
+        return self.data
 
     def readline(self):
         return self.lines.pop(0) if self.lines else ''
@@ -195,6 +210,8 @@ class WindowsHost:
         self.commands.append(command)
         if not command.startswith(wh.POWERSHELL):
             if command.startswith('shutdown '):
+                if getattr(self, 'shutting_down', False):     # Windows refuses while a restart is under way
+                    return None, Stream('', 1115), Stream('Das System wird bereits heruntergefahren.(1115)\r\n', 1115)
                 return None, Stream(''), Stream('')
             return None, Stream('', 1), Stream(f"'{command.split()[0]}' is not recognized\r\n", 1)
         script = _decode(command)
@@ -238,8 +255,9 @@ def test_windows_update_installs_as_system_then_runs_winget():
     assert 'Found 2 update(s).' in text and 'Windows updates installed: 2' in text
     assert 'needs a restart' in text and 'Successfully installed Mozilla.Firefox' in text
     markers = [s.split('\n', 1)[0] for s in host.scripts]
-    assert markers == ['# fleetpilot:windows-info', '# fleetpilot:upload', '# fleetpilot:upload',
-                       '# fleetpilot:run-as-system', '# fleetpilot:winget']
+    uploads = len(wh.upload_commands(wh.UPDATE_WORKER))
+    assert markers == (['# fleetpilot:windows-info'] + ['# fleetpilot:upload'] * uploads +
+                       ['# fleetpilot:run-as-system', '# fleetpilot:winget'])
 
 
 def test_windows_update_problems_are_reported():
@@ -255,6 +273,96 @@ def test_windows_update_problems_are_reported():
     assert problems == ['Windows Update: 0x80240022', '1 Windows update(s) failed to install']
     assert updater._run_windows_update(WindowsHost(result={}), True, log.append)[0].startswith(
         'Windows Update gave no result')
+    # Past the wait limit the runner leaves Windows installing and says so (seen on slow Ceph storage).
+    running = {'ok': False, 'mode': 'running', 'error': 'still installing after 120 minutes. Windows continues ...'}
+    assert updater._run_windows_update(WindowsHost(result=running), True, log.append) == [
+        'Windows Update: still installing after 120 minutes. Windows continues ...']
+    runner = _decode(wh.update_command(True))
+    assert 'Stop-ScheduledTask' not in runner and '-Hours 24' in runner
+
+
+def test_windows_output_in_the_oem_code_page_does_not_end_the_update():
+    # Found on German Server 2022: titles came as code page 850 ("f\x81r" is "für"), and the strict UTF-8
+    # readline raised in the middle of the update. Scripts now write UTF-8, and odd bytes are replaced.
+    class GermanHost(WindowsHost):
+        def exec_command(self, command, timeout=None, get_pty=False):
+            stdin, out, err = super().exec_command(command, timeout, get_pty)
+            if self.scripts and self.scripts[-1].startswith('# fleetpilot:run-as-system'):
+                out = Stream(b'Kumulatives Update f\x81r Windows Server 2022 (KB5066782)\r\n' + out.data)
+            return stdin, out, err
+
+    log = []
+    assert updater._run_windows_update(GermanHost(), True, log.append) == []
+    assert 'Kumulatives Update f\ufffdr Windows Server 2022 (KB5066782)' in log
+    for command in (wh.HW_COMMAND, wh.INFO_COMMAND, wh.update_command(True)):
+        assert _decode(command).split('\n')[1] == wh.UTF8_OUTPUT       # marker line first, then UTF-8 output
+
+
+def test_powershell_clixml_errors_become_readable_text():
+    # Captured from Server 2022 (German): stderr of a redirected PowerShell is CLIXML, progress records included.
+    raw = ('#< CLIXML\r\n<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04">'
+           '<Obj S="progress" RefId="0"><MS><PR N="Record"><AV>Module werden f\u00fcr erstmalige Verwendung vorbereitet.'
+           '</AV></PR></MS></Obj><S S="Error">Get-ScheduledTask : Es wurden keine MSFT_ScheduledTask-Objekte '
+           'gefunden_x000D__x000A_</S><S S="Error">In Zeile:38 Zeichen:10_x000D__x000A_</S>'
+           '<S S="Error"> _x000D__x000A_</S></Objs>')
+    assert wh.error_text(raw) == ('Get-ScheduledTask : Es wurden keine MSFT_ScheduledTask-Objekte gefunden\n'
+                                  'In Zeile:38 Zeichen:10')
+    assert wh.error_text('  Access denied.\r\n') == 'Access denied.'
+    runner = _decode(wh.update_command(True))
+    assert "$ProgressPreference = 'SilentlyContinue'" in runner and '} catch {' in runner
+    assert '(Get-ScheduledTask -TaskName $task).State' not in runner       # a vanished task must not throw
+
+
+def test_a_timeout_is_named_in_the_update_log(monkeypatch):
+    # A busy Windows sshd timed out with an empty message: the log read "Error updating w22core:".
+    def slow(*a, **k):
+        raise TimeoutError()
+    monkeypatch.setattr(updater.ssh_helper, 'create_client', slow)
+    monkeypatch.setattr(updater.time, 'sleep', lambda s: None)
+    monkeypatch.setattr(updater.email_config, 'get_error_notifications_enabled', lambda: False)
+    log = []
+    updater.run_update('192.0.2.80', 'Administrator', 'w22core', log)
+    assert any(line.endswith('✗ Error updating w22core: the host did not answer in time') for line in log)
+
+
+def test_create_client_retries_one_dropped_handshake_but_not_bad_credentials(tmp_path, monkeypatch):
+    # Windows' sshd answered "No existing session" to FleetPilot's shutdown while finishing a restart.
+    import paramiko
+    import ssh_helper
+    calls = []
+    def connect(self, **kw):
+        calls.append(kw['hostname'])
+        if len(calls) == 1:
+            raise paramiko.SSHException('No existing session')
+    monkeypatch.setattr(paramiko.SSHClient, 'connect', connect)
+    monkeypatch.setattr(ssh_helper, 'HANDSHAKE_RETRY_DELAY', 0)
+    ssh_helper.create_client('192.0.2.84', known_hosts_path=str(tmp_path / 'kh'))
+    assert calls == ['192.0.2.84', '192.0.2.84']
+
+    def refuse(self, **kw):
+        calls.append('auth')
+        raise paramiko.AuthenticationException('wrong password')
+    monkeypatch.setattr(paramiko.SSHClient, 'connect', refuse)
+    with pytest.raises(paramiko.AuthenticationException):
+        ssh_helper.create_client('192.0.2.84', known_hosts_path=str(tmp_path / 'kh'))
+    assert calls.count('auth') == 1
+
+
+def test_a_dropped_handshake_is_retried(monkeypatch):
+    # Windows' sshd dropped the handshake (EOFError) while the machine was installing updates.
+    host, attempts = WindowsHost(), []
+    def flaky(*a, **k):
+        attempts.append(1)
+        if len(attempts) < 3:
+            raise EOFError()
+        return host
+    monkeypatch.setattr(updater.ssh_helper, 'create_client', flaky)
+    monkeypatch.setattr(updater.time, 'sleep', lambda s: None)
+    monkeypatch.setattr(updater.email_config, 'get_error_notifications_enabled', lambda: False)
+    log = []
+    updater.run_update('192.0.2.80', 'Administrator', 'w22gui', log, repo_only=True)
+    assert len(attempts) == 3 and any('Connection attempt 1 failed (EOFError); retrying' in line for line in log)
+    assert any('Update completed successfully for w22gui' in line for line in log)
 
 
 def test_run_update_detects_windows_in_any_ssh_shell(monkeypatch):
@@ -303,6 +411,13 @@ def test_detect_os_recognises_windows_and_shutdown_uses_windows_commands(operato
 
     assert client.post('/hosts/desk/shutdown').get_json()['ok']
     assert host.commands[-1] == wh.SHUTDOWN_COMMAND
+
+    # Seen on Server 2022: during a restart's update servicing sshd still answers, but shutdown.exe refuses.
+    host.shutting_down = True
+    response = client.post('/hosts/desk/shutdown')
+    assert response.status_code == 502 and not response.get_json()['ok']
+    assert response.get_json()['error'] == ('desk refused to shut down (exit code 1115): '
+                                            'Das System wird bereits heruntergefahren.(1115)')
 
 
 def test_editing_a_host_keeps_what_the_form_does_not_show(operator):

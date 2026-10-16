@@ -2726,19 +2726,22 @@ def install_key(name):
             # Windows: OpenSSH reads administrators' keys from ProgramData, not the profile.
             _, probe, _ = ssh.exec_command(windows_host.DETECT_COMMAND, timeout=15)
             if probe.read().decode(errors="replace").strip().lower() == "windows":
+                key_file = None
                 try:
                     _, out, err = ssh.exec_command(windows_host.install_key_command(pubkey), timeout=30)
                     output = out.read().decode(errors="replace")
                     if "installed:" in output:
                         success = True
+                        key_file = output.split("installed:", 1)[1].strip().splitlines()[0]
                     else:
-                        error = "Could not install the key: " + (err.read().decode(errors="replace").strip()[-300:]
+                        error = "Could not install the key: " + (windows_host.error_text(err.read().decode(errors="replace"))[-300:]
                                                                  or output.strip()[-300:] or "no answer")
                 except ValueError as e:
                     error = str(e)
                 finally:
                     ssh.close()
-                return render_template("install_key.html", name=name, error=error, success=success)
+                return render_template("install_key.html", name=name, error=error, success=success,
+                                       key_file=key_file)
 
             # Security: Use SFTP to safely write the key file instead of shell commands
             try:
@@ -6644,10 +6647,17 @@ def host_shutdown(name):
         
         stdin, stdout, stderr = client.exec_command(cmd, timeout=10)
         exit_code = stdout.channel.recv_exit_status()
+        detail = (windows_host.error_text(stderr.read().decode(errors='replace')) or
+                  stdout.read().decode(errors='replace').strip())
         client.close()
-        
+
         app.logger.info('SSH shutdown sent to %s (%s), exit_code=%s', safe_errors.log_text(name),
                         safe_errors.log_text(ssh_host), exit_code)
+        # -1: the connection closed without an exit status, as when the host goes down at once.
+        # Anything else is a refusal, e.g. Windows' 1115 "a system shutdown is in progress".
+        if exit_code > 0:
+            return jsonify({'ok': False, 'error': f'{name} refused to shut down (exit code {exit_code})'
+                                                  + (f': {detail[-300:]}' if detail else '')}), 502
         return jsonify({'ok': True, 'message': f'{name} is shutting down via SSH.'})
     except Exception as e:
         app.logger.error('Shutdown failed for %s: %s', safe_errors.log_text(name), safe_errors.log_text(e))

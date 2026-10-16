@@ -18,9 +18,10 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 ### Added
 
 - **Windows PCs and servers, every release Microsoft still supports**, all over OpenSSH (see [WINDOWS_SUPPORT.md](WINDOWS_SUPPORT.md)):
-  - covers Windows 10/11 (including LTSC 2019/2021/2024 and IoT) and Windows Server 2016, 2019, 2022 and 2025 (Desktop or Core)
+  - covers Windows 11 up to 26H2, Windows 10/11 LTSC 2019/2021/2024 (including IoT and evaluation editions) and Windows Server 2016, 2019, 2022 and 2025 (Desktop or Core), in any display language
   - **Detect OS** names the exact release and edition and shows Microsoft's support end date; the host list warns about ended support
   - updates use the built-in Windows Update Agent, run once as SYSTEM through a scheduled task (Windows does not let an SSH session install updates), never restart the machine, and work with WSUS, LTSC and Server Core; a full update also runs `winget upgrade` where winget exists
+  - an installation is never cut off: after two hours FleetPilot stops waiting while Windows carries on, and the next update run (or one after a lost connection) follows the running installation to its result
   - hardware overview and SMART (with smartmontools for Windows) for Windows hosts; **Install SSH key** puts the key where Windows OpenSSH reads it for administrators
   - all commands are encoded PowerShell, so they work with cmd.exe or PowerShell as the SSH shell
 - **Android app (beta)**, now working with FleetPilot itself:

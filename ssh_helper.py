@@ -16,6 +16,7 @@ Security design:
 
 import os
 import logging
+import time
 import paramiko
 from typing import Optional
 
@@ -24,6 +25,11 @@ logger = logging.getLogger(__name__)
 # Path to the known_hosts file used by FleetPilot
 # Set by init() at startup
 _KNOWN_HOSTS_FILE: Optional[str] = None
+
+
+def _sanitize_for_log(value: object) -> str:
+    """Return a single-line representation safe for plain-text logs."""
+    return str(value).replace("\r", "").replace("\n", "")
 
 
 def init(data_dir: str) -> None:
@@ -77,6 +83,31 @@ class _TOFUPolicy(paramiko.MissingHostKeyPolicy):
             logger.warning("SSH: Could not save host key for %s: %s", hostname, exc)
 
 
+HANDSHAKE_RETRY_DELAY = 3
+
+
+def _new_client(kh_path: str) -> paramiko.SSHClient:
+    client = paramiko.SSHClient()
+
+    # Load existing known hosts
+    if os.path.exists(kh_path):
+        try:
+            client.load_host_keys(kh_path)
+        except Exception as exc:
+            logger.warning("SSH: Could not load known_hosts from %s: %s", kh_path, exc)
+
+    # Also load system-wide known_hosts for additional trust anchors
+    client.load_system_host_keys()
+
+    # Unknown hosts: trust on first use, or refuse them in strict mode
+    # (FLEETPILOT_SSH_STRICT_HOST_KEYS=true; host keys must be added to known_hosts in advance).
+    if strict_host_keys():
+        client.set_missing_host_key_policy(paramiko.RejectPolicy())
+    else:
+        client.set_missing_host_key_policy(_TOFUPolicy(kh_path))
+    return client
+
+
 def create_client(
     hostname: str,
     port: int = 22,
@@ -117,30 +148,16 @@ def create_client(
     """
     kh_path = known_hosts_path or _get_known_hosts_path()
 
-    client = paramiko.SSHClient()
-
-    # Load existing known hosts
-    if os.path.exists(kh_path):
-        try:
-            client.load_host_keys(kh_path)
-        except Exception as exc:
-            logger.warning("SSH: Could not load known_hosts from %s: %s", kh_path, exc)
-
-    # Also load system-wide known_hosts for additional trust anchors
-    client.load_system_host_keys()
-
-    # Unknown hosts: trust on first use, or refuse them in strict mode
-    # (FLEETPILOT_SSH_STRICT_HOST_KEYS=true; host keys must be added to known_hosts in advance).
-    if strict_host_keys():
-        client.set_missing_host_key_policy(paramiko.RejectPolicy())
-    else:
-        client.set_missing_host_key_policy(_TOFUPolicy(kh_path))
+    client = _new_client(kh_path)
 
     connect_kwargs: dict = {
         "hostname": hostname,
         "port": port,
         "username": username,
         "timeout": timeout,
+        # paramiko waits only 15 s for the server's banner by default; a busy Windows sshd can take longer.
+        "banner_timeout": max(timeout, 15),
+        "auth_timeout": max(timeout, 30),
         "allow_agent": bool(allow_agent),
         "look_for_keys": (key_filename is None) if look_for_keys is None else bool(look_for_keys),
     }
@@ -149,7 +166,22 @@ def create_client(
     if key_filename:
         connect_kwargs["key_filename"] = key_filename
 
-    client.connect(**connect_kwargs)
+    try:
+        client.connect(**connect_kwargs)
+    except (paramiko.AuthenticationException, paramiko.BadHostKeyException):
+        raise
+    except (EOFError, paramiko.SSHException) as exc:
+        # A busy server (Windows' sshd while installing updates) drops or garbles a handshake now and
+        # then; one more try fixes that. Unreachable hosts (OSError, timeouts) are not retried.
+        logger.info(
+            "SSH: handshake with %s failed (%s), retrying once",
+            _sanitize_for_log(hostname),
+            exc or type(exc).__name__,
+        )
+        client.close()
+        time.sleep(HANDSHAKE_RETRY_DELAY)
+        client = _new_client(kh_path)
+        client.connect(**connect_kwargs)
     return client
 
 
@@ -203,3 +235,10 @@ def quick_exec(
         return exec_command(client, command, timeout=cmd_timeout)
     finally:
         client.close()
+
+
+def output_lines(stdout):
+    """Yield an SSH command's output line by line, decoded leniently (one stray byte must not end an update)."""
+    raw = stdout.channel.makefile('rb')
+    for line in iter(raw.readline, b''):
+        yield line.decode('utf-8', errors='replace')

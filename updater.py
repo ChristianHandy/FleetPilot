@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: Copyright the FleetPilot contributors
 # SPDX-License-Identifier: GPL-3.0-or-later
 # updater.py - Enhanced error handling, better distribution support, and fixed notification propagation
+import functools
 import os
 import logging
 import paramiko
@@ -250,21 +251,21 @@ def _run_windows_update(ssh, repo_only, log):
     for command in windows_host.upload_commands(windows_host.UPDATE_WORKER):
         _, out, err = ssh.exec_command(command, timeout=60)
         if out.channel.recv_exit_status() != 0:
-            detail = err.read().decode('utf-8', errors='replace').strip().splitlines()
+            detail = windows_host.error_text(err.read().decode('utf-8', errors='replace')).splitlines()
             return [f"Could not prepare Windows Update ({detail[-1] if detail else 'unknown error'}). "
                     "The SSH account must be an administrator."]
 
     log("Installing Windows updates (as SYSTEM, through a one-off scheduled task)...")
     _, out, err = ssh.exec_command(windows_host.update_command(install=True), timeout=None)
     result = None
-    for line in iter(out.readline, ''):
+    for line in ssh_helper.output_lines(out):
         parsed = windows_host.parse_result(line)
         if parsed is not None:
             result = parsed
         elif line.strip():
             log(line.rstrip())
     if result is None:
-        detail = err.read().decode('utf-8', errors='replace').strip().splitlines()
+        detail = windows_host.error_text(err.read().decode('utf-8', errors='replace')).splitlines()
         problems.append(f"Windows Update gave no result ({detail[-1] if detail else 'no output'})")
     else:
         if result.get('error'):
@@ -279,13 +280,17 @@ def _run_windows_update(ssh, repo_only, log):
     if not repo_only:
         log("Updating applications with winget...")
         _, out, _ = ssh.exec_command(windows_host.WINGET_COMMAND, timeout=None)
-        for line in iter(out.readline, ''):
+        for line in ssh_helper.output_lines(out):
             if line.strip():
                 log(line.rstrip())
         code = out.channel.recv_exit_status()
         if code != 0:
             log(f"⚠ winget finished with exit code {code}; some applications may not have been updated.")
     return problems
+
+
+CONNECT_ATTEMPTS = 3
+CONNECT_RETRY_DELAY = 10
 
 
 def run_update(host, user, name, log_list, repo_only=False, password=None):
@@ -324,11 +329,23 @@ def run_update(host, user, name, log_list, repo_only=False, password=None):
         # Connect to the remote host using SSH key or password authentication
         if password:
             log("Connecting with password authentication...")
-            ssh = ssh_helper.create_client(host, username=user, password=password, timeout=30,
-                        look_for_keys=False, allow_agent=False)
+            connect = functools.partial(ssh_helper.create_client, host, username=user, password=password,
+                                        timeout=30, look_for_keys=False, allow_agent=False)
         else:
             # SSH key authentication (key must be configured beforehand)
-            ssh = ssh_helper.create_client(host, username=user, timeout=30)
+            connect = functools.partial(ssh_helper.create_client, host, username=user, timeout=30)
+        # A host busy installing updates (Windows' sshd in particular) can drop or stall a handshake.
+        for attempt in range(1, CONNECT_ATTEMPTS + 1):
+            try:
+                ssh = connect()
+                break
+            except paramiko.AuthenticationException:
+                raise
+            except (EOFError, TimeoutError, OSError, paramiko.SSHException) as e:
+                if attempt == CONNECT_ATTEMPTS:
+                    raise
+                log(f"Connection attempt {attempt} failed ({str(e) or type(e).__name__}); retrying in {CONNECT_RETRY_DELAY} s...")
+                time.sleep(CONNECT_RETRY_DELAY)
         log(f"Connected to {name}")
         
         # Detect the operating system and distribution
@@ -384,10 +401,7 @@ def run_update(host, user, name, log_list, repo_only=False, password=None):
         stdin, stdout, stderr = ssh.exec_command(update_cmd, get_pty=True)
         
         # Read output in real-time
-        while True:
-            line = stdout.readline()
-            if not line:
-                break
+        for line in ssh_helper.output_lines(stdout):
             log(line.rstrip())
         
         # Check exit status
@@ -418,10 +432,12 @@ def run_update(host, user, name, log_list, repo_only=False, password=None):
         error_occurred = True
         error_details.append(f"SSH error: {str(e)}")
     except Exception as e:
-        error_msg = f"✗ Error updating {name}: {str(e)}"
+        # Timeouts carry no message; name them so the log is never just "Error updating x:".
+        detail = "the host did not answer in time" if isinstance(e, TimeoutError) else (str(e) or type(e).__name__)
+        error_msg = f"✗ Error updating {name}: {detail}"
         log(error_msg)
         error_occurred = True
-        error_details.append(f"Unexpected error: {str(e)}")
+        error_details.append(f"Unexpected error: {detail}")
     finally:
         if ssh:
             ssh.close()
