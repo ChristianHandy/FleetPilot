@@ -97,3 +97,5 @@ def test_terminal_codes_are_stripped_from_update_output():
             "\x1b[?25h\x1b]3008;end=cf4b\x1b\\")
     assert ssh_helper.plain_text(arch) == ':: Starting full system upgrade...'
     assert ssh_helper.plain_text('0% [Working]\r100% [Done]\n') == '100% [Done]'
+    # apk saves and restores the cursor (ESC 7 / ESC 8) around its progress text.
+    assert ssh_helper.plain_text('\x1b7[syncing disks...]\x1b8OK: 206 packages\n') == '[syncing disks...]OK: 206 packages'

@@ -240,7 +240,7 @@ def quick_exec(
 
 # Terminal control sequences that package managers write to a pty: colours (zypper, pacman), cursor moves,
 # and OSC sequences such as systemd's OSC 3008 context markers that sudo emits since systemd 257.
-_TERMINAL_CODES = re.compile(r'\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-?]*[ -/]*[@-~]|\x1b[@-Z\\-_]')
+_TERMINAL_CODES = re.compile(r'\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-?]*[ -/]*[@-~]|\x1b[@-Z\\-_0-9=<>]')
 
 
 def plain_text(line: str) -> str:
