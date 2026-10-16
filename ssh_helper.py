@@ -27,6 +27,11 @@ logger = logging.getLogger(__name__)
 _KNOWN_HOSTS_FILE: Optional[str] = None
 
 
+def _sanitize_for_log(value: object) -> str:
+    """Return a single-line representation safe for plain-text logs."""
+    return str(value).replace("\r", "").replace("\n", "")
+
+
 def init(data_dir: str) -> None:
     """Initialise the SSH helper with the application data directory."""
     global _KNOWN_HOSTS_FILE
@@ -168,7 +173,11 @@ def create_client(
     except (EOFError, paramiko.SSHException) as exc:
         # A busy server (Windows' sshd while installing updates) drops or garbles a handshake now and
         # then; one more try fixes that. Unreachable hosts (OSError, timeouts) are not retried.
-        logger.info("SSH: handshake with %s failed (%s), retrying once", hostname, exc or type(exc).__name__)
+        logger.info(
+            "SSH: handshake with %s failed (%s), retrying once",
+            _sanitize_for_log(hostname),
+            exc or type(exc).__name__,
+        )
         client.close()
         time.sleep(HANDSHAKE_RETRY_DELAY)
         client = _new_client(kh_path)
