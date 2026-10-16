@@ -2726,11 +2726,13 @@ def install_key(name):
             # Windows: OpenSSH reads administrators' keys from ProgramData, not the profile.
             _, probe, _ = ssh.exec_command(windows_host.DETECT_COMMAND, timeout=15)
             if probe.read().decode(errors="replace").strip().lower() == "windows":
+                key_file = None
                 try:
                     _, out, err = ssh.exec_command(windows_host.install_key_command(pubkey), timeout=30)
                     output = out.read().decode(errors="replace")
                     if "installed:" in output:
                         success = True
+                        key_file = output.split("installed:", 1)[1].strip().splitlines()[0]
                     else:
                         error = "Could not install the key: " + (err.read().decode(errors="replace").strip()[-300:]
                                                                  or output.strip()[-300:] or "no answer")
@@ -2738,7 +2740,8 @@ def install_key(name):
                     error = str(e)
                 finally:
                     ssh.close()
-                return render_template("install_key.html", name=name, error=error, success=success)
+                return render_template("install_key.html", name=name, error=error, success=success,
+                                       key_file=key_file)
 
             # Security: Use SFTP to safely write the key file instead of shell commands
             try:

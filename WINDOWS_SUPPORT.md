@@ -8,6 +8,10 @@ Every Windows release that Microsoft still services, as of October 2026. FleetPi
 
 | Release | Editions | Build | Microsoft support ends |
 |---|---|---|---|
+| Windows 11 26H2 | Home, Pro | 26300 | 2028-10-10 |
+| | Enterprise, Education | 26300 | 2029-10-09 |
+| Windows 11 26H1 (only on new Arm devices) | Home, Pro | 28000 | 2028-03-14 |
+| | Enterprise, Education | 28000 | 2029-03-13 |
 | Windows 11 25H2 | Home, Pro | 26200 | 2027-10-12 |
 | | Enterprise, Education | 26200 | 2028-10-10 |
 | Windows 11 24H2 | Enterprise, Education | 26100 | 2027-10-12 |

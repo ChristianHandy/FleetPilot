@@ -26,6 +26,10 @@ class _Channel:
     def recv_exit_status(self):
         return self.session.run()[0]
 
+    def makefile(self, mode="r"):
+        # Like paramiko: a file on the command's stdout.
+        return self.session.run()[1]
+
     def exit_status_ready(self):
         return True
 

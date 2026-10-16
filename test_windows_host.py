@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Windows PCs and servers: version and support status, encoded PowerShell, updates, power, inventory."""
 import base64
+import io
 import json
 import os
 import re
@@ -29,6 +30,15 @@ def info(caption, edition, build, installation='Client', display='', ubr=1000):
 
 
 @pytest.mark.parametrize('fields,name,channel,end,status', [
+    (info('Microsoft Windows 11 Enterprise Evaluation', 'EnterpriseEval', 26300, display='26H2'),
+     'Windows 11 Enterprise Evaluation 26H2', 'General Availability', '2029-10-09', 'supported'),
+    (info('Microsoft Windows 11 Pro', 'Professional', 26300, display='26H2'), 'Windows 11 Pro 26H2',
+     'General Availability', '2028-10-10', 'supported'),
+    (info('Microsoft Windows 11 Home', 'Core', 28000, display='26H1'), 'Windows 11 Home 26H1',
+     'General Availability', '2028-03-14', 'supported'),
+    # Microsoft's evaluation ISOs report the edition with an "Eval" suffix.
+    (info('Microsoft Windows 11 IoT Enterprise LTSC Evaluation', 'IoTEnterpriseSEval', 26100, display='24H2'),
+     'Windows 11 IoT Enterprise LTSC Evaluation 2024', 'Long-Term Servicing Channel', '2034-10-10', 'supported'),
     (info('Microsoft Windows 11 Home', 'Core', 26200, display='25H2'), 'Windows 11 Home 25H2',
      'General Availability', '2027-10-12', 'supported'),
     (info('Microsoft Windows 11 Pro', 'Professional', 26100, display='24H2'), 'Windows 11 Pro 24H2',
@@ -160,20 +170,25 @@ def test_powershell_scripts_parse(tmp_path, name):
 # ── A Windows host behind SSH ────────────────────────────────────────────────
 
 class Channel:
-    def __init__(self, code):
-        self.code = code
+    def __init__(self, code, data=b''):
+        self.code, self.data = code, data
 
     def recv_exit_status(self):
         return self.code
 
+    def makefile(self, mode='r'):
+        return io.BytesIO(self.data)
+
 
 class Stream:
     def __init__(self, text, code=0):
+        data = text if isinstance(text, bytes) else text.encode()
+        text = data.decode('utf-8', errors='replace')
         self.lines = text.splitlines(keepends=True)
-        self.text, self.channel = text, Channel(code)
+        self.text, self.data, self.channel = text, data, Channel(code, data)
 
     def read(self):
-        return self.text.encode()
+        return self.data
 
     def readline(self):
         return self.lines.pop(0) if self.lines else ''
@@ -255,6 +270,34 @@ def test_windows_update_problems_are_reported():
     assert problems == ['Windows Update: 0x80240022', '1 Windows update(s) failed to install']
     assert updater._run_windows_update(WindowsHost(result={}), True, log.append)[0].startswith(
         'Windows Update gave no result')
+
+
+def test_windows_output_in_the_oem_code_page_does_not_end_the_update():
+    # Found on German Server 2022: titles came as code page 850 ("f\x81r" is "für"), and the strict UTF-8
+    # readline raised in the middle of the update. Scripts now write UTF-8, and odd bytes are replaced.
+    class GermanHost(WindowsHost):
+        def exec_command(self, command, timeout=None, get_pty=False):
+            stdin, out, err = super().exec_command(command, timeout, get_pty)
+            if self.scripts and self.scripts[-1].startswith('# fleetpilot:run-as-system'):
+                out = Stream(b'Kumulatives Update f\x81r Windows Server 2022 (KB5066782)\r\n' + out.data)
+            return stdin, out, err
+
+    log = []
+    assert updater._run_windows_update(GermanHost(), True, log.append) == []
+    assert 'Kumulatives Update f\ufffdr Windows Server 2022 (KB5066782)' in log
+    for command in (wh.HW_COMMAND, wh.INFO_COMMAND, wh.update_command(True)):
+        assert _decode(command).split('\n')[1] == wh.UTF8_OUTPUT       # marker line first, then UTF-8 output
+
+
+def test_a_timeout_is_named_in_the_update_log(monkeypatch):
+    # A busy Windows sshd timed out with an empty message: the log read "Error updating w22core:".
+    def slow(*a, **k):
+        raise TimeoutError()
+    monkeypatch.setattr(updater.ssh_helper, 'create_client', slow)
+    monkeypatch.setattr(updater.email_config, 'get_error_notifications_enabled', lambda: False)
+    log = []
+    updater.run_update('192.0.2.80', 'Administrator', 'w22core', log)
+    assert any(line.endswith('✗ Error updating w22core: the host did not answer in time') for line in log)
 
 
 def test_run_update_detects_windows_in_any_ssh_shell(monkeypatch):

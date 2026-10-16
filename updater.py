@@ -257,7 +257,7 @@ def _run_windows_update(ssh, repo_only, log):
     log("Installing Windows updates (as SYSTEM, through a one-off scheduled task)...")
     _, out, err = ssh.exec_command(windows_host.update_command(install=True), timeout=None)
     result = None
-    for line in iter(out.readline, ''):
+    for line in ssh_helper.output_lines(out):
         parsed = windows_host.parse_result(line)
         if parsed is not None:
             result = parsed
@@ -279,7 +279,7 @@ def _run_windows_update(ssh, repo_only, log):
     if not repo_only:
         log("Updating applications with winget...")
         _, out, _ = ssh.exec_command(windows_host.WINGET_COMMAND, timeout=None)
-        for line in iter(out.readline, ''):
+        for line in ssh_helper.output_lines(out):
             if line.strip():
                 log(line.rstrip())
         code = out.channel.recv_exit_status()
@@ -384,10 +384,7 @@ def run_update(host, user, name, log_list, repo_only=False, password=None):
         stdin, stdout, stderr = ssh.exec_command(update_cmd, get_pty=True)
         
         # Read output in real-time
-        while True:
-            line = stdout.readline()
-            if not line:
-                break
+        for line in ssh_helper.output_lines(stdout):
             log(line.rstrip())
         
         # Check exit status
@@ -418,10 +415,12 @@ def run_update(host, user, name, log_list, repo_only=False, password=None):
         error_occurred = True
         error_details.append(f"SSH error: {str(e)}")
     except Exception as e:
-        error_msg = f"✗ Error updating {name}: {str(e)}"
+        # Timeouts carry no message; name them so the log is never just "Error updating x:".
+        detail = "the host did not answer in time" if isinstance(e, TimeoutError) else (str(e) or type(e).__name__)
+        error_msg = f"✗ Error updating {name}: {detail}"
         log(error_msg)
         error_occurred = True
-        error_details.append(f"Unexpected error: {str(e)}")
+        error_details.append(f"Unexpected error: {detail}")
     finally:
         if ssh:
             ssh.close()

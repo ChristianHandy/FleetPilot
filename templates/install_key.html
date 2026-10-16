@@ -42,7 +42,7 @@
     <div class="card-header">
       <h2>SSH Key Installed Successfully</h2>
     </div>
-    <p>Public key installed into <code>~/.ssh/authorized_keys</code> on the remote host. Passwordless authentication is now available.</p>
+    <p>Public key installed into <code>{{ key_file or "~/.ssh/authorized_keys" }}</code> on the remote host. Passwordless authentication is now available.</p>
     <a class="btn btn-primary btn-sm" href="/hosts" style="margin-top:0.75rem;">&#x2190; Back to Hosts</a>
   </div>
   {% else %}

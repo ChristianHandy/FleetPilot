@@ -25,8 +25,18 @@ WORK_DIR = r'C:\ProgramData\FleetPilot'
 RESULT_MARKER = '@@fp:result '
 
 
+# Console output is in the OEM code page by default (850 on German Windows: "ü" is byte 0x81). UTF-8 without a BOM
+# keeps update titles and adapter names intact and leaves the first line ("windows") unprefixed.
+UTF8_OUTPUT = '[Console]::OutputEncoding = New-Object Text.UTF8Encoding'
+
+
 def ps(script: str) -> str:
-    """A command line that runs ``script`` in Windows PowerShell from cmd.exe or PowerShell."""
+    """A command line that runs ``script`` in Windows PowerShell from cmd.exe or PowerShell, writing UTF-8."""
+    first, newline, rest = script.partition('\n')
+    if first.startswith('# fleetpilot:'):      # keep the marker line first (the demo lab dispatches on it)
+        script = f'{first}\n{UTF8_OUTPUT}\n{rest}'
+    else:
+        script = f'{UTF8_OUTPUT}\n{script}'
     return POWERSHELL + base64.b64encode(script.encode('utf-16-le')).decode('ascii')
 
 
@@ -52,6 +62,8 @@ REBOOT_COMMAND = 'shutdown /r /t 30 /c "FleetPilot restart"'
 # End of servicing from Microsoft's lifecycle pages, checked October 2026. Windows
 # 10/11 feature updates: (version, end for Home/Pro, end for Enterprise/Education).
 CLIENT = {
+    28000: ('26H1', date(2028, 3, 14), date(2029, 3, 13)),   # new Arm devices only
+    26300: ('26H2', date(2028, 10, 10), date(2029, 10, 9)),
     26200: ('25H2', date(2027, 10, 12), date(2028, 10, 10)),
     26100: ('24H2', date(2026, 10, 13), date(2027, 10, 12)),
     22631: ('23H2', date(2025, 11, 11), date(2026, 11, 10)),
@@ -99,7 +111,7 @@ def identify(info: Dict, today: Optional[date] = None) -> Dict:
     installation = str(info.get('installation') or '')
     caption = str(info.get('caption') or 'Windows').replace('Microsoft ', '').strip()
     server = installation.lower().startswith('server') or edition.startswith('Server')
-    ltsc = not server and re.fullmatch(r'(IoT)?EnterpriseS[NK]?', edition) is not None   # LTSC/LTSB editions
+    ltsc = not server and re.fullmatch(r'(IoT)?EnterpriseS[NK]?(Eval)?', edition) is not None   # LTSC/LTSB editions, also evaluations
     iot = edition.startswith('IoT')
     # Windows 11 still writes "Windows 10" into the registry; the build tells them apart.
     if not server and build >= 22000:
@@ -130,7 +142,9 @@ def identify(info: Dict, today: Optional[date] = None) -> Dict:
         status = 'ending'
     else:
         status = 'supported'
-    name = caption if not release or release in caption else f'{caption} {release}'
+    # Append the release unless the caption already names it ("... LTSC Evaluation" + "LTSC 2024" -> "... 2024").
+    missing = ' '.join(word for word in release.split() if word not in caption.split())
+    name = f'{caption} {missing}' if missing else caption
     if installation == 'Server Core':
         name += ' (Server Core)'
     return {
@@ -205,15 +219,21 @@ $ErrorActionPreference = 'Stop'
 $dir = 'C:\ProgramData\FleetPilot'
 $script = Join-Path $dir 'update.ps1'; $log = Join-Path $dir 'update.log'; $json = Join-Path $dir 'update.json'
 $b64 = Join-Path $dir 'update.b64'
-[IO.File]::WriteAllBytes($script, [Convert]::FromBase64String([IO.File]::ReadAllText($b64)))
-Remove-Item $b64, $log, $json -ErrorAction SilentlyContinue
 $task = 'FleetPilot Windows Update'
-$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}" -Mode __MODE__ -Dir "{1}"' -f $script, $dir)
-$principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes __MINUTES__)
-Register-ScheduledTask -TaskName $task -Action $action -Principal $principal -Settings $settings -Force | Out-Null
+# A run whose SSH session was lost keeps going as SYSTEM: follow it instead of starting a second one.
+if ((Get-ScheduledTask -TaskName $task -ErrorAction SilentlyContinue).State -eq 'Running') {
+  Write-Output 'A Windows Update started earlier by FleetPilot is still running; following it.'
+  Remove-Item $b64 -ErrorAction SilentlyContinue
+} else {
+  [IO.File]::WriteAllBytes($script, [Convert]::FromBase64String([IO.File]::ReadAllText($b64)))
+  Remove-Item $b64, $log, $json -ErrorAction SilentlyContinue
+  $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}" -Mode __MODE__ -Dir "{1}"' -f $script, $dir)
+  $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+  $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes __MINUTES__)
+  Register-ScheduledTask -TaskName $task -Action $action -Principal $principal -Settings $settings -Force | Out-Null
+}
 try {
-  Start-ScheduledTask -TaskName $task
+  if ((Get-ScheduledTask -TaskName $task).State -ne 'Running') { Start-ScheduledTask -TaskName $task }
   $shown = 0; $deadline = (Get-Date).AddMinutes(__MINUTES__)
   while ($true) {
     Start-Sleep -Seconds 3
@@ -287,7 +307,7 @@ $ErrorActionPreference = 'SilentlyContinue'
 $os = Get-CimInstance Win32_OperatingSystem; $cs = Get-CimInstance Win32_ComputerSystem
 $cpu = @(Get-CimInstance Win32_Processor); $bb = Get-CimInstance Win32_BaseBoard; $bios = Get-CimInstance Win32_BIOS
 $up = (Get-Date) - $os.LastBootUpTime; $total = [int64]$os.TotalVisibleMemorySize; $free = [int64]$os.FreePhysicalMemory
-$ram = Get-CimInstance Win32_PhysicalMemory | ForEach-Object { '{0} GB {1} MHz {2} {3}' -f ($_.Capacity / 1GB), $_.Speed, $_.Manufacturer, "$($_.PartNumber)".Trim() }
+$ram = Get-CimInstance Win32_PhysicalMemory | ForEach-Object { ('{0} GB {1} MHz {2} {3}' -f ($_.Capacity / 1GB), $_.Speed, $_.Manufacturer, $_.PartNumber -replace '  MHz').Trim() }
 $info = [ordered]@{
   platform = 'windows'; os = $os.Caption -replace '^Microsoft ', ''; kernel = $os.Version; hostname = $env:COMPUTERNAME
   uptime = '{0}d {1}h {2}m' -f $up.Days, $up.Hours, $up.Minutes; arch = $os.OSArchitecture
@@ -297,19 +317,19 @@ $info = [ordered]@{
   memory = [ordered]@{ total_kb = "$total"; free_kb = "$free"; used_kb = "$($total - $free)"
     used_pct = "$([math]::Round(($total - $free) * 100 / [math]::Max($total, 1), 1))"; slots_raw = ($ram -join "`n") }
   motherboard = [ordered]@{ manufacturer = $bb.Manufacturer; product = $bb.Product; version = $bb.Version
-    bios_vendor = $bios.Manufacturer; bios_version = $bios.SMBIOSBIOSVersion; bios_date = "$($bios.ReleaseDate)" }
+    bios_vendor = $bios.Manufacturer; bios_version = $bios.SMBIOSBIOSVersion; bios_date = '{0:MM\/dd\/yyyy}' -f $bios.ReleaseDate }
   gpus = @(Get-CimInstance Win32_VideoController | ForEach-Object { [ordered]@{ vendor = $_.AdapterCompatibility
     name = $_.Name; driver = $_.DriverVersion; vram_total_mb = "$([math]::Round($_.AdapterRAM / 1MB))" } })
   network = @(Get-NetAdapter -Physical | ForEach-Object {
     $ips = @(Get-NetIPAddress -InterfaceIndex $_.ifIndex)
-    [ordered]@{ name = $_.Name; mac = $_.MacAddress; speed_mbps = "$([math]::Round($_.Speed / 1e6))"
+    [ordered]@{ name = $_.Name; mac = $_.MacAddress -replace '-', ':'; speed_mbps = "$([math]::Round($_.Speed / 1e6))"
       state = "$($_.Status)".ToLower(); driver = $_.InterfaceDescription
       ipv4 = (($ips | Where-Object AddressFamily -eq 'IPv4').IPAddress -join ', ')
       ipv6 = (($ips | Where-Object { $_.AddressFamily -eq 'IPv6' -and $_.IPAddress -notlike 'fe80*' }).IPAddress -join ', ') } })
   disks = @(Get-PhysicalDisk | ForEach-Object { [ordered]@{ name = "PhysicalDrive$($_.DeviceId)"
     size = '{0:N0} GB' -f ($_.Size / 1GB); model = $_.FriendlyName; serial = "$($_.SerialNumber)".Trim()
     transport = "$($_.BusType)"; rotational = ("$($_.MediaType)" -eq 'HDD'); health = "$($_.HealthStatus)"
-    type = $(if ("$($_.BusType)" -eq 'NVMe') { 'NVMe' } elseif ("$($_.MediaType)" -eq 'HDD') { 'HDD' } else { 'SSD' }) } })
+    type = $(if ("$($_.BusType)" -eq 'NVMe') { 'NVMe' } else { "$($_.MediaType)" -replace 'Unspecified' }) } })
   virtualization = $(if ($cs.Model -match 'Virtual|VMware|KVM|QEMU|Standard PC') { $cs.Model } else { 'bare-metal' })
 }
 $info | ConvertTo-Json -Depth 4 -Compress

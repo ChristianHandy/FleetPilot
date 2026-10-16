@@ -141,6 +141,9 @@ def create_client(
         "port": port,
         "username": username,
         "timeout": timeout,
+        # paramiko waits only 15 s for the server's banner by default; a busy Windows sshd can take longer.
+        "banner_timeout": max(timeout, 15),
+        "auth_timeout": max(timeout, 30),
         "allow_agent": bool(allow_agent),
         "look_for_keys": (key_filename is None) if look_for_keys is None else bool(look_for_keys),
     }
@@ -203,3 +206,10 @@ def quick_exec(
         return exec_command(client, command, timeout=cmd_timeout)
     finally:
         client.close()
+
+
+def output_lines(stdout):
+    """Yield an SSH command's output line by line, decoded leniently (one stray byte must not end an update)."""
+    raw = stdout.channel.makefile('rb')
+    for line in iter(raw.readline, b''):
+        yield line.decode('utf-8', errors='replace')
