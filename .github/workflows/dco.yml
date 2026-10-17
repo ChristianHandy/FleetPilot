@@ -31,13 +31,39 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
+          # Commit data goes into workflow commands: escape % (and with it %0A) so it stays plain text.
+          esc() { printf '%s' "$1" | sed 's/%/%25/g'; }
+          # The commit the branch started from: the contributor has it locally, unlike the current main.
+          base="$(git rev-parse --short "$(git merge-base "$BASE" "$HEAD")")"
           missing=0
           for commit in $(git rev-list --no-merges "$BASE..$HEAD"); do
             author="$(git log -1 --format='%an <%ae>' "$commit")"
             case "$author" in *"[bot]"*) continue ;; esac
-            if ! git log -1 --format='%(trailers:key=Signed-off-by,valueonly)' "$commit" | grep -qxF "$author"; then
-              echo "::error::$(git log -1 --format='%h %s' "$commit"): missing 'Signed-off-by: $author'. Amend with: git commit --amend -s"
-              missing=1
+            signoffs="$(git log -1 --format='%(trailers:key=Signed-off-by,valueonly)' "$commit" | sed '/^$/d')"
+            if printf '%s\n' "$signoffs" | grep -qxF "$author"; then
+              continue
             fi
+            missing=1
+            title="DCO: $(git log -1 --format='%h %s' "$commit")"
+            if [ -z "$signoffs" ]; then
+              msg="This commit has no Signed-off-by line.%0A%0A"
+              msg+="Last commit: git commit --amend --no-edit -s%0A"
+              msg+="Several commits: git rebase --signoff $base%0A"
+              msg+="Then: git push --force-with-lease"
+            else
+              msg="Signed off as:  $(esc "$(printf '%s' "$signoffs" | head -1)")%0A"
+              msg+="Commit author:  $(esc "$author")%0A"
+              msg+="Both must be the same name and email address. Either:%0A%0A"
+              msg+="1. Make the author match the sign-off: set git config user.name and user.email to the"
+              msg+=" signed-off name and address, then run git commit --amend --no-edit --reset-author"
+              msg+=" (several commits: git rebase --exec 'git commit --amend --no-edit --reset-author' $base)%0A"
+              msg+="2. Or sign off with the author's address: git commit --amend --no-edit"
+              msg+=" --trailer \"Signed-off-by: $(esc "$author")\"%0A%0A"
+              msg+="Then: git push --force-with-lease"
+            fi
+            echo "::error title=$(esc "$title" | tr -d ',:')::$msg"
           done
+          if [ "$missing" = 1 ]; then
+            echo "Every commit needs 'Signed-off-by: Name <email>' matching its author; see CONTRIBUTING.md (Sign-off)."
+          fi
           exit "$missing"
