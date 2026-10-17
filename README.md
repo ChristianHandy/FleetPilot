@@ -190,6 +190,18 @@ This component was previously the separate `HAOS_SMART_Monitor` repository. The 
 
 ---
 
+## How much of FleetPilot is written by AI?
+
+<img src="https://christianhandy.github.io/FleetPilot/ai-share.svg" alt="Bar chart: share of changed lines per month that were written with AI assistance. The current values are listed at https://christianhandy.github.io/FleetPilot/ai-share.json" width="100%">
+
+**Too much, and this number needs to be as low as we can get.** Most of FleetPilot so far was written with AI coding assistants (GitHub Copilot, Manus, Claude). Every change goes through the same tests, CodeQL, fuzzing and review. But software that holds the keys to your servers should be written and reviewed by people, and that's the goal of the [roadmap](ROADMAP.md#project-more-people-less-ai-written-code).
+
+The chart counts the lines each commit changed, per month, and marks a commit as AI-assisted when its author is a coding agent or its message names an AI co-author. Dependency bots are left out. It's a lower bound: AI help that isn't declared isn't counted. It's rebuilt daily from the git history by [`scripts/ai_share.py`](scripts/ai_share.py).
+
+**You can help push it down:** pick a [good first issue](https://github.com/ChristianHandy/FleetPilot/labels/good%20first%20issue), review a pull request, or [translate FleetPilot](https://github.com/ChristianHandy/FleetPilot/labels/translation).
+
+---
+
 ## Contributing
 
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
