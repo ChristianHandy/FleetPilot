@@ -18,6 +18,7 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ### Added
 
+- **Translation report:** `python scripts/missing_translations.py` lists untranslated literal template strings and per-language totals without starting the application; `--lang` checks one language.
 - **Windows PCs and servers, every release Microsoft still supports**, all over OpenSSH (see [WINDOWS_SUPPORT.md](WINDOWS_SUPPORT.md)):
   - covers Windows 11 up to 26H2, Windows 10/11 LTSC 2019/2021/2024 (including IoT and evaluation editions) and Windows Server 2016, 2019, 2022 and 2025 (Desktop or Core), in any display language
   - **Detect OS** names the exact release and edition and shows Microsoft's support end date; the host list warns about ended support
