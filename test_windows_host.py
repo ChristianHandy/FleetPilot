@@ -222,7 +222,8 @@ class WindowsHost:
         elif marker == '# fleetpilot:windows-info':
             out = json.dumps(self.info) + '\r\n'
         elif marker == '# fleetpilot:upload':
-            return None, Stream('', self.upload_code), Stream('Access to the path is denied.\r\n')
+            denied = 'Access to the path is denied.\r\n' if self.upload_code != -1 else ''
+            return None, Stream('', self.upload_code), Stream(denied)
         elif marker == '# fleetpilot:run-as-system':
             out = 'Searching for updates...\r\nFound 2 update(s).\r\nInstalling...\r\n'
             if self.result:
@@ -268,6 +269,10 @@ def test_windows_update_problems_are_reported():
     assert not any('fleetpilot:winget' in s for s in host.scripts)          # repository-only: no winget
     assert updater._run_windows_update(WindowsHost(upload_code=1), True, log.append) == [
         'Could not prepare Windows Update (Access to the path is denied.). The SSH account must be an administrator.']
+    # Server 2025 restarted to finish servicing and closed the session without an exit status: not a rights problem.
+    assert updater._run_windows_update(WindowsHost(upload_code=-1), True, log.append) == [
+        'Could not prepare Windows Update: the connection ended unexpectedly. '
+        'Windows may be restarting; run the update again in a few minutes.']
     failed = dict(WindowsHost().result, failed=1, error='0x80240022')
     problems = updater._run_windows_update(WindowsHost(result=failed), True, log.append)
     assert problems == ['Windows Update: 0x80240022', '1 Windows update(s) failed to install']
@@ -279,6 +284,8 @@ def test_windows_update_problems_are_reported():
         'Windows Update: still installing after 120 minutes. Windows continues ...']
     runner = _decode(wh.update_command(True))
     assert 'Stop-ScheduledTask' not in runner and '-Hours 24' in runner
+    # Server 2025 restarted itself to finish servicing, which ended the task with SCHED_S_TASK_TERMINATED.
+    assert '-eq 0x41306' in runner and 'Windows probably restarted' in runner
 
 
 def test_windows_output_in_the_oem_code_page_does_not_end_the_update():
@@ -333,6 +340,17 @@ def test_a_timeout_is_named_in_the_update_log(monkeypatch):
     assert any(line.endswith('✗ Error updating w22core: the host did not answer in time') for line in log)
 
 
+def test_banner_error_says_why_the_ssh_server_dropped_the_connection():
+    # Windows 11 and Server 2025 ran out of memory and left sshd-auth processes behind; sshd then reset new
+    # connections before its banner, and FleetPilot logged paramiko's "Error reading SSH protocol banner".
+    import paramiko
+    import ssh_helper
+    exc = paramiko.SSHException('Error reading SSH protocol banner[Errno 104] Connection reset by peer')
+    assert ssh_helper.describe_error(exc) == ('the SSH server closed the connection without answering '
+                                              '(it is overloaded, out of memory, or has too many logins waiting)')
+    assert ssh_helper.describe_error(paramiko.SSHException('No existing session')) == 'No existing session'
+
+
 def test_create_client_retries_one_dropped_handshake_but_not_bad_credentials(tmp_path, monkeypatch):
     # Windows' sshd answered "No existing session" to FleetPilot's shutdown while finishing a restart.
     import paramiko
@@ -354,6 +372,21 @@ def test_create_client_retries_one_dropped_handshake_but_not_bad_credentials(tmp
     with pytest.raises(paramiko.AuthenticationException):
         ssh_helper.create_client('192.0.2.84', known_hosts_path=str(tmp_path / 'kh'))
     assert calls.count('auth') == 1
+
+
+def test_connections_send_keepalives(tmp_path, monkeypatch):
+    # Windows 11's firewall began dropping SSH packets during an update; without traffic FleetPilot waited forever.
+    import paramiko
+    import ssh_helper
+    intervals = []
+
+    class Transport:
+        def set_keepalive(self, seconds):
+            intervals.append(seconds)
+    monkeypatch.setattr(paramiko.SSHClient, 'connect', lambda self, **kw: None)
+    monkeypatch.setattr(paramiko.SSHClient, 'get_transport', lambda self: Transport())
+    ssh_helper.create_client('192.0.2.85', known_hosts_path=str(tmp_path / 'kh'))
+    assert intervals == [30]
 
 
 def test_install_key_names_an_error_without_a_message(operator, monkeypatch):
@@ -382,6 +415,22 @@ def test_a_dropped_handshake_is_retried(monkeypatch):
     updater.run_update('192.0.2.80', 'Administrator', 'w22gui', log, repo_only=True)
     assert len(attempts) == 3 and any('Connection attempt 1 failed (EOFError); retrying' in line for line in log)
     assert any('Update completed successfully for w22gui' in line for line in log)
+
+
+def test_an_update_names_why_the_ssh_server_dropped_it(monkeypatch):
+    # Server 2025's sshd reset every connection before its banner (MaxStartups); the log showed paramiko's text.
+    import paramiko
+    def refused(*a, **k):
+        raise paramiko.SSHException('Error reading SSH protocol banner[Errno 104] Connection reset by peer')
+    monkeypatch.setattr(updater.ssh_helper, 'create_client', refused)
+    monkeypatch.setattr(updater.time, 'sleep', lambda s: None)
+    monkeypatch.setattr(updater.email_config, 'get_error_notifications_enabled', lambda: False)
+    log = []
+    updater.run_update('192.0.2.81', 'Administrator', 'w25gui', log, repo_only=True)
+    assert any(line.endswith('✗ SSH error connecting to w25gui: the SSH server closed the connection without '
+                             'answering (it is overloaded, out of memory, or has too many logins waiting)')
+               for line in log)
+    assert not any('protocol banner' in line for line in log)
 
 
 def test_run_update_detects_windows_in_any_ssh_shell(monkeypatch):
