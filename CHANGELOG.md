@@ -52,7 +52,7 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ### Fixed
 
-- An SSH server that closes the connection before greeting is reported as overloaded, out of memory or with too many logins waiting, not as paramiko's "Error reading SSH protocol banner". [WINDOWS_SUPPORT.md](WINDOWS_SUPPORT.md) explains the cause seen on Windows 11 and Server 2025: low memory, and `sshd-auth.exe` processes that OpenSSH 10.0 for Windows leaves behind.
+- An SSH server that closes the connection before greeting is reported as overloaded, out of memory or with too many logins waiting, not as paramiko's "Error reading SSH protocol banner". [WINDOWS_SUPPORT.md](WINDOWS_SUPPORT.md) explains the cause seen on Windows 11 and Server 2025: low memory, and `sshd-auth.exe` processes that OpenSSH 10.0 for Windows leaves behind. A Windows Update that Windows ends by restarting (task result 0x41306) now says so.
 - Windows hosts were detected as Linux, could not be shut down (FleetPilot sent the Linux `shutdown -h now`), and updates failed when the SSH shell was PowerShell or the PowerShell Gallery was unreachable.
 - Editing a host dropped every field the form does not show (custom image, reachability state, detected OS) and, when it was renamed, its last-update and last-seen times.
 - **HW Monitor never collected live metrics:** the collector script sent to each host had broken indentation since an earlier clean-up, so it failed on every host and every server showed as unreachable. A test now runs the script.

@@ -263,7 +263,9 @@ try {
       Start-Sleep -Seconds 3
       if (-not (Test-Path $json)) {
         $code = (Get-ScheduledTaskInfo -TaskName $task -ErrorAction SilentlyContinue).LastTaskResult
-        throw ('Windows Update stopped without a result (task result 0x{0:X}).' -f [int64]$code)
+        # 0x41306 (SCHED_S_TASK_TERMINATED): the task was ended, typically by Windows restarting to finish servicing.
+        $why = if ([int64]$code -eq 0x41306) { ' Windows probably restarted; run the update again.' } else { '' }
+        throw ('Windows Update stopped without a result (task result 0x{0:X}).{1}' -f [int64]$code, $why)
       }
     }
   }

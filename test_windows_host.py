@@ -279,6 +279,8 @@ def test_windows_update_problems_are_reported():
         'Windows Update: still installing after 120 minutes. Windows continues ...']
     runner = _decode(wh.update_command(True))
     assert 'Stop-ScheduledTask' not in runner and '-Hours 24' in runner
+    # Server 2025 restarted itself to finish servicing, which ended the task with SCHED_S_TASK_TERMINATED.
+    assert '-eq 0x41306' in runner and 'Windows probably restarted' in runner
 
 
 def test_windows_output_in_the_oem_code_page_does_not_end_the_update():
