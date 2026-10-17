@@ -333,6 +333,17 @@ def test_a_timeout_is_named_in_the_update_log(monkeypatch):
     assert any(line.endswith('✗ Error updating w22core: the host did not answer in time') for line in log)
 
 
+def test_banner_error_says_why_the_ssh_server_dropped_the_connection():
+    # Windows 11 and Server 2025 ran out of memory and left sshd-auth processes behind; sshd then reset new
+    # connections before its banner, and FleetPilot logged paramiko's "Error reading SSH protocol banner".
+    import paramiko
+    import ssh_helper
+    exc = paramiko.SSHException('Error reading SSH protocol banner[Errno 104] Connection reset by peer')
+    assert ssh_helper.describe_error(exc) == ('the SSH server closed the connection without answering '
+                                              '(it is overloaded, out of memory, or has too many logins waiting)')
+    assert ssh_helper.describe_error(paramiko.SSHException('No existing session')) == 'No existing session'
+
+
 def test_create_client_retries_one_dropped_handshake_but_not_bad_credentials(tmp_path, monkeypatch):
     # Windows' sshd answered "No existing session" to FleetPilot's shutdown while finishing a restart.
     import paramiko
