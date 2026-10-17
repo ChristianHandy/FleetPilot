@@ -171,6 +171,7 @@ def create_client(
     try:
         client.connect(**connect_kwargs)
     except (paramiko.AuthenticationException, paramiko.BadHostKeyException):
+        client.close()
         raise
     except (EOFError, paramiko.SSHException) as exc:
         # A busy server (Windows' sshd while installing updates) drops or garbles a handshake now and
@@ -183,7 +184,15 @@ def create_client(
         client.close()
         time.sleep(HANDSHAKE_RETRY_DELAY)
         client = _new_client(kh_path)
-        client.connect(**connect_kwargs)
+        try:
+            client.connect(**connect_kwargs)
+        except BaseException:
+            client.close()
+            raise
+    except BaseException:
+        # Timeouts and unreachable hosts: a half-open client would keep its socket (and a Windows sshd slot) open.
+        client.close()
+        raise
     transport = client.get_transport()
     if transport is not None:
         # Without traffic a long wait (a Windows Update) never notices a host that vanished, for example behind a

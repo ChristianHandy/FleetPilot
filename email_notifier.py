@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 # Port 465 speaks TLS from the first byte (implicit TLS); the others use STARTTLS or plain SMTP.
 SMTPS_PORT = 465
 SMTP_TIMEOUT = 20  # seconds
+SMTP_TIMEOUT = 20
+
 
 def send_email(subject, body, html_body=None):
     """
@@ -65,6 +67,19 @@ def send_email(subject, body, html_body=None):
         with server:
             if port != SMTPS_PORT and settings.get("smtp_use_tls", True):
                 server.starttls(context=context)
+        # Connect to SMTP server and send
+        host = settings['smtp_server']
+        port = int(settings['smtp_port'])
+        if port == 465:
+            conn = smtplib.SMTP_SSL(
+                host, port, context=ssl.create_default_context(), timeout=SMTP_TIMEOUT
+            )
+        else:
+            conn = smtplib.SMTP(host, port, timeout=SMTP_TIMEOUT)
+
+        with conn as server:
+            if port != 465 and settings.get("smtp_use_tls", True):
+                server.starttls(context=ssl.create_default_context())
 
             # Login if credentials provided
             if settings.get("smtp_username") and settings.get("smtp_password"):

@@ -80,13 +80,10 @@ def execute_remote_command(host, port, username, command):
     a known_hosts file.
     """
     try:
-        ssh = ssh_helper.create_client(host, port=port, username=username, timeout=10)
-        
-        stdin, stdout, stderr = ssh.exec_command(command)
-        output = stdout.read().decode('utf-8')
-        error = stderr.read().decode('utf-8')
-        
-        ssh.close()
+        with ssh_helper.create_client(host, port=port, username=username, timeout=10) as ssh:
+            stdin, stdout, stderr = ssh.exec_command(command)
+            output = stdout.read().decode('utf-8')
+            error = stderr.read().decode('utf-8')
         
         if error:
             return None, error

@@ -186,27 +186,25 @@ def init_db(data_dir):
 
 def ssh_run(ip, port, user, pw, cmd, timeout=12):
     try:
-        c = ssh_helper.create_client(
+        with ssh_helper.create_client(
             hostname=ip, port=int(port), username=user, password=pw, timeout=8
-        )
-        _, stdout, _ = c.exec_command(cmd, timeout=timeout)
-        out = stdout.read().decode("utf-8", errors="replace").strip()
-        c.close()
+        ) as c:
+            _, stdout, _ = c.exec_command(cmd, timeout=timeout)
+            out = stdout.read().decode("utf-8", errors="replace").strip()
         return True, out
     except Exception as e:
         return False, safe_errors.public_error(e, 'SSH command')
 
 def ssh_run_script(ip, port, user, pw, script_content, timeout=15):
     try:
-        c = ssh_helper.create_client(
-            hostname=ip, port=port, username=user, password=pw,
-                  timeout=8, allow_agent=False, look_for_keys=False)
-        # Feed the script on stdin so nothing is written to a shared /tmp path.
-        stdin, stdout, _ = c.exec_command("python3 -", timeout=timeout)
-        stdin.write(script_content)
-        stdin.channel.shutdown_write()
-        out = stdout.read().decode("utf-8", errors="replace").strip()
-        c.close()
+        with ssh_helper.create_client(
+                hostname=ip, port=port, username=user, password=pw,
+                timeout=8, allow_agent=False, look_for_keys=False) as c:
+            # Feed the script on stdin so nothing is written to a shared /tmp path.
+            stdin, stdout, _ = c.exec_command("python3 -", timeout=timeout)
+            stdin.write(script_content)
+            stdin.channel.shutdown_write()
+            out = stdout.read().decode("utf-8", errors="replace").strip()
         return True, out
     except Exception as e:
         return False, safe_errors.public_error(e, 'SSH command')
