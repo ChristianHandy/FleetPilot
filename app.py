@@ -6514,9 +6514,11 @@ def api_host_metrics():
                "ld=open('/proc/loadavg').read().split()[:3];"
                "print(f'{cpu}|{ram}|{upstr}|{ld[0]} {ld[1]} {ld[2]}')"
                "\" 2>/dev/null")
-        _, stdout, _ = client.exec_command(cmd, timeout=10)
-        out = stdout.read().decode().strip()
-        client.close()
+        try:
+            _, stdout, _ = client.exec_command(cmd, timeout=10)
+            out = stdout.read().decode().strip()
+        finally:
+            client.close()
         parts = out.split('|')
         if len(parts) >= 4:
             return jsonify({
@@ -6648,11 +6650,13 @@ def host_shutdown(name):
         if sudo and os_type != 'windows':
             cmd = f'{linux_distro.ELEVATE}; {cmd}'
         
-        stdin, stdout, stderr = client.exec_command(cmd, timeout=10)
-        exit_code = stdout.channel.recv_exit_status()
-        detail = (windows_host.error_text(stderr.read().decode(errors='replace')) or
-                  stdout.read().decode(errors='replace').strip())
-        client.close()
+        try:
+            stdin, stdout, stderr = client.exec_command(cmd, timeout=10)
+            exit_code = stdout.channel.recv_exit_status()
+            detail = (windows_host.error_text(stderr.read().decode(errors='replace')) or
+                      stdout.read().decode(errors='replace').strip())
+        finally:
+            client.close()
 
         app.logger.info('SSH shutdown sent to %s (%s), exit_code=%s', safe_errors.log_text(name),
                         safe_errors.log_text(ssh_host), exit_code)

@@ -343,20 +343,18 @@ class HwInfoCollector:
                 connect_kwargs['key_filename'] = ssh_key
             elif password:
                 connect_kwargs['password'] = password
-            client = ssh_helper.create_client(**connect_kwargs)
-
-            _, probe, _ = client.exec_command(windows_host.DETECT_COMMAND, timeout=15)
-            if probe.read().decode(errors='replace').strip().lower() == 'windows':
-                _, stdout, _ = client.exec_command(windows_host.HW_COMMAND, timeout=60)
-            else:
-                # Feed the collection script on stdin so nothing is written to a shared /tmp path.
-                stdin, stdout, stderr = client.exec_command(
-                    'python3 - 2>/dev/null', timeout=30
-                )
-                stdin.write(_COLLECT_SCRIPT)
-                stdin.channel.shutdown_write()
-            output = stdout.read().decode(errors='replace').strip()
-            client.close()
+            with ssh_helper.create_client(**connect_kwargs) as client:
+                _, probe, _ = client.exec_command(windows_host.DETECT_COMMAND, timeout=15)
+                if probe.read().decode(errors='replace').strip().lower() == 'windows':
+                    _, stdout, _ = client.exec_command(windows_host.HW_COMMAND, timeout=60)
+                else:
+                    # Feed the collection script on stdin so nothing is written to a shared /tmp path.
+                    stdin, stdout, stderr = client.exec_command(
+                        'python3 - 2>/dev/null', timeout=30
+                    )
+                    stdin.write(_COLLECT_SCRIPT)
+                    stdin.channel.shutdown_write()
+                output = stdout.read().decode(errors='replace').strip()
 
             if not output:
                 return {'error': 'No output from collection script'}

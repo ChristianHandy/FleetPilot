@@ -247,6 +247,12 @@ class WindowsHost:
     def close(self):
         self.closed = True
 
+    def __enter__(self):          # like paramiko.SSHClient
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
 
 def test_windows_update_installs_as_system_then_runs_winget():
     host, log = WindowsHost(winget='Successfully installed Mozilla.Firefox'), []
@@ -537,3 +543,36 @@ def test_ssh_key_goes_where_windows_openssh_reads_it(operator, monkeypatch):
     for bad in ("ssh-ed25519 AAAA' ; Remove-Item C:\\ -Recurse ; '", 'not a key', ''):
         with pytest.raises(ValueError):
             wh.install_key_command(bad)
+
+
+def test_ssh_clients_are_closed_when_connecting_or_reading_fails(tmp_path, monkeypatch):
+    # The hardware monitor polled Server 2025 every few seconds; each timed-out read left the client open until
+    # FleetPilot held 193 connections and Windows' sshd refused all others ("Exceeded MaxStartups").
+    import socket
+    import paramiko
+    import hw_monitor
+    import ssh_helper
+    closed = []
+    monkeypatch.setattr(paramiko.SSHClient, 'close', lambda self: closed.append(self))
+
+    def unreachable(self, **kw):
+        raise socket.timeout('timed out')
+    monkeypatch.setattr(paramiko.SSHClient, 'connect', unreachable)
+    with pytest.raises(socket.timeout):
+        ssh_helper.create_client('192.0.2.86', known_hosts_path=str(tmp_path / 'kh'))
+    assert len(closed) == 1
+
+    class SlowClient:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            closed.append(self)
+
+        def exec_command(self, *a, **k):
+            raise socket.timeout('read timed out')
+    monkeypatch.setattr(hw_monitor.ssh_helper, 'create_client', lambda **kw: SlowClient())
+    closed.clear()
+    assert hw_monitor.ssh_run('192.0.2.86', 22, 'root', None, 'uptime')[0] is False
+    assert hw_monitor.ssh_run_script('192.0.2.86', 22, 'root', None, 'print(1)')[0] is False
+    assert len(closed) == 2
