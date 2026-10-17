@@ -5,6 +5,7 @@ Email notification system for the FleetPilot.
 Sends scheduled reports and error notifications via SMTP.
 """
 import smtplib
+import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
@@ -12,6 +13,10 @@ import logging
 import email_config
 
 logger = logging.getLogger(__name__)
+
+# Port 465 speaks TLS from the first byte (implicit TLS); the others use STARTTLS or plain SMTP.
+SMTPS_PORT = 465
+SMTP_TIMEOUT = 20  # seconds
 
 def send_email(subject, body, html_body=None):
     """
@@ -50,20 +55,23 @@ def send_email(subject, body, html_body=None):
         if html_body:
             msg.attach(MIMEText(html_body, 'html'))
         
-        # Connect to SMTP server and send
-        if settings.get("smtp_use_tls", True):
-            server = smtplib.SMTP(settings['smtp_server'], settings['smtp_port'])
-            server.starttls()
+        # Connect to SMTP server and send; the with block closes the connection on errors too
+        host, port = settings['smtp_server'], int(settings['smtp_port'])
+        context = ssl.create_default_context()
+        if port == SMTPS_PORT:
+            server = smtplib.SMTP_SSL(host, port, context=context, timeout=SMTP_TIMEOUT)
         else:
-            server = smtplib.SMTP(settings['smtp_server'], settings['smtp_port'])
-        
-        # Login if credentials provided
-        if settings.get("smtp_username") and settings.get("smtp_password"):
-            server.login(settings['smtp_username'], settings['smtp_password'])
-        
-        # Send email
-        server.send_message(msg)
-        server.quit()
+            server = smtplib.SMTP(host, port, timeout=SMTP_TIMEOUT)
+        with server:
+            if port != SMTPS_PORT and settings.get("smtp_use_tls", True):
+                server.starttls(context=context)
+
+            # Login if credentials provided
+            if settings.get("smtp_username") and settings.get("smtp_password"):
+                server.login(settings['smtp_username'], settings['smtp_password'])
+
+            # Send email
+            server.send_message(msg)
         
         logger.info(f"Email sent successfully: {subject}")
         return True, None
