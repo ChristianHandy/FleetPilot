@@ -107,5 +107,5 @@ A pull request that does not meet these is not merged, however small.
 
 ## Releases
 
-- **Versioning:** [semantic versioning](https://semver.org) (`vMAJOR.MINOR.PATCH`). Tags are signed, and the release workflow publishes the release with an SBOM and the notes from `CHANGELOG.md`.
+- **Versioning:** [semantic versioning](https://semver.org) (`vMAJOR.MINOR.PATCH`). Tags are signed, and the release workflow publishes the release with an SBOM and the notes from `CHANGELOG.md`. Pre-releases use tags like `v1.8.0-beta.2`. Files built elsewhere (the Android APK) go into a draft release for the tag before the tag is pushed; the workflow then keeps the draft's notes, adds the files to `SHA256SUMS` and the signed provenance, and publishes the draft.
 - **Security fixes** are listed in the release notes with their CVE or advisory where one exists.

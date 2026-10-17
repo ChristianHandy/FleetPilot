@@ -47,7 +47,7 @@ gh attestation verify fleetpilot-X.Y.Z.tar.gz --repo ChristianHandy/FleetPilot \
   --signer-workflow ChristianHandy/FleetPilot/.github/workflows/release.yml
 ```
 
-**Expected identity:** the provenance must be signed by the workflow `.github/workflows/release.yml` of `ChristianHandy/FleetPilot`, running for a `refs/tags/vX.Y.Z` tag (`gh attestation verify` prints both). Nobody holds a private key for this signature; it comes from GitHub's OIDC identity of that workflow run.
+**Expected identity:** the provenance must be signed by the workflow `.github/workflows/release.yml` of `ChristianHandy/FleetPilot`, running for a `refs/tags/vX.Y.Z` tag, or `refs/tags/vX.Y.Z-beta.N` for a pre-release (`gh attestation verify` prints both). The provenance also covers files built outside the workflow and attached to the release, such as the signed Android APK: `gh attestation verify FleetPilot-android-X.Y.Z.apk --repo ChristianHandy/FleetPilot` proves the file is the one published with that release. Nobody holds a private key for this signature; it comes from GitHub's OIDC identity of that workflow run.
 
 Release tags are signed by the maintainer's OpenPGP key:
 
