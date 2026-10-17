@@ -222,7 +222,8 @@ class WindowsHost:
         elif marker == '# fleetpilot:windows-info':
             out = json.dumps(self.info) + '\r\n'
         elif marker == '# fleetpilot:upload':
-            return None, Stream('', self.upload_code), Stream('Access to the path is denied.\r\n')
+            denied = 'Access to the path is denied.\r\n' if self.upload_code != -1 else ''
+            return None, Stream('', self.upload_code), Stream(denied)
         elif marker == '# fleetpilot:run-as-system':
             out = 'Searching for updates...\r\nFound 2 update(s).\r\nInstalling...\r\n'
             if self.result:
@@ -268,6 +269,10 @@ def test_windows_update_problems_are_reported():
     assert not any('fleetpilot:winget' in s for s in host.scripts)          # repository-only: no winget
     assert updater._run_windows_update(WindowsHost(upload_code=1), True, log.append) == [
         'Could not prepare Windows Update (Access to the path is denied.). The SSH account must be an administrator.']
+    # Server 2025 restarted to finish servicing and closed the session without an exit status: not a rights problem.
+    assert updater._run_windows_update(WindowsHost(upload_code=-1), True, log.append) == [
+        'Could not prepare Windows Update: the connection ended unexpectedly. '
+        'Windows may be restarting; run the update again in a few minutes.']
     failed = dict(WindowsHost().result, failed=1, error='0x80240022')
     problems = updater._run_windows_update(WindowsHost(result=failed), True, log.append)
     assert problems == ['Windows Update: 0x80240022', '1 Windows update(s) failed to install']

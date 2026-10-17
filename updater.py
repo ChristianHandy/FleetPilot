@@ -217,8 +217,13 @@ def _run_windows_update(ssh, repo_only, log):
 
     for command in windows_host.upload_commands(windows_host.UPDATE_WORKER):
         _, out, err = ssh.exec_command(command, timeout=60)
-        if out.channel.recv_exit_status() != 0:
+        status = out.channel.recv_exit_status()
+        if status != 0:
             detail = windows_host.error_text(err.read().decode('utf-8', errors='replace')).splitlines()
+            if status == -1 and not detail:
+                # No exit status: the session ended (seen while Windows restarted to finish servicing).
+                return ["Could not prepare Windows Update: the connection ended unexpectedly. "
+                        "Windows may be restarting; run the update again in a few minutes."]
             return [f"Could not prepare Windows Update ({detail[-1] if detail else 'unknown error'}). "
                     "The SSH account must be an administrator."]
 
