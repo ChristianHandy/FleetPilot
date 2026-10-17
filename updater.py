@@ -316,7 +316,7 @@ def run_update(host, user, name, log_list, repo_only=False, password=None):
             except (EOFError, TimeoutError, OSError, paramiko.SSHException) as e:
                 if attempt == CONNECT_ATTEMPTS:
                     raise
-                log(f"Connection attempt {attempt} failed ({str(e) or type(e).__name__}); retrying in {CONNECT_RETRY_DELAY} s...")
+                log(f"Connection attempt {attempt} failed ({ssh_helper.describe_error(e)}); retrying in {CONNECT_RETRY_DELAY} s...")
                 time.sleep(CONNECT_RETRY_DELAY)
         log(f"Connected to {name}")
         
@@ -411,10 +411,10 @@ def run_update(host, user, name, log_list, repo_only=False, password=None):
         error_occurred = True
         error_details.append("Authentication failed - check SSH keys or credentials")
     except paramiko.SSHException as e:
-        error_msg = f"✗ SSH error connecting to {name}: {str(e)}"
+        error_msg = f"✗ SSH error connecting to {name}: {ssh_helper.describe_error(e)}"
         log(error_msg)
         error_occurred = True
-        error_details.append(f"SSH error: {str(e)}")
+        error_details.append(f"SSH error: {ssh_helper.describe_error(e)}")
     except Exception as e:
         # Timeouts carry no message; name them so the log is never just "Error updating x:".
         detail = ssh_helper.describe_error(e)

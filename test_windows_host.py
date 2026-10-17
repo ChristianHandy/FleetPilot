@@ -417,6 +417,22 @@ def test_a_dropped_handshake_is_retried(monkeypatch):
     assert any('Update completed successfully for w22gui' in line for line in log)
 
 
+def test_an_update_names_why_the_ssh_server_dropped_it(monkeypatch):
+    # Server 2025's sshd reset every connection before its banner (MaxStartups); the log showed paramiko's text.
+    import paramiko
+    def refused(*a, **k):
+        raise paramiko.SSHException('Error reading SSH protocol banner[Errno 104] Connection reset by peer')
+    monkeypatch.setattr(updater.ssh_helper, 'create_client', refused)
+    monkeypatch.setattr(updater.time, 'sleep', lambda s: None)
+    monkeypatch.setattr(updater.email_config, 'get_error_notifications_enabled', lambda: False)
+    log = []
+    updater.run_update('192.0.2.81', 'Administrator', 'w25gui', log, repo_only=True)
+    assert any(line.endswith('✗ SSH error connecting to w25gui: the SSH server closed the connection without '
+                             'answering (it is overloaded, out of memory, or has too many logins waiting)')
+               for line in log)
+    assert not any('protocol banner' in line for line in log)
+
+
 def test_run_update_detects_windows_in_any_ssh_shell(monkeypatch):
     host = WindowsHost()
     monkeypatch.setattr(updater.ssh_helper, 'create_client', lambda *a, **k: host)
