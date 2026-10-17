@@ -168,7 +168,12 @@ def identify(info: Dict, today: Optional[date] = None) -> Dict:
 UPDATE_WORKER = r"""# fleetpilot:windows-update
 param([string]$Mode = 'check', [string]$Dir = 'C:\ProgramData\FleetPilot')
 $ErrorActionPreference = 'Stop'
-function Log([string]$m) { Add-Content -Path (Join-Path $Dir 'update.log') -Value $m -Encoding UTF8 }
+# FleetPilot's runner (or a virus scanner) may be reading the log; a line that cannot be written must not end the update.
+function Log([string]$m) {
+  for ($t = 0; $t -lt 10; $t++) {
+    try { Add-Content -Path (Join-Path $Dir 'update.log') -Value $m -Encoding UTF8 -ErrorAction Stop; return } catch { Start-Sleep -Milliseconds 300 }
+  }
+}
 $result = [ordered]@{ ok = $false; mode = $Mode; updates = @(); installed = 0; failed = 0; reboot = $false; error = $null }
 try {
   $session = New-Object -ComObject Microsoft.Update.Session
@@ -245,9 +250,12 @@ try {
   while ($true) {
     Start-Sleep -Seconds 3
     if (Test-Path $log) {
-      $lines = @(Get-Content -Path $log -Encoding UTF8)
-      for ($i = $shown; $i -lt $lines.Count; $i++) { Write-Output $lines[$i] }
-      $shown = $lines.Count
+      # The worker may be writing the log just now (seen on Server 2025): read it again next time.
+      try {
+        $lines = @(Get-Content -Path $log -Encoding UTF8 -ErrorAction Stop)
+        for ($i = $shown; $i -lt $lines.Count; $i++) { Write-Output $lines[$i] }
+        $shown = $lines.Count
+      } catch { }
     }
     if (Test-Path $json) { break }
     if ((Get-Date) -gt $deadline) {
