@@ -13,6 +13,7 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
   - **Logs:** host, device and path names have their line breaks escaped, so they cannot forge log entries.
   - **File permissions:** the generated public SSH key, the proxy routes and the HAProxy candidate configuration are readable by their owner only.
   - **Data sync:** the optional sync checks the peer's certificate by default (`FLEETPILOT_SYNC_CA` for a self-signed peer).
+- VM power actions answered a rejected node, guest type or action with the exception's text; they now return only fixed messages (CodeQL `py/stack-trace-exposure`).
 - `/vm/<id>/disks` stored disks without their node, so the disks of a cluster's nodes overwrote each other there too.
 
 ### Added
