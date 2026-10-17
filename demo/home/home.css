@@ -148,6 +148,10 @@ h3 { font-size: 1.1rem; margin: .6em 0 .35em; }
 .stat-num { font-size: 1.9rem; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .stat-label { color: var(--muted); font-size: .92rem; }
 .stats-date { font-size: .85rem; margin: 0; }
+.ai-share { max-width: 820px; margin: 28px auto 0; padding: 18px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); }
+.ai-share img { width: 100%; }
+.ai-share figcaption { color: var(--muted); font-size: .95rem; margin-top: 10px; text-align: center; }
 @media (max-width: 900px) {
   .top-nav { display: none; }
   .top-row .btn { margin-left: auto; }

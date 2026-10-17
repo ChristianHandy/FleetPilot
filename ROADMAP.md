@@ -41,7 +41,7 @@ Much of FleetPilot's code was written with an AI coding assistant (see [GOVERNAN
 - **Human audit of the most sensitive parts:** sign-in and sessions, SSH and key handling, privileged operations, updates of managed machines. Each part is rewritten where reviewers find it hard to follow.
 - **Openness:**
   - AI-assisted commits keep their `Co-Authored-By` line.
-  - Once a year, the share of AI-assisted changes is published with this roadmap review.
+  - The share of AI-assisted changes is shown in the README, rebuilt daily from the git history (`scripts/ai_share.py`), and reviewed with this roadmap.
 
 ## Not planned
 
