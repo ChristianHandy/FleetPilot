@@ -9,6 +9,8 @@ name: Demo site
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: "41 4 * * *"   # daily, so the homepage's GitHub numbers stay current
   workflow_dispatch:
 
 permissions:
@@ -39,6 +41,9 @@ jobs:
       - name: Build the static tour
         run: python demo/build_site.py
       - name: Build the homepage
+        env:
+          FLEETPILOT_GITHUB_STATS: "1"     # open issues, good first issues, contributors, … from the GitHub API
+          GH_TOKEN: ${{ github.token }}    # read-only; only raises the API rate limit
         run: python demo/build_home.py
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
