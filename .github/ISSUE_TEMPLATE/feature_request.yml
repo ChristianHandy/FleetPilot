@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Feature request
+description: Suggest something FleetPilot should do, or do better.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check the [roadmap](https://github.com/ChristianHandy/FleetPilot/blob/main/ROADMAP.md) and the open issues first; a 👍 on an existing request helps too.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What do you want to do?
+      description: The task or problem in your homelab, not the solution yet.
+      placeholder: I want to see which of my hosts still need a restart after updates...
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How could FleetPilot help?
+      description: Your idea of how it could work, and what you do today instead.
+  - type: input
+    id: systems
+    attributes:
+      label: Systems involved
+      description: Operating systems, devices or services this is about.
+      placeholder: OPNsense 25.7, Synology DSM 7.2, ...
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Contributing
+      options:
+        - label: I would like to help implement this (see CONTRIBUTING.md).
