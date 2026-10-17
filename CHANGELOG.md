@@ -48,7 +48,7 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 - **Live demo you can try before installing** (https://christianhandy.github.io/FleetPilot/): the real FleetPilot runs in the browser with Pyodide against an emulated homelab of Proxmox nodes, TrueNAS, Proxmox Backup Server, Linux and Windows machines, FRITZ!Box/Repeater, OpenWrt and OPNsense. Updates, Wake-on-LAN, VM power, fan control, SMART alerts and router checks all work; a "Virtual lab" panel switches devices off, fails disks or publishes updates. The previous static demo is now the lighter tour at `/tour/`. See `demo/README.md`.
 
-- **Issue forms** for bug reports and feature requests; security reports are pointed to private reporting.
+- **Releases:** pre-release tags (`v1.8.0-beta.2`) are published by the release workflow too, as pre-releases. Files attached to a draft release before the tag is pushed, such as the Android APK, get checksums and signed provenance like the source archive.
 
 ### Fixed
 
