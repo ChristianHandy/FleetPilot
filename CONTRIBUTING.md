@@ -31,7 +31,12 @@ By contributing you agree that your contribution is licensed under the project's
 
 ## Sign-off (DCO)
 
-Every commit must be signed off: `git commit -s` adds a `Signed-off-by: Your Name <you@example.com>` line matching the commit's author. With it you certify the [Developer Certificate of Origin](https://developercertificate.org): you wrote the change, or otherwise have the right to submit it under the project's license. A check (`dco.yml`) fails pull requests with commits that are not signed off. To fix the last commit, run `git commit --amend -s`; for older commits, run `git rebase --signoff main`.
+Every commit must be signed off: `git commit -s` adds a `Signed-off-by: Your Name <you@example.com>` line matching the commit's author. With it you certify the [Developer Certificate of Origin](https://developercertificate.org): you wrote the change, or otherwise have the right to submit it under the project's license. A check (`dco.yml`) fails pull requests with commits that are not signed off, and says how to fix each one:
+
+- **No sign-off:** for the last commit, run `git commit --amend --no-edit -s`; for older commits, run `git rebase --signoff main`.
+- **Signed off with a different address than the commit's author** (for example your GitHub noreply address as author and a personal address in the sign-off): set `git config user.name` and `user.email` to the signed-off name and address and run `git commit --amend --no-edit --reset-author`. Or keep the author and add a matching line with `git commit --amend --no-edit --trailer "Signed-off-by: Your Name <author address>"`.
+
+Then push with `git push --force-with-lease`.
 
 ## Building and running from source
 
