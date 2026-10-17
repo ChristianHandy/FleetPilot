@@ -1,0 +1,82 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Bug report
+description: Something in FleetPilot or the Android app does not work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a problem.
+        **Security problems do not belong here:** report them privately as described in [SECURITY.md](https://github.com/ChristianHandy/FleetPilot/blob/main/SECURITY.md).
+        Remove passwords, tokens, keys and public IP addresses from everything you paste.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+      placeholder: |
+        1. Open Hosts and click "Update" on a Debian 12 host
+        2. ...
+        Expected: ...
+        Instead: ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: FleetPilot version
+      description: Shown at the bottom of the sidebar (for example "FleetPilot v1.7.0").
+      placeholder: v1.7.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How is FleetPilot installed?
+      options:
+        - Proxmox helper script (container)
+        - install.sh on Debian or Ubuntu
+        - install.sh on a Raspberry Pi
+        - Other (please describe below)
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - Hosts and updates (Linux)
+        - Hosts and updates (Windows)
+        - Proxmox VMs and containers
+        - Disks and SMART
+        - Hardware monitor and fans
+        - Backups
+        - Routers and network
+        - Users, sign-in and 2FA
+        - Add-ons
+        - Android app
+        - Installation or update of FleetPilot itself
+        - Something else
+    validations:
+      required: true
+  - type: input
+    id: target
+    attributes:
+      label: Managed system
+      description: If the problem concerns a managed machine, its operating system and version.
+      placeholder: Windows Server 2025, Ubuntu 24.04, Proxmox VE 9.1, ...
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log output
+      description: |
+        The relevant lines from the update log, the page, or `journalctl -u fleetpilot --since "10 min ago"`.
+        This is shown as code, so no backticks are needed.
+      render: text
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else?
+      description: Screenshots, browser, other details that might help.
