@@ -257,6 +257,9 @@ def _http(method: str, url: str, headers: Dict = None,
 
 _GUEST_TYPES = {"qemu": "qemu", "lxc": "lxc"}
 _POWER_ACTIONS = {a: a for a in ("start", "stop", "shutdown", "reboot", "suspend", "resume")}
+_UNKNOWN_NODE = "Proxmox does not know this node."
+_UNKNOWN_GUEST_TYPE = "Unknown guest type (expected qemu or lxc)."
+_UNKNOWN_ACTION = "Unknown power action."
 
 
 class ProxmoxClient:
@@ -323,14 +326,14 @@ class ProxmoxClient:
         for known in self.get_nodes():
             if known.get("node") == node:
                 return known["node"]
-        raise ValueError("Proxmox does not know this node.")
+        raise ValueError(_UNKNOWN_NODE)
 
     @staticmethod
     def _guest(rtype: str) -> str:
         try:
             return _GUEST_TYPES[rtype]
         except KeyError:
-            raise ValueError("Unknown guest type (expected qemu or lxc).") from None
+            raise ValueError(_UNKNOWN_GUEST_TYPE) from None
 
     def _guest_path(self, node: str, vmid: int, rtype: str) -> str:
         return f"/nodes/{self._node(node)}/{self._guest(rtype)}/{int(vmid)}"
@@ -345,7 +348,7 @@ class ProxmoxClient:
         try:
             verb = _POWER_ACTIONS[action]
         except KeyError:
-            raise ValueError("Unknown power action.") from None
+            raise ValueError(_UNKNOWN_ACTION) from None
         return self._post(f"{self._guest_path(node, vmid, rtype)}/status/{verb}")
 
     def get_snapshots(self, node: str, vmid: int, rtype: str = "qemu") -> List[Dict]:
@@ -536,7 +539,9 @@ def vm_power_action(ep_id: int, node: str, vmid: int, action: str,
     try:
         result = client.vm_action(node, vmid, action, rtype)
     except ValueError as exc:
-        return {"ok": False, "error": str(exc)}
+        # Answer with one of the fixed texts, never with the exception itself.
+        known = (_UNKNOWN_NODE, _UNKNOWN_GUEST_TYPE, _UNKNOWN_ACTION)
+        return {"ok": False, "error": next((m for m in known if m == str(exc)), "Invalid request.")}
     status = "ok" if result.get("ok") else "error"
     log_event(ep_id, str(vmid), f"{node}/{vmid}", action.upper(), status,
               result.get("error", ""))

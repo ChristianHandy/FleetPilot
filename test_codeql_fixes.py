@@ -146,7 +146,21 @@ def test_proxmox_paths_only_use_names_proxmox_reported(monkeypatch):
             client.vm_action(node, 100, action, rtype)
     assert len(calls) == 1
     monkeypatch.setattr(vc, "connect", lambda ep: client)
-    assert vc.vm_power_action(1, "evil\nnode", 100, "start")["ok"] is False
+    assert vc.vm_power_action(1, "evil\nnode", 100, "start") == {"ok": False, "error": "Proxmox does not know this node."}
+    assert vc.vm_power_action(1, "pve-01", 100, "start", "qemu/../x")["error"] == \
+        "Unknown guest type (expected qemu or lxc)."
+    assert vc.vm_power_action(1, "pve-01", 100, "delete")["error"] == "Unknown power action."
+
+
+def test_vm_power_action_never_returns_other_exception_text(monkeypatch):
+    import vm_controller as vc
+    client = vc.ProxmoxClient.__new__(vc.ProxmoxClient)
+
+    def vm_action(*args):
+        raise ValueError("/opt/fleetpilot/secret.py line 3: token=abc")
+    monkeypatch.setattr(client, "vm_action", vm_action)
+    monkeypatch.setattr(vc, "connect", lambda ep: client)
+    assert vc.vm_power_action(1, "pve-01", 100, "start") == {"ok": False, "error": "Invalid request."}
 
 
 def test_duplicati_only_runs_jobs_it_lists(monkeypatch):
