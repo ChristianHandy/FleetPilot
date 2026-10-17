@@ -85,6 +85,7 @@ class _TOFUPolicy(paramiko.MissingHostKeyPolicy):
 
 
 HANDSHAKE_RETRY_DELAY = 3
+KEEPALIVE_INTERVAL = 30   # seconds between SSH keepalive messages on an idle connection
 
 
 def _new_client(kh_path: str) -> paramiko.SSHClient:
@@ -183,6 +184,11 @@ def create_client(
         time.sleep(HANDSHAKE_RETRY_DELAY)
         client = _new_client(kh_path)
         client.connect(**connect_kwargs)
+    transport = client.get_transport()
+    if transport is not None:
+        # Without traffic a long wait (a Windows Update) never notices a host that vanished, for example behind a
+        # firewall that started dropping packets; keepalives make the connection fail instead of hanging forever.
+        transport.set_keepalive(KEEPALIVE_INTERVAL)
     return client
 
 

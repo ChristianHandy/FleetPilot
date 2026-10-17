@@ -374,6 +374,21 @@ def test_create_client_retries_one_dropped_handshake_but_not_bad_credentials(tmp
     assert calls.count('auth') == 1
 
 
+def test_connections_send_keepalives(tmp_path, monkeypatch):
+    # Windows 11's firewall began dropping SSH packets during an update; without traffic FleetPilot waited forever.
+    import paramiko
+    import ssh_helper
+    intervals = []
+
+    class Transport:
+        def set_keepalive(self, seconds):
+            intervals.append(seconds)
+    monkeypatch.setattr(paramiko.SSHClient, 'connect', lambda self, **kw: None)
+    monkeypatch.setattr(paramiko.SSHClient, 'get_transport', lambda self: Transport())
+    ssh_helper.create_client('192.0.2.85', known_hosts_path=str(tmp_path / 'kh'))
+    assert intervals == [30]
+
+
 def test_install_key_names_an_error_without_a_message(operator, monkeypatch):
     # Windows 11 right after setup: "Timeout opening channel", then errors without text ("Connection error:").
     client, store = operator
