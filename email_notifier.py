@@ -5,6 +5,7 @@ Email notification system for the FleetPilot.
 Sends scheduled reports and error notifications via SMTP.
 """
 import smtplib
+import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
@@ -12,6 +13,9 @@ import logging
 import email_config
 
 logger = logging.getLogger(__name__)
+
+SMTP_TIMEOUT = 20
+
 
 def send_email(subject, body, html_body=None):
     """
@@ -51,19 +55,25 @@ def send_email(subject, body, html_body=None):
             msg.attach(MIMEText(html_body, 'html'))
         
         # Connect to SMTP server and send
-        if settings.get("smtp_use_tls", True):
-            server = smtplib.SMTP(settings['smtp_server'], settings['smtp_port'])
-            server.starttls()
+        host = settings['smtp_server']
+        port = int(settings['smtp_port'])
+        if port == 465:
+            conn = smtplib.SMTP_SSL(
+                host, port, context=ssl.create_default_context(), timeout=SMTP_TIMEOUT
+            )
         else:
-            server = smtplib.SMTP(settings['smtp_server'], settings['smtp_port'])
-        
-        # Login if credentials provided
-        if settings.get("smtp_username") and settings.get("smtp_password"):
-            server.login(settings['smtp_username'], settings['smtp_password'])
-        
-        # Send email
-        server.send_message(msg)
-        server.quit()
+            conn = smtplib.SMTP(host, port, timeout=SMTP_TIMEOUT)
+
+        with conn as server:
+            if port != 465 and settings.get("smtp_use_tls", True):
+                server.starttls(context=ssl.create_default_context())
+
+            # Login if credentials provided
+            if settings.get("smtp_username") and settings.get("smtp_password"):
+                server.login(settings['smtp_username'], settings['smtp_password'])
+
+            # Send email
+            server.send_message(msg)
         
         logger.info(f"Email sent successfully: {subject}")
         return True, None
