@@ -14,6 +14,7 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 ### Fixed
 
 - The two-factor page's "Back" button pointed to `/settings`, which doesn't exist; it now goes back to My Profile (found by the new smoke test).
+- The SMART button on the Storage workspace pointed to `/disks/smart/<disk>`, which doesn't exist; it opens the disk's SMART report now (found by the smoke test).
 
 ## [1.8.0-beta.2] — 2026-10-18
 

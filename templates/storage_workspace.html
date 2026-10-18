@@ -52,7 +52,7 @@
         <td data-label="Capacity">{{ disk.size|default('—') }}</td>
         <td data-label="Usage">{{ ('%s%%' % disk.usage) if disk.usage is not none else 'Not mounted' }}</td>
         <td data-label="Actions"><div class="workspace-actions">
-          <a class="btn btn-secondary btn-sm" href="/disks/smart/{{ disk.device }}">SMART</a>
+          <a class="btn btn-secondary btn-sm" href="{{ url_for('smart_view_route', device=disk.device) }}">SMART</a>
           <a class="btn btn-secondary btn-sm" href="/disks/validate/{{ disk.device }}">Validate</a>
           {% if can_operate %}<a class="btn btn-outline-danger btn-sm" href="/disks/format/{{ disk.device }}">Format</a>{% endif %}
         </div></td>

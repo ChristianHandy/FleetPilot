@@ -28,7 +28,7 @@ from collections import deque
 from html.parser import HTMLParser
 
 # Path parts of links that are not opened, to stay on the safe side.
-UNSAFE = re.compile(r"logout|delete|remove|shutdown|reboot|poweroff|power|wake|wol|update|upgrade|install|"
+UNSAFE = re.compile(r"logout|delete|remove|validate|format|shutdown|reboot|poweroff|power|wake|wol|update|upgrade|install|"
                     r"restart|start|stop|apply|reset|run|scan|sync|export|download|backup_now|test_",
                     re.IGNORECASE)
 SKIP_PREFIXES = ("/static/", "/healthz")
