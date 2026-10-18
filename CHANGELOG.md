@@ -4,9 +4,20 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ## [Unreleased]
 
+## [1.8.0] — 2026-10-18
+
+**Stable release with two security fixes. Please update.** It contains everything from 1.8.0-beta.2 (below: Windows support for every supported release, the Android app, the live demo, stricter checks and much more) plus the changes here. After updating, change the SSH passwords that were stored for scheduled shutdowns or in the server registry.
+
+
 ### Security
 
 - **Scheduled shutdown exposed SSH passwords to every signed-in user** (all versions up to 1.8.0-beta.2). The schedules page and `GET /api/shutdown_schedule` returned each schedule's SSH password in plain text, readable by viewers and read-only API tokens, and the passwords were stored unencrypted. Passwords are now encrypted like all other device credentials (existing ones on the first start), never sent to the browser or the API, and kept when a schedule is edited without a new one. **If you use scheduled shutdown with passwords, change those passwords** (or switch to SSH keys). Schedules are also validated now (host, time, days, port, action); an unknown action no longer falls back to a shutdown, and a host that cannot be reached is logged instead of failing silently.
+- **Server registry exposed SSH passwords to every signed-in user** (all versions up to 1.8.0-beta.2; [GHSA-7h7w-wfff-7p6w](https://github.com/ChristianHandy/FleetPilot/security/advisories/GHSA-7h7w-wfff-7p6w)). `GET /api/registry/servers` and `/api/registry/servers/<id>` returned each server's stored SSH password in plain text and its SSH key, readable by viewers and read-only API tokens, and the Fan controller's add page put known servers' passwords into its JavaScript. Registry passwords are now encrypted at rest (existing ones on the first start), the API returns `has_password`/`has_ssh_key` instead, and only the code that opens the SSH connection reads the password. **Change the SSH passwords of servers that had a password in the registry.**
+
+### Added
+
+- **"Safe to merge" check on pull requests:** one required verdict that passes only when the functional check passes (`install.sh` installs the code on a fresh Ubuntu machine over HTTP and HTTPS, an admin signs in and every page the app links to opens, an installation of the latest release updates to the new code, and the Android app builds) and ClamAV plus `scripts/pr_threat_scan.py` find no virus or backdoor pattern in the change. The scanner runs from the base branch, so a pull request cannot switch it off.
+- **Daily repository scan** (and on every push to main): the functional check, ClamAV over every tracked file and the backdoor scan of the whole repository.
 
 ### Fixed
 
@@ -14,6 +25,9 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
   - `update_pre` and `update_post` run around every host update (`updater.run_update`, which is also what the scheduler and the update routes call). `update_post` receives a result with `success`, `packages_updated`, `name`, `host` and `error`.
   - `notification` fires with the event `new_version_available` (`data={"type", "version", "description", "url"}`) when a newer release or commit appears — once per version, not on every 24-hour check — and also fires for email update reports (`event="update_report"`, `data={"hosts_status", "history"}`), host update error notifications (`event="update_error"`, `data={"host", "error"}`), and `notify.send()` messages (`event` set to the notification category such as `smart`, `security`, `backup`, `router` or `vulnerability`, `data={"title", "message", "level"}`).
   - A hook runs after the update result is stored, and an exception inside a hook is logged instead of propagated, so a notification can never break or delay the update it reports on.
+- The two-factor page's "Back" button pointed to `/settings`, which doesn't exist; it goes back to My Profile now ([#194](https://github.com/ChristianHandy/FleetPilot/issues/194)).
+- The SMART button on the Storage workspace pointed to `/disks/smart/<disk>`, which doesn't exist; it opens the disk's SMART report now ([#195](https://github.com/ChristianHandy/FleetPilot/issues/195)).
+- The network scanner page left a socket open when it could not find the local subnet.
 
 ## [1.8.0-beta.2] — 2026-10-18
 
