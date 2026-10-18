@@ -4,6 +4,10 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ## [Unreleased]
 
+## [1.8.0-beta.2] — 2026-10-18
+
+**Pre-release for testers.** Everything below is new since 1.7.0. Please try it on your own hardware and [report what breaks](https://github.com/ChristianHandy/FleetPilot/issues/new?template=bug_report.yml).
+
 ### Security
 
 - Fan, disk and CheckMK pages put names and the monitoring token into inline JavaScript as JSON now (`|tojson`); a test checks every template for unencoded values in scripts.
@@ -51,6 +55,7 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 - **Live demo you can try before installing** (https://christianhandy.github.io/FleetPilot/): the real FleetPilot runs in the browser with Pyodide against an emulated homelab of Proxmox nodes, TrueNAS, Proxmox Backup Server, Linux and Windows machines, FRITZ!Box/Repeater, OpenWrt and OPNsense. Updates, Wake-on-LAN, VM power, fan control, SMART alerts and router checks all work; a "Virtual lab" panel switches devices off, fails disks or publishes updates. The previous static demo is now the lighter tour at `/tour/`. See `demo/README.md`.
 
 - **Releases:** pre-release tags (`v1.8.0-beta.2`) are published by the release workflow too, as pre-releases. Files attached to a draft release before the tag is pushed, such as the Android APK, get checksums and signed provenance like the source archive.
+- **Android app in every release:** the release workflow builds the APK from the tag, signs it with the release key, checks the signing certificate and attaches it to beta and stable releases, covered by `SHA256SUMS` and the signed provenance.
 
 ### Fixed
 
