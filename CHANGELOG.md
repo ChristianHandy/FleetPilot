@@ -68,6 +68,7 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 - In a Proxmox cluster, disks with the same name on different nodes (every node's `sda`) overwrote each other in the SMART registry; they are now stored as `node:sda`.
 - Fan controllers (lm-sensors) showed the sensor limits (`temp1_max`, `temp1_crit`) as extra temperature readings; only measured values are shown now.
 - HW Monitor showed German labels ("Netz", "CPU Last") in the English interface.
+- **Ping button (example plugin):** the round-trip time started before the port 80 attempt, so a host without a web server was charged that attempt's full timeout even when SSH answered in a millisecond; every attempt is timed on its own and the time of the one that answered is reported. A refused connection also counts as an answer (the host is up, only the port is closed), so a host with neither port 80 nor port 22 open is no longer shown as "Timeout". The button shows `3 ms (22)` or the reason a host did not answer (`timeout`, `dns`, `unreachable`) instead of always "Timeout".
 
 ## [1.7.0] — 2026-10-09
 
