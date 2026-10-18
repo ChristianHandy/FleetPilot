@@ -4,6 +4,10 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ## [Unreleased]
 
+### Security
+
+- **Scheduled shutdown exposed SSH passwords to every signed-in user** (all versions up to 1.8.0-beta.2). The schedules page and `GET /api/shutdown_schedule` returned each schedule's SSH password in plain text, readable by viewers and read-only API tokens, and the passwords were stored unencrypted. Passwords are now encrypted like all other device credentials (existing ones on the first start), never sent to the browser or the API, and kept when a schedule is edited without a new one. **If you use scheduled shutdown with passwords, change those passwords** (or switch to SSH keys). Schedules are also validated now (host, time, days, port, action); an unknown action no longer falls back to a shutdown, and a host that cannot be reached is logged instead of failing silently.
+
 ### Fixed
 
 - **Plugin hooks `update_pre`, `update_post` and `notification` are fired now** ([#145](https://github.com/ChristianHandy/FleetPilot/issues/145)). They were registered by the add-on loader and documented on the plugin docs page, but nothing ever called `AddonManager.fire_hooks()`, so the bundled Slack example never sent a message and any third-party plugin built on these hooks silently did nothing:

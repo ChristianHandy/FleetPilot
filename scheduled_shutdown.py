@@ -3,7 +3,8 @@
 """
 scheduled_shutdown.py — Scheduled power-off for remote hosts via SSH.
 
-Stores schedules in DATA_DIR/scheduled_shutdown.db.
+Stores schedules in DATA_DIR/scheduled_shutdown.db; SSH passwords are encrypted
+(secret_box) and never returned by list_schedules()/get_schedule().
 A background thread checks every minute whether any schedule is due and
 executes the shutdown command via SSH.
 """
@@ -11,6 +12,7 @@ executes the shutdown command via SSH.
 import sqlite3
 import db_util
 import safe_errors
+import secret_box
 import threading
 import time
 import logging
@@ -28,7 +30,14 @@ _lock = threading.Lock()
 _thread: Optional[threading.Thread] = None
 _running = False
 
+_box = secret_box.SecretBox("sha256")
 DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+ACTIONS = {
+    'shutdown':  'shutdown -h now',
+    'reboot':    'shutdown -r now',
+    'suspend':   'systemctl suspend',
+    'hibernate': 'systemctl hibernate',
+}
 
 
 def _get_db():
@@ -71,22 +80,39 @@ def init_db(data_dir: str):
                 ts          TEXT DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        # Versions up to 1.8.0-beta.2 stored SSH passwords in plain text: encrypt them.
+        for row in conn.execute("SELECT id, password FROM schedules WHERE password != '' "
+                                "AND password NOT LIKE 'gAAAAA%'").fetchall():
+            conn.execute('UPDATE schedules SET password=? WHERE id=?', (_box.encrypt(row['password']), row['id']))
         conn.commit()
     logger.info('scheduled_shutdown: DB initialised at %s', _DB_FILE)
 
 
 # ── CRUD ──────────────────────────────────────────────────────────────────────
 
+def _public(row) -> Dict:
+    """A schedule as shown to users: the password is replaced by whether one is set."""
+    schedule = dict(row)
+    schedule['has_password'] = bool(schedule.pop('password', ''))
+    return schedule
+
+
 def list_schedules() -> List[Dict]:
     with _get_db() as conn:
         rows = conn.execute('SELECT * FROM schedules ORDER BY shutdown_time').fetchall()
-    return [dict(r) for r in rows]
+    return [_public(r) for r in rows]
 
 
 def get_schedule(sid: int) -> Optional[Dict]:
     with _get_db() as conn:
         row = conn.execute('SELECT * FROM schedules WHERE id=?', (sid,)).fetchone()
-    return dict(row) if row else None
+    return _public(row) if row else None
+
+
+def _password(sid: int) -> str:
+    with _get_db() as conn:
+        row = conn.execute('SELECT password FROM schedules WHERE id=?', (sid,)).fetchone()
+    return _box.decrypt(row['password'] or '') if row else ''
 
 
 def add_schedule(name, host, port, username, password, ssh_key,
@@ -97,7 +123,7 @@ def add_schedule(name, host, port, username, password, ssh_key,
             '''INSERT INTO schedules
                (name,host,port,username,password,ssh_key,shutdown_time,days,enabled,warn_minutes,action)
                VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
-            (name, host, port, username, password, ssh_key,
+            (name, host, port, username, _box.encrypt(password) if password else '', ssh_key,
              shutdown_time, days_json, int(enabled), warn_minutes, action)
         )
         conn.commit()
@@ -115,6 +141,13 @@ def update_schedule(sid, **kwargs):
         return
     if 'days' in kwargs and isinstance(kwargs['days'], list):
         kwargs['days'] = json.dumps(kwargs['days'])
+    if 'password' in kwargs:   # None or missing keeps the stored password
+        if kwargs['password'] is None:
+            del kwargs['password']
+        else:
+            kwargs['password'] = _box.encrypt(kwargs['password']) if kwargs['password'] else ''
+    if not kwargs:
+        return
     sets = ', '.join(f'{k}=?' for k in kwargs)
     vals = list(kwargs.values()) + [sid]
     with _get_db() as conn:
@@ -150,18 +183,15 @@ def _execute_action(schedule: Dict) -> tuple:
     host = schedule['host']
     port = schedule.get('port', 22)
     user = schedule.get('username', 'root')
-    pwd  = schedule.get('password', '')
+    pwd  = _password(schedule['id']) if schedule.get('id') else schedule.get('password', '')
     key  = schedule.get('ssh_key', '')
     action = schedule.get('action', 'shutdown')
 
-    cmd_map = {
-        'shutdown':  'shutdown -h now',
-        'reboot':    'shutdown -r now',
-        'suspend':   'systemctl suspend',
-        'hibernate': 'systemctl hibernate',
-    }
-    cmd = cmd_map.get(action, 'shutdown -h now')
+    cmd = ACTIONS.get(action)
+    if cmd is None:
+        return False, f'Unknown action {action!r}'
 
+    client = None
     try:
         connect_kwargs = dict(hostname=host, port=port, username=user, timeout=15)
         if key:
@@ -172,12 +202,12 @@ def _execute_action(schedule: Dict) -> tuple:
         _, stdout, stderr = client.exec_command(cmd, timeout=10)
         out = stdout.read().decode().strip()
         err = stderr.read().decode().strip()
-        client.close()
         return True, f'Command: {cmd} | out: {out} | err: {err}'
     except Exception as e:
         return False, safe_errors.public_error(e, 'Scheduled action')
     finally:
-        client.close()
+        if client is not None:
+            client.close()
 
 
 def _log_run(schedule_id, host, action, status, message):

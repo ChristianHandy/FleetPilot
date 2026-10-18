@@ -3712,10 +3712,10 @@ def scanner():
     managed_ips = [h.get('host', '') for h in hosts.values()]
     # Guess default subnet from local IP
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(('8.8.8.8', 80))
-        local_ip = s.getsockname()[0]
-        s.close()
+        # A UDP connect sends nothing; it only picks the interface of the default route.
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(('8.8.8.8', 80))
+            local_ip = s.getsockname()[0]
         default_prefix = '.'.join(local_ip.split('.')[:3])
     except Exception:
         default_prefix = '192.168.1'
@@ -6696,23 +6696,43 @@ def shutdown_schedule_index():
                            known_hosts=known_hosts)
 
 
+def _schedule_form(password):
+    """The fields of a shutdown schedule from the submitted form, validated (ValueError if not)."""
+    form = request.form
+    name, host = form.get('name', '').strip(), form.get('host', '').strip()
+    if not name or not host:
+        raise ValueError('A schedule needs a name and a host.')
+    if not re.fullmatch(r'[A-Za-z0-9._:-]{1,253}', host):
+        raise ValueError('The host must be a host name or an IP address.')
+    try:
+        port, warn = int(form.get('port', 22)), int(form.get('warn_minutes', 5))
+    except ValueError:
+        raise ValueError('Port and warning time must be numbers.') from None
+    if not (1 <= port <= 65535 and 0 <= warn <= 60):
+        raise ValueError('The port must be 1–65535 and the warning 0–60 minutes.')
+    shutdown_time = form.get('shutdown_time', '23:00')
+    if not re.fullmatch(r'([01]\d|2[0-3]):[0-5]\d', shutdown_time):
+        raise ValueError('The time must look like 23:00.')
+    days = form.getlist('days')
+    if not days or not set(days) <= set(_ss.DAYS_OF_WEEK):
+        raise ValueError('Choose at least one day.')
+    action = form.get('action', 'shutdown')
+    if action not in _ss.ACTIONS:
+        raise ValueError('Unknown action.')
+    return dict(name=name, host=host, port=port, username=form.get('username', 'root').strip() or 'root',
+                password=password, ssh_key=form.get('ssh_key', ''), shutdown_time=shutdown_time, days=days,
+                enabled=bool(form.get('enabled')), warn_minutes=warn, action=action)
+
+
 @app.route('/shutdown_schedule/add', methods=['POST'])
 @operator_required
 def shutdown_schedule_add():
-    days = request.form.getlist('days')
-    _ss.add_schedule(
-        name=request.form.get('name', ''),
-        host=request.form.get('host', ''),
-        port=int(request.form.get('port', 22)),
-        username=request.form.get('username', 'root'),
-        password=request.form.get('password', ''),
-        ssh_key=request.form.get('ssh_key', ''),
-        shutdown_time=request.form.get('shutdown_time', '23:00'),
-        days=days,
-        enabled=bool(request.form.get('enabled')),
-        warn_minutes=int(request.form.get('warn_minutes', 5)),
-        action=request.form.get('action', 'shutdown'),
-    )
+    try:
+        fields = _schedule_form(password=request.form.get('password', ''))
+    except ValueError as exc:
+        flash(str(exc), 'error')
+        return redirect('/shutdown_schedule')
+    _ss.add_schedule(**fields)
     flash('Schedule added.', 'success')
     return redirect('/shutdown_schedule')
 
@@ -6720,20 +6740,15 @@ def shutdown_schedule_add():
 @app.route('/shutdown_schedule/<int:sid>/edit', methods=['POST'])
 @operator_required
 def shutdown_schedule_edit(sid):
-    days = request.form.getlist('days')
-    _ss.update_schedule(sid,
-        name=request.form.get('name', ''),
-        host=request.form.get('host', ''),
-        port=int(request.form.get('port', 22)),
-        username=request.form.get('username', 'root'),
-        password=request.form.get('password') or _ss.get_schedule(sid).get('password', ''),
-        ssh_key=request.form.get('ssh_key', ''),
-        shutdown_time=request.form.get('shutdown_time', '23:00'),
-        days=days,
-        enabled=bool(request.form.get('enabled')),
-        warn_minutes=int(request.form.get('warn_minutes', 5)),
-        action=request.form.get('action', 'shutdown'),
-    )
+    schedule = _ss.get_schedule(sid)
+    if schedule is None:
+        abort(404)
+    try:
+        fields = _schedule_form(password=request.form.get('password') or None)   # empty keeps the stored one
+    except ValueError as exc:
+        flash(str(exc), 'error')
+        return redirect('/shutdown_schedule')
+    _ss.update_schedule(sid, **fields)
     flash('Schedule updated.', 'success')
     return redirect('/shutdown_schedule')
 
