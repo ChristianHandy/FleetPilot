@@ -6,7 +6,10 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ### Added
 
-- **Smoke test on GitHub** (`.github/workflows/smoke.yml`): every push, pull request and a daily run install the code with `install.sh` on a fresh Ubuntu machine (HTTP and HTTPS), sign in and open every page the app links to (`scripts/smoke_test.py`), update an installation of the latest release to the new code, and build the Android app.
+- **"Safe to merge" check on pull requests** (`.github/workflows/pr-check.yml`): one verdict that passes only when
+  - the functional check passes (`functional.yml`): `install.sh` installs the code on a fresh Ubuntu machine (HTTP and HTTPS), an admin signs in and every page the app links to opens (`scripts/smoke_test.py`), an installation of the latest release updates to the new code, and the Android app builds;
+  - ClamAV finds no virus in the changed files and `scripts/pr_threat_scan.py` finds no backdoor patterns in the added lines (reverse shells, obfuscated code that runs, downloads piped into a shell, crypto miners, hidden Unicode, SSH keys, binaries, scripts in SVGs). The scanner runs from the base branch, so a pull request cannot switch it off.
+- **Daily repository scan** (`.github/workflows/repo-scan.yml`, also on every push to main): the functional check, ClamAV over every tracked file and the backdoor scan of the whole repository.
 
 ## [1.8.0-beta.2] — 2026-10-18
 

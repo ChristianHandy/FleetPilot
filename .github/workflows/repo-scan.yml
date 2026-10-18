@@ -1,0 +1,54 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Repository scan
+
+# The same checks as for pull requests, regularly on the whole repository: catches
+# what slipped through, changes pushed directly to main, new virus signatures for old
+# files, and breakage from outside (new Ubuntu packages, a changed latest release).
+#   - functional check (functional.yml)
+#   - ClamAV over every tracked file
+#   - scripts/pr_threat_scan.py --all over every tracked file
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "23 5 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  functional:
+    name: Functional
+    permissions:
+      contents: read
+    uses: ./.github/workflows/functional.yml
+
+  malware:
+    name: Viruses and backdoors (whole repository)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Backdoor patterns in every tracked file
+        run: python3 scripts/pr_threat_scan.py --all
+
+      - name: ClamAV virus scan of every tracked file
+        if: success() || failure()
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends clamav clamav-freshclam > /dev/null
+          sudo systemctl stop clamav-freshclam || true
+          sudo freshclam --quiet || { sleep 30; sudo freshclam --quiet; }
+          git ls-files -z > "$RUNNER_TEMP/files"
+          xargs -0 clamscan --no-summary --infected --alert-encrypted=yes --alert-macros=yes < "$RUNNER_TEMP/files"
+          echo "ClamAV: no viruses in $(tr -cd '\0' < "$RUNNER_TEMP/files" | wc -c) tracked files." >> "$GITHUB_STEP_SUMMARY"

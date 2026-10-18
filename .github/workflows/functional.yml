@@ -1,27 +1,17 @@
 # SPDX-FileCopyrightText: Copyright the FleetPilot contributors
 # SPDX-License-Identifier: GPL-3.0-or-later
-name: Smoke test
+name: Functional check
 
-# Checks that the code as it is on GitHub actually works for a user, beyond the unit
-# tests: install.sh installs this commit on a fresh Ubuntu machine (with and without
-# HTTPS), FleetPilot starts under systemd, an admin can sign in and every page the app
-# links to opens without a server error (scripts/smoke_test.py). It also updates an
-# installation of the latest release to this commit, and builds the Android app.
-# Runs on every push to main, every pull request and daily (for changes outside the
-# repository, such as new package versions on Ubuntu).
+# Checks that the code actually works for a user, beyond the unit tests: install.sh
+# installs this commit on a fresh Ubuntu machine (with and without HTTPS), FleetPilot
+# starts under systemd, an admin can sign in and every page the app links to opens
+# without a server error (scripts/smoke_test.py). It also updates an installation of
+# the latest release to this commit, and builds the Android app.
+# Called by pr-check.yml (pull requests) and repo-scan.yml (daily and on main).
 on:
-  push:
-    branches: [main]
-  pull_request:
-  schedule:
-    - cron: "23 5 * * *"
-  workflow_dispatch:
+  workflow_call:
 
 permissions: {}
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
 
 jobs:
   install:
@@ -105,7 +95,7 @@ jobs:
           curl -fsSL "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$latest/install.sh" -o "$RUNNER_TEMP/install-latest.sh"
           sudo FP_NONINTERACTIVE=1 FP_HTTPS=no FP_ADMIN_PASSWORD="$password" FP_BRANCH="$latest" \
             bash "$RUNNER_TEMP/install-latest.sh"
-          python3 scripts/smoke_test.py --base http://127.0.0.1:5000
+          FP_SMOKE_PASSWORD="$password" python3 scripts/smoke_test.py --base http://127.0.0.1:5000
 
       - name: Update it to this commit
         run: |

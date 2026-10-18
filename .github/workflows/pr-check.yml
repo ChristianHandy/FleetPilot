@@ -1,0 +1,103 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Pull request check
+
+# One verdict per pull request: the "Safe to merge" check passes only when
+#   - the functional check passes (install, sign in, every page, update, Android build;
+#     see functional.yml), and
+#   - the malware check finds nothing: ClamAV scans every file the pull request adds or
+#     changes, and scripts/pr_threat_scan.py reads the added lines for backdoors.
+# The scanner script is taken from the base branch, so a pull request cannot switch it
+# off by editing it. A pull request that edits the workflows themselves can still change
+# what runs here, so changes under .github/ always need a careful human review
+# (CODEOWNERS). The scanner lists those and other sensitive files in the job summary.
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  functional:
+    name: Functional
+    permissions:
+      contents: read
+    uses: ./.github/workflows/functional.yml
+
+  malware:
+    name: Viruses and backdoors
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Backdoor patterns in the added lines
+        run: |
+          if [ -z "$BASE_SHA" ] || ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            BASE_SHA="$(git rev-parse origin/main)"
+          fi
+          # The scanner from the base branch, not from the pull request.
+          if git cat-file -e "$BASE_SHA:scripts/pr_threat_scan.py" 2>/dev/null; then
+            git show "$BASE_SHA:scripts/pr_threat_scan.py" > "$RUNNER_TEMP/pr_threat_scan.py"
+          else
+            echo "::warning::The base branch has no scanner yet; using the pull request's own copy."
+            cp scripts/pr_threat_scan.py "$RUNNER_TEMP/pr_threat_scan.py"
+          fi
+          python3 "$RUNNER_TEMP/pr_threat_scan.py" "$BASE_SHA" "$HEAD_SHA"
+
+      - name: ClamAV virus scan of the changed files
+        run: |
+          if [ -z "$BASE_SHA" ] || ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            BASE_SHA="$(git rev-parse origin/main)"
+          fi
+          git diff --name-only -z --diff-filter=ACMRT "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/changed"
+          if [ ! -s "$RUNNER_TEMP/changed" ]; then
+            echo "No added or changed files."
+            exit 0
+          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends clamav clamav-freshclam > /dev/null
+          sudo systemctl stop clamav-freshclam || true
+          sudo freshclam --quiet || { sleep 30; sudo freshclam --quiet; }
+          xargs -0 clamscan --no-summary --infected --alert-encrypted=yes --alert-macros=yes < "$RUNNER_TEMP/changed"
+          echo "ClamAV: no viruses in $(tr -cd '\0' < "$RUNNER_TEMP/changed" | wc -c) changed files." >> "$GITHUB_STEP_SUMMARY"
+
+  verdict:
+    name: Safe to merge
+    if: always()
+    needs: [functional, malware]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: All checks passed?
+        env:
+          FUNCTIONAL: ${{ needs.functional.result }}
+          MALWARE: ${{ needs.malware.result }}
+        run: |
+          {
+            echo "## Safe to merge?"
+            echo ""
+            echo "| Check | Result |"
+            echo "|---|---|"
+            echo "| Functional (install, pages, update, Android) | $FUNCTIONAL |"
+            echo "| Viruses and backdoors | $MALWARE |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$FUNCTIONAL" = "success" ] && [ "$MALWARE" = "success" ]; then
+            echo "✅ **Safe to merge** as far as these checks can tell. Still read the change, especially anything the scanner listed for review." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ **Not safe to merge** until the failed checks pass." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi

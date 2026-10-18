@@ -64,7 +64,7 @@ class Client:
     def request(self, path, data=None):
         """Return (status, final path, body); HTTP errors are returned, not raised."""
         body = urllib.parse.urlencode(data).encode() if data is not None else None
-        req = urllib.request.Request(self.base + path, data=body, headers={"Referer": self.base + "/login"})
+        req = urllib.request.Request(self.base + path, data=body, headers={"Referer": self.base + "/"})
         try:
             with self.opener.open(req, timeout=self.timeout) as resp:
                 return resp.status, urllib.parse.urlsplit(resp.geturl()).path, resp.read().decode("utf-8", "replace")
@@ -87,12 +87,13 @@ def wait_until_healthy(client, seconds):
 
 
 def sign_in(client, username, password):
-    status, _, page = client.request("/login")
-    if status != 200:
-        sys.exit(f"FAIL: /login answered {status}")
-    status, final, page = client.request("/login", {"username": username, "password": password,
-                                                    "csrf_token": _csrf_token(page)})
-    if status >= 400 or final.rstrip("/").endswith("/login"):
+    """FleetPilot's sign-in form is the start page "/" (fields "user" and "pass")."""
+    status, _, page = client.request("/")
+    if status != 200 or 'name="pass"' not in page:
+        sys.exit(f"FAIL: the sign-in page / answered {status} without a sign-in form")
+    status, final, page = client.request("/", {"user": username, "pass": password,
+                                               "csrf_token": _csrf_token(page)})
+    if status >= 400 or 'name="pass"' in page:
         sys.exit(f"FAIL: signing in as {username} did not work (status {status}, ended on {final})")
     return final, page
 
