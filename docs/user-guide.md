@@ -54,6 +54,8 @@ Actions that change security-relevant data (users, tokens, security rules, backu
 
 English, Deutsch, Français, Español and Nederlands. Choose the language at the top right; the choice is saved in your profile.
 
+Translation contributors can run `python scripts/missing_translations.py` from a source checkout to list untranslated template strings and counts by language. Use `--lang de` to check one language. The command exits with `0` when complete, `1` when translations are missing and `2` for invalid arguments; it does not start FleetPilot.
+
 ### Accessibility
 
 **Account → Accessibility** makes FleetPilot easier to read and use: larger text, high contrast, an easy-to-read font, wider spacing, underlined links, reduced motion, and *easy language* with simple menu names and a short plain explanation on every page (English and German *Leichte Sprache*). The settings follow your account to every device. FleetPilot works with the keyboard alone and with screen readers. Details: [accessibility.md](accessibility.md).

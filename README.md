@@ -1,5 +1,13 @@
 <div align="center">
 
+<a href="https://github.com/ChristianHandy/FleetPilot/issues/new?template=bug_report.yml"><img src="docs/testers-wanted.svg" alt="Testers wanted: run FleetPilot in your homelab and tell us what breaks. Proxmox, TrueNAS, Unraid, FRITZ!Box, OpenWrt, OPNsense, Windows machines and the Android app." width="100%"></a>
+
+**FleetPilot needs testers.** It's tested against an emulated homelab, but nothing beats real hardware.<br>
+Install it, or just [try the live demo](https://christianhandy.github.io/FleetPilot/demo/), and tell us what works and what doesn't:<br>
+**[🐞 Report a bug](https://github.com/ChristianHandy/FleetPilot/issues/new?template=bug_report.yml)** · **[💬 Share how it went](https://github.com/ChristianHandy/FleetPilot/discussions)** · [Open issues](https://github.com/ChristianHandy/FleetPilot/issues)
+
+---
+
 <img src="static/fleetpilot-logo.svg" alt="" width="88">
 
 # FleetPilot
@@ -187,6 +195,18 @@ Extend FleetPilot with custom disk tools and integrations via the addon system. 
 `integrations/home-assistant/` contains a Home Assistant custom component that shows SMART health for disks on your servers as sensors, binary sensors and self-test buttons. It runs inside Home Assistant on its own and reads the same `smartctl` data as FleetPilot's SMART pages. See [its README](integrations/home-assistant/README.md) for installation.
 
 This component was previously the separate `HAOS_SMART_Monitor` repository. The older standalone `Disk_Tools` app is fully covered by FleetPilot's Disk Tools pages (`/disks`).
+
+---
+
+## How much of FleetPilot is written by AI?
+
+<img src="https://christianhandy.github.io/FleetPilot/ai-share.svg" alt="Bar chart: share of changed lines per month that were written with AI assistance. The current values are listed at https://christianhandy.github.io/FleetPilot/ai-share.json" width="100%">
+
+**Too much, and this number needs to be as low as we can get.** Most of FleetPilot so far was written with AI coding assistants (GitHub Copilot, Manus, Claude). Every change goes through the same tests, CodeQL, fuzzing and review. But software that holds the keys to your servers should be written and reviewed by people, and that's the goal of the [roadmap](ROADMAP.md#project-more-people-less-ai-written-code).
+
+The chart counts the lines each commit changed, per month, and marks a commit as AI-assisted when its author is a coding agent or its message names an AI co-author. Dependency bots are left out. It's a lower bound: AI help that isn't declared isn't counted. It's rebuilt daily from the git history by [`scripts/ai_share.py`](scripts/ai_share.py).
+
+**You can help push it down:** pick a [good first issue](https://github.com/ChristianHandy/FleetPilot/labels/good%20first%20issue), review a pull request, or [translate FleetPilot](https://github.com/ChristianHandy/FleetPilot/labels/translation).
 
 ---
 

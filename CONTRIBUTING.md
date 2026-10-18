@@ -14,6 +14,8 @@ Reports in English or German are fine; issues are usually answered within a few 
 
 ## Contributing code
 
+Before starting on an issue, comment "I'd like to work on this" and wait for a maintainer to assign it to you. Assigned issues without activity for two weeks become free again. Small fixes like typos don't need this.
+
 1. Fork the repository and create a branch from `main`.
 2. Make your change. Keep it focused: one fix or feature per pull request.
 3. Add or update tests (see the test policy below) and the documentation it touches (`docs/user-guide.md`, `docs/de/benutzerhandbuch.md`, `CHANGELOG.md` under "Unreleased").
@@ -31,7 +33,12 @@ By contributing you agree that your contribution is licensed under the project's
 
 ## Sign-off (DCO)
 
-Every commit must be signed off: `git commit -s` adds a `Signed-off-by: Your Name <you@example.com>` line matching the commit's author. With it you certify the [Developer Certificate of Origin](https://developercertificate.org): you wrote the change, or otherwise have the right to submit it under the project's license. A check (`dco.yml`) fails pull requests with commits that are not signed off. To fix the last commit, run `git commit --amend -s`; for older commits, run `git rebase --signoff main`.
+Every commit must be signed off: `git commit -s` adds a `Signed-off-by: Your Name <you@example.com>` line matching the commit's author. With it you certify the [Developer Certificate of Origin](https://developercertificate.org): you wrote the change, or otherwise have the right to submit it under the project's license. A check (`dco.yml`) fails pull requests with commits that are not signed off, and says how to fix each one:
+
+- **No sign-off:** for the last commit, run `git commit --amend --no-edit -s`; for older commits, run `git rebase --signoff main`.
+- **Signed off with a different address than the commit's author** (for example your GitHub noreply address as author and a personal address in the sign-off): set `git config user.name` and `user.email` to the signed-off name and address and run `git commit --amend --no-edit --reset-author`. Or keep the author and add a matching line with `git commit --amend --no-edit --trailer "Signed-off-by: Your Name <author address>"`.
+
+Then push with `git push --force-with-lease`.
 
 ## Building and running from source
 

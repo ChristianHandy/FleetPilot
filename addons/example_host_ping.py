@@ -19,6 +19,70 @@ import logging
 logger = logging.getLogger("fleetpilot.host_ping")
 
 
+# Ports tried in order; the first one that answers decides the reported time
+PROBE_PORTS = (80, 22)
+
+# Per-attempt connection timeout in seconds
+PROBE_TIMEOUT = 2.0
+
+
+def probe_host(ip: str, ports=PROBE_PORTS, timeout=PROBE_TIMEOUT) -> dict:
+    """
+    TCP-probe a host and report what the attempt that answered took
+
+    Two things went wrong when this was inline in the route: the timer was
+    started once before the port 80 attempt, so a host without a web server
+    was charged the full port 80 timeout even though SSH answered in a
+    millisecond; and a refused connection was treated as no answer at all, so
+    a host that is up but has neither port open was reported as "Timeout".
+
+    A *refused* connection is an answer: the host sent an RST, so it is
+    reachable and only the port is closed. Such a host is reported as up with
+    ``error="port closed"``, and the probe keeps looking for an open port so
+    the answer names a port something is actually listening on.
+
+    Args:
+        ip: address to probe
+        ports: ports to try, in order
+        timeout: connection timeout per attempt, in seconds
+
+    Returns:
+        ``{"ok", "ms", "port", "error"}``. ``ok`` says whether the host
+        answered at all, ``ms`` is the round-trip time of the attempt that
+        answered (``None`` when nothing did), ``port`` the port that answered
+        and ``error`` one of ``None``, ``"port closed"``, ``"timeout"``,
+        ``"dns"`` or ``"unreachable"``.
+    """
+    last_error = None
+    refused = None
+
+    for port in ports:
+        start = time.monotonic()
+        try:
+            with socket.create_connection((ip, port), timeout=timeout):
+                pass
+        except ConnectionRefusedError:
+            # The host answered with an RST: reachable, nothing listening here
+            if refused is None:
+                refused = (port, round((time.monotonic() - start) * 1000))
+            last_error = "port closed"
+        except socket.timeout:
+            last_error = "timeout"
+        except socket.gaierror:
+            last_error = "dns"
+        except OSError:
+            last_error = "unreachable"
+        else:
+            return {"ok": True, "ms": round((time.monotonic() - start) * 1000),
+                    "port": port, "error": None}
+
+    if refused is not None:
+        return {"ok": True, "ms": refused[1], "port": refused[0],
+                "error": "port closed"}
+
+    return {"ok": False, "ms": None, "port": None, "error": last_error or "unreachable"}
+
+
 def _ping_button(host: dict) -> str:
     """Return an HTML button that triggers a client-side ping request."""
     ip = host.get("ip", "")
@@ -47,7 +111,9 @@ if (!window._fpPingLoaded) {{
     fetch('/plugins/ping?ip=' + encodeURIComponent(ip))
       .then(r => r.json())
       .then(d => {{
-        btn.textContent = d.ok ? d.ms + ' ms' : 'Timeout';
+        btn.textContent = d.ok
+          ? d.ms + ' ms' + (d.port ? ' (' + d.port + ')' : '')
+          : (d.error || 'unreachable');
         btn.style.color = d.ok ? '#10b981' : '#ef4444';
         setTimeout(() => {{
           btn.disabled = false;
@@ -99,21 +165,9 @@ def register(app, core):
         ip = request.args.get("ip", "").strip()
         if not ip:
             return jsonify({"ok": False, "error": "no ip"}), 400
-        # Lightweight TCP probe on port 80 (falls back to ICMP-style timing)
-        start = time.monotonic()
-        ok = False
-        try:
-            with socket.create_connection((ip, 80), timeout=2):
-                ok = True
-        except OSError:
-            # Port 80 closed — try port 22 (SSH)
-            try:
-                with socket.create_connection((ip, 22), timeout=2):
-                    ok = True
-            except OSError:
-                pass
-        ms = round((time.monotonic() - start) * 1000)
-        return jsonify({"ok": ok, "ms": ms, "ip": ip})
+        result = probe_host(ip)
+        result["ip"] = ip
+        return jsonify(result)
 
     app.register_blueprint(bp)
     logger.info("[host_ping] /plugins/ping route registered")

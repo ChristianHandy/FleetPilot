@@ -4,6 +4,10 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ## [Unreleased]
 
+## [1.8.0-beta.2] — 2026-10-18
+
+**Pre-release for testers.** Everything below is new since 1.7.0. Please try it on your own hardware and [report what breaks](https://github.com/ChristianHandy/FleetPilot/issues/new?template=bug_report.yml).
+
 ### Security
 
 - Fan, disk and CheckMK pages put names and the monitoring token into inline JavaScript as JSON now (`|tojson`); a test checks every template for unencoded values in scripts.
@@ -18,6 +22,7 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ### Added
 
+- **Translation report:** `python scripts/missing_translations.py` lists untranslated literal template strings and per-language totals without starting the application; `--lang` checks one language.
 - **Windows PCs and servers, every release Microsoft still supports**, all over OpenSSH (see [WINDOWS_SUPPORT.md](WINDOWS_SUPPORT.md)):
   - covers Windows 11 up to 26H2, Windows 10/11 LTSC 2019/2021/2024 (including IoT and evaluation editions) and Windows Server 2016, 2019, 2022 and 2025 (Desktop or Core), in any display language
   - **Detect OS** names the exact release and edition and shows Microsoft's support end date; the host list warns about ended support
@@ -50,6 +55,7 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 - **Live demo you can try before installing** (https://christianhandy.github.io/FleetPilot/): the real FleetPilot runs in the browser with Pyodide against an emulated homelab of Proxmox nodes, TrueNAS, Proxmox Backup Server, Linux and Windows machines, FRITZ!Box/Repeater, OpenWrt and OPNsense. Updates, Wake-on-LAN, VM power, fan control, SMART alerts and router checks all work; a "Virtual lab" panel switches devices off, fails disks or publishes updates. The previous static demo is now the lighter tour at `/tour/`. See `demo/README.md`.
 
 - **Releases:** pre-release tags (`v1.8.0-beta.2`) are published by the release workflow too, as pre-releases. Files attached to a draft release before the tag is pushed, such as the Android APK, get checksums and signed provenance like the source archive.
+- **Android app in every release:** the release workflow builds the APK from the tag, signs it with the release key, checks the signing certificate and attaches it to beta and stable releases, covered by `SHA256SUMS` and the signed provenance.
 
 ### Fixed
 
@@ -69,6 +75,7 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 - In a Proxmox cluster, disks with the same name on different nodes (every node's `sda`) overwrote each other in the SMART registry; they are now stored as `node:sda`.
 - Fan controllers (lm-sensors) showed the sensor limits (`temp1_max`, `temp1_crit`) as extra temperature readings; only measured values are shown now.
 - HW Monitor showed German labels ("Netz", "CPU Last") in the English interface.
+- **Ping button (example plugin):** the round-trip time started before the port 80 attempt, so a host without a web server was charged that attempt's full timeout even when SSH answered in a millisecond; every attempt is timed on its own and the time of the one that answered is reported. A refused connection also counts as an answer (the host is up, only the port is closed), so a host with neither port 80 nor port 22 open is no longer shown as "Timeout". The button shows `3 ms (22)` or the reason a host did not answer (`timeout`, `dns`, `unreachable`) instead of always "Timeout".
 
 ## [1.7.0] — 2026-10-09
 
