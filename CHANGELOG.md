@@ -4,6 +4,10 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ## [Unreleased]
 
+### Added
+
+- **Smoke test on GitHub** (`.github/workflows/smoke.yml`): every push, pull request and a daily run install the code with `install.sh` on a fresh Ubuntu machine (HTTP and HTTPS), sign in and open every page the app links to (`scripts/smoke_test.py`), update an installation of the latest release to the new code, and build the Android app.
+
 ## [1.8.0-beta.2] — 2026-10-18
 
 **Pre-release for testers.** Everything below is new since 1.7.0. Please try it on your own hardware and [report what breaks](https://github.com/ChristianHandy/FleetPilot/issues/new?template=bug_report.yml).
