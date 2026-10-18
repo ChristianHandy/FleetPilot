@@ -268,3 +268,298 @@ def test_ping_route_without_ip_is_rejected(ping_client, create_connection):
     assert response.status_code == 400
     assert response.get_json() == {"ok": False, "error": "no ip"}
     assert fake.attempts == []
+
+
+# ---------------------------------------------------------------------------
+# End-to-end plugin hooks: update_pre, update_post, notification (issue #145)
+# ---------------------------------------------------------------------------
+
+
+class _FakeChannel:
+    def __init__(self, raw=b"", exit_status=0):
+        import io
+
+        self._raw = raw
+        self._exit_status = exit_status
+        self._io = io
+
+    def makefile(self, mode="rb"):
+        return self._io.BytesIO(self._raw)
+
+    def recv_exit_status(self):
+        return self._exit_status
+
+
+class _FakeStream:
+    def __init__(self, text="", exit_status=0):
+        self._raw = text.encode("utf-8")
+        self.channel = _FakeChannel(raw=self._raw, exit_status=exit_status)
+
+    def read(self):
+        return self._raw
+
+
+class _FakeLinuxSSH:
+    def __init__(self, upgrade_output="3 upgraded, 1 newly installed, 0 to remove and 0 not upgraded.", exit_status=0):
+        self.upgrade_output = upgrade_output
+        self.exit_status = exit_status
+        self.closed = False
+
+    def exec_command(self, command, timeout=None, get_pty=False):
+        import linux_distro
+        import updater
+
+        if command == updater.WINDOWS_DETECTION_COMMAND:
+            return None, _FakeStream("linux"), _FakeStream("")
+        if command == linux_distro.OS_RELEASE_COMMAND:
+            return None, _FakeStream('ID=ubuntu\nPRETTY_NAME="Ubuntu 24.04 LTS"\n'), _FakeStream("")
+        if "apt-get" in command:
+            return None, _FakeStream(self.upgrade_output, exit_status=self.exit_status), _FakeStream("apt error")
+        return None, _FakeStream(""), _FakeStream("")
+
+    def close(self):
+        self.closed = True
+
+
+def test_update_and_notification_hooks_are_called_with_documented_arguments(tmp_path, monkeypatch):
+    import addon_loader
+    import email_config
+    import email_notifier
+    import notify
+    import updater
+    import version_manager
+    from flask import Flask
+
+    addon_dir = tmp_path / "addons"
+    tpl_dir = tmp_path / "templates"
+    addon_dir.mkdir()
+    tpl_dir.mkdir()
+
+    calls = {"pre": [], "post": [], "notify": []}
+    log_snapshots = {}
+
+    mgr = addon_loader.AddonManager(Flask(__name__), None)
+    plugin_file = addon_dir / "recorder_plugin.py"
+    plugin_file.write_text(
+        "addon_meta = {\n"
+        '    "name": "Recorder",\n'
+        '    "version": "1.0.0",\n'
+        '    "update_pre": lambda host: None,\n'
+        '    "update_post": lambda host, result: None,\n'
+        '    "notification": lambda event, data: None,\n'
+        "}\n",
+        encoding="utf-8",
+    )
+    mgr.load_addons(str(addon_dir), str(tpl_dir))
+
+    log_list = []
+    mgr.hooks["update_pre_hook"] = [
+        lambda host: (
+            calls["pre"].append(dict(host)),
+            log_snapshots.setdefault("pre_len", len(log_list)),
+        )
+    ]
+    mgr.hooks["update_post_hook"] = [
+        lambda host, result: (
+            calls["post"].append((dict(host), dict(result))),
+            log_snapshots.setdefault("post_logs", list(log_list)),
+        )
+    ]
+    mgr.hooks["notification_hook"] = [
+        lambda event, data: calls["notify"].append((event, dict(data)))
+    ]
+
+    ssh = _FakeLinuxSSH()
+    monkeypatch.setattr(updater.ssh_helper, "create_client", lambda *a, **k: ssh)
+    monkeypatch.setattr(email_config, "get_error_notifications_enabled", lambda: False)
+
+    res = updater.run_update("192.0.2.10", "ubuntu", "web-1", log_list)
+
+    assert calls["pre"] == [
+        {"name": "web-1", "host": "192.0.2.10", "ip": "192.0.2.10", "user": "ubuntu", "repo_only": False}
+    ]
+    assert log_snapshots["pre_len"] == 0
+    assert any("Update completed successfully for web-1" in line for line in log_snapshots["post_logs"])
+    assert len(calls["post"]) == 1
+    post_host, post_result = calls["post"][0]
+    assert post_host == calls["pre"][0]
+    assert post_result == {"success": True, "packages_updated": 4, "error": None}
+    assert res == post_result
+
+    # Version check firing new_version_available
+    monkeypatch.setattr(version_manager, "VERSION_CHECK_FILE", str(tmp_path / "version_check.json"))
+    monkeypatch.setattr(version_manager, "get_current_commit_sha", lambda: "aaaa111")
+    monkeypatch.setattr(version_manager, "get_current_branch", lambda: "main")
+    monkeypatch.delenv("FLEETPILOT_OFFLINE", raising=False)
+    monkeypatch.setattr(
+        version_manager.requests,
+        "get",
+        lambda url, timeout=10: SimpleNamespace(
+            status_code=200,
+            json=lambda: {
+                "target_commitish": "bbbb222",
+                "tag_name": "v2.5.0",
+                "html_url": "https://github.com/ChristianHandy/fleetpilot/releases/tag/v2.5.0",
+                "name": "Release 2.5.0",
+            },
+        ),
+    )
+
+    version_manager.check_for_updates()
+    assert any(ev == "new_version_available" and data.get("version") == "v2.5.0" for ev, data in calls["notify"])
+
+    # notify.send and email_notifier also fire notification_hook
+    monkeypatch.setenv("FLEETPILOT_DATA_DIR", str(tmp_path))
+    notify.send("security", "FleetPilot: sign-in locked", "Too many attempts", "warning")
+    assert ("security", {"title": "FleetPilot: sign-in locked", "message": "Too many attempts", "level": "warning"}) in calls["notify"]
+
+    email_notifier.send_error_notification("web-1", "apt failed")
+    assert ("update_error", {"host": "web-1", "error": "apt failed"}) in calls["notify"]
+
+
+def test_slack_example_plugin_sends_webhook_on_update_and_new_version(tmp_path, monkeypatch, urlopen):
+    import addon_loader
+    import email_config
+    import updater
+    import version_manager
+    from flask import Flask
+
+    webhook_url = "https://example.invalid/slack-hook"
+    monkeypatch.setenv("SLACK_WEBHOOK_URL", webhook_url)
+    urlopen.side_effect = None
+    urlopen.return_value = nullcontext(SimpleNamespace(status=200))
+
+    mgr = addon_loader.AddonManager(Flask(__name__), None)
+    mgr._load_one("example_slack_notify.py", "addons", str(tmp_path))
+
+    monkeypatch.setattr(
+        updater.ssh_helper,
+        "create_client",
+        lambda *a, **k: _FakeLinuxSSH("3 upgraded, 0 newly installed, 0 to remove and 0 not upgraded."),
+    )
+    monkeypatch.setattr(email_config, "get_error_notifications_enabled", lambda: False)
+
+    log_list = []
+    updater.run_update("192.0.2.25", "ubuntu", "nas", log_list)
+
+    assert urlopen.call_count == 1
+    req1 = urlopen.call_args_list[0].args[0]
+    body1 = json.loads(req1.data.decode("utf-8"))["text"]
+    assert "`nas`" in body1
+    assert "succeeded" in body1
+    assert "Packages updated: *3*" in body1
+
+    monkeypatch.setattr(version_manager, "VERSION_CHECK_FILE", str(tmp_path / "version_check.json"))
+    monkeypatch.setattr(version_manager, "get_current_commit_sha", lambda: "1111111")
+    monkeypatch.setattr(version_manager, "get_current_branch", lambda: "main")
+    monkeypatch.delenv("FLEETPILOT_OFFLINE", raising=False)
+    monkeypatch.setattr(
+        version_manager.requests,
+        "get",
+        lambda url, timeout=10: SimpleNamespace(
+            status_code=200,
+            json=lambda: {
+                "target_commitish": "2222222",
+                "tag_name": "v3.1.0",
+                "html_url": "https://github.com/ChristianHandy/fleetpilot/releases/tag/v3.1.0",
+                "name": "v3.1.0",
+            },
+        ),
+    )
+
+    version_manager.check_for_updates()
+
+    assert urlopen.call_count == 2
+    req2 = urlopen.call_args_list[1].args[0]
+    body2 = json.loads(req2.data.decode("utf-8"))["text"]
+    assert "*v3.1.0*" in body2
+
+
+def test_raising_hooks_do_not_stop_update_and_are_logged(monkeypatch, caplog):
+    import logging
+    import addon_loader
+    import email_config
+    import updater
+    from flask import Flask
+
+    mgr = addon_loader.AddonManager(Flask(__name__), None)
+    post_called = []
+
+    def bad_pre(host):
+        raise RuntimeError("pre-hook boom")
+
+    def bad_post(host, result):
+        raise ValueError("post-hook boom")
+
+    def good_post(host, result):
+        post_called.append(result)
+
+    mgr.hooks["update_pre_hook"] = [bad_pre]
+    mgr.hooks["update_post_hook"] = [bad_post, good_post]
+
+    monkeypatch.setattr(updater.ssh_helper, "create_client", lambda *a, **k: _FakeLinuxSSH())
+    monkeypatch.setattr(email_config, "get_error_notifications_enabled", lambda: False)
+
+    log_list = []
+    with caplog.at_level(logging.ERROR, logger="addon_loader"):
+        result = updater.run_update("192.0.2.99", "ubuntu", "db-1", log_list)
+
+    assert result["success"] is True
+    assert result["packages_updated"] == 4
+    assert any("Update completed successfully for db-1" in line for line in log_list)
+    assert post_called == [{"success": True, "packages_updated": 4, "error": None}]
+    assert "pre-hook boom" in caplog.text
+    assert "post-hook boom" in caplog.text
+
+
+def test_failed_update_and_localhost_update_fire_pre_and_post_hooks(monkeypatch):
+    import addon_loader
+    import email_config
+    import updater
+    from flask import Flask
+
+    mgr = addon_loader.AddonManager(Flask(__name__), None)
+    events = []
+    mgr.hooks["update_pre_hook"] = [lambda host: events.append(("pre", host["name"], host["repo_only"]))]
+    mgr.hooks["update_post_hook"] = [
+        lambda host, result: events.append(("post", host["name"], result["success"], result["packages_updated"]))
+    ]
+
+    monkeypatch.setattr(
+        updater.ssh_helper,
+        "create_client",
+        lambda *a, **k: _FakeLinuxSSH("E: dpkg was interrupted", exit_status=100),
+    )
+    monkeypatch.setattr(email_config, "get_error_notifications_enabled", lambda: False)
+
+    res_fail = updater.run_update("192.0.2.55", "ubuntu", "broken-host", [], repo_only=True)
+    assert res_fail["success"] is False
+    assert res_fail["packages_updated"] == 0
+    assert "exit code 100" in res_fail["error"]
+    assert events == [
+        ("pre", "broken-host", True),
+        ("post", "broken-host", False, 0),
+    ]
+
+
+def test_plugin_docs_documents_all_notification_events_and_update_payloads():
+    from pathlib import Path
+
+    docs_html = Path("templates/plugin_docs.html").read_text(encoding="utf-8")
+    for event_name in (
+        "new_version_available",
+        "security",
+        "smart",
+        "vulnerability",
+        "backup",
+        "router",
+        "test",
+        "update_error",
+        "update_report",
+    ):
+        assert event_name in docs_html
+    assert "packages_updated" in docs_html
+    assert "update_pre" in docs_html
+    assert "update_post" in docs_html
+
+

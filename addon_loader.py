@@ -14,13 +14,49 @@ Supports plugins for ALL areas of the dashboard:
   - Settings panels
 """
 
+import logging
 import os
+import sys
 import importlib.util
 import traceback
 import threading
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 import textwrap
+
+logger = logging.getLogger(__name__)
+
+addon_mgr: Optional["AddonManager"] = None
+_default_app_mgr: Optional["AddonManager"] = None
+
+
+def get_addon_manager() -> Optional["AddonManager"]:
+    """Return the active AddonManager instance, if any."""
+    app_mod = sys.modules.get("app")
+    if app_mod is not None:
+        app_mgr = getattr(app_mod, "addon_mgr", None)
+        if app_mgr is not None and app_mgr is not _default_app_mgr:
+            return app_mgr
+    return addon_mgr
+
+
+def set_addon_manager(mgr: Optional["AddonManager"]) -> None:
+    """Set the active AddonManager instance used by module-level fire_hooks."""
+    global addon_mgr
+    addon_mgr = mgr
+
+
+def fire_hooks(hookname: str, *args, **kwargs) -> None:
+    """Fire hooks on the active AddonManager, if one is initialised."""
+    mgr = get_addon_manager()
+    if mgr is None:
+        return
+    try:
+        mgr.fire_hooks(hookname, *args, **kwargs)
+    except Exception as exc:
+        logger.exception("Hook %s error: %s", hookname, exc)
+        print(f"[plugin] Hook {hookname} error: {exc}")
+
 
 HOOK_NAMES = [
     "device_buttons",
@@ -67,6 +103,7 @@ class AddonManager:
     """Universal plugin manager for FleetPilot."""
 
     def __init__(self, app, core, hookpoints: Optional[Dict] = None):
+        global addon_mgr, _default_app_mgr
         self.app = app
         self.core = core
         self.hooks: Dict[str, List[Callable]] = {h: [] for h in HOOK_NAMES}
@@ -76,6 +113,11 @@ class AddonManager:
         self.css_files: List[str] = []
         self.plugins: List[PluginInfo] = []
         self._lock = threading.Lock()
+        addon_mgr = self
+        if app is not None:
+            app.addon_mgr = self
+            if _default_app_mgr is None:
+                _default_app_mgr = self
 
     def load_addons(self, addon_dir: str = "addons",
                     template_target: str = "templates/addons") -> None:
@@ -175,6 +217,7 @@ class AddonManager:
             try:
                 func(*args, **kwargs)
             except Exception as exc:
+                logger.exception("Hook %s error: %s", hookname, exc)
                 print(f"[plugin] Hook {hookname} error: {exc}")
 
     def get_sidebar_links(self) -> List[Dict]:

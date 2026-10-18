@@ -23,11 +23,23 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+import addon_loader
 import secret_box
 
 logger = logging.getLogger(__name__)
 _box = secret_box.SecretBox('sha256')
 _lock = threading.Lock()
+addon_mgr = None
+
+
+def _fire_notification_hook(event: str, data: dict) -> None:
+    mgr = addon_mgr if addon_mgr is not None else addon_loader.get_addon_manager()
+    if mgr is None:
+        return
+    try:
+        mgr.fire_hooks('notification_hook', event, data)
+    except Exception as exc:
+        logger.exception('Hook notification_hook error: %s', exc)
 
 KINDS = {
     'ntfy': 'ntfy',
@@ -202,6 +214,10 @@ def send(event, title, message, level='warning', wait=False, only=None):
     """
     if level not in LEVELS:
         level = 'warning'
+    _fire_notification_hook(
+        event,
+        {'title': title, 'message': message, 'level': level},
+    )
     rank = LEVELS.index(level)
     targets = [c for c in _load() if (only and c.get('id') == only) or
                (not only and c.get('enabled') and event in c.get('events', [])

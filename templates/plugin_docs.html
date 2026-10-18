@@ -142,6 +142,51 @@ def register(app, core):
             </tbody>
           </table>
         </div>
+
+        <h3 style="margin:1.5rem 0 0.75rem; font-size:0.95rem; font-weight:600">Update Hook Payloads (<code>update_pre</code> / <code>update_post</code>)</h3>
+        <p style="color:var(--text-secondary); font-size:0.85rem; line-height:1.6; margin:0 0 0.75rem">
+          <code>update_pre(host)</code> runs before each host update and <code>update_post(host, result)</code> runs after the update finishes and its result is recorded. Exceptions raised by hooks are logged and never interrupt an update.
+        </p>
+        <ul style="font-size:0.84rem; color:var(--text-secondary); line-height:1.7; margin:0 0 1.25rem; padding-left:1.25rem">
+          <li><code>host</code>: <code>{"name": str, "host": str, "ip": str, "user": str, "repo_only": bool}</code> (plus any extra fields configured for the host in <code>hosts.json</code>).</li>
+          <li><code>result</code>: <code>{"success": bool, "packages_updated": int, "error": str | None}</code>.</li>
+        </ul>
+
+        <h3 style="margin:1.25rem 0 0.75rem; font-size:0.95rem; font-weight:600">Notification Hook Events (<code>notification</code>)</h3>
+        <p style="color:var(--text-secondary); font-size:0.85rem; line-height:1.6; margin:0 0 0.75rem">
+          <code>notification(event, data)</code> is called whenever FleetPilot emits a system or alert event:
+        </p>
+        <div style="overflow:auto">
+          <table style="width:100%; border-collapse:collapse; font-size:0.85rem">
+            <thead>
+              <tr style="border-bottom:2px solid var(--border-color)">
+                <th style="text-align:left; padding:0.5rem 0.75rem; color:var(--text-muted); font-weight:600">Event</th>
+                <th style="text-align:left; padding:0.5rem 0.75rem; color:var(--text-muted); font-weight:600"><code>data</code> Contents</th>
+                <th style="text-align:left; padding:0.5rem 0.75rem; color:var(--text-muted); font-weight:600">Triggered When</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% set notification_events = [
+                ("new_version_available", '{"version": str, "current_version": str, "latest_version": str, "update_type": "release"|"commit", "update_url": str, "update_description": str}', "version_manager.check_for_updates() finds a newer FleetPilot release or commit"),
+                ("security", '{"title": str, "message": str, "level": "info"|"warning"|"critical"}', "Account lockout, API token creation, new administrator, or security settings change (notify.send)"),
+                ("smart", '{"title": str, "message": str, "level": "info"|"warning"|"critical"}', "Disk SMART health warning or failure (notify.send)"),
+                ("vulnerability", '{"title": str, "message": str, "level": "info"|"warning"|"critical"}', "New high/critical CVEs with an available fix found during vulnerability scan (notify.send)"),
+                ("backup", '{"title": str, "message": str, "level": "info"|"warning"|"critical"}', "Configuration backup downloaded or restore staged (notify.send)"),
+                ("router", '{"title": str, "message": str, "level": "info"|"warning"|"critical"}', "Managed router reboot or status alert (notify.send)"),
+                ("test", '{"title": str, "message": str, "level": "info"|"warning"|"critical"}', "Test notification sent from System Notifications settings (notify.send)"),
+                ("update_error", '{"host": str, "error": str}', "Host update failure alert (email_notifier.send_error_notification)"),
+                ("update_report", '{"hosts_status": dict, "history": dict}', "Scheduled system update report (email_notifier.send_update_report)"),
+              ] %}
+              {% for ev_name, ev_data, ev_when in notification_events %}
+              <tr style="border-bottom:1px solid var(--border-color)">
+                <td style="padding:0.6rem 0.75rem; font-family:var(--font-mono); color:var(--accent-primary)">{{ ev_name }}</td>
+                <td style="padding:0.6rem 0.75rem; color:var(--text-secondary); font-family:var(--font-mono); font-size:0.78rem">{{ ev_data }}</td>
+                <td style="padding:0.6rem 0.75rem; color:var(--text-muted)">{{ ev_when }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
 
