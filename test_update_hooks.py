@@ -17,7 +17,10 @@ import flask
 import pytest
 
 import addon_loader
+import email_config
+import email_notifier
 import linux_distro
+import notify
 import ssh_helper
 import updater
 import version_manager
@@ -202,3 +205,23 @@ def test_updater_without_an_app_context_fires_nothing(monkeypatch):
     install_host(monkeypatch)
 
     assert updater.run_update('192.0.2.10', 'ops', 'nas', [])['success'] is True
+
+
+def test_email_notifier_and_notify_fire_notification_hook(monkeypatch, hook_app, tmp_path):
+    """email_notifier (update_report, update_error) and notify.send reach notification_hook."""
+    calls = record_hooks(hook_app)
+    monkeypatch.setattr(email_config, 'get_report_enabled', lambda: False)
+    monkeypatch.setattr(email_config, 'get_error_notifications_enabled', lambda: False)
+    monkeypatch.setenv('FLEETPILOT_DATA_DIR', str(tmp_path))
+
+    email_notifier.send_update_report({'nas': {'status': 'ok'}}, [{'host': 'nas'}])
+    email_notifier.send_error_notification('nas', 'apt failed')
+    notify.send('security', 'FleetPilot: sign-in locked', 'Too many attempts', 'warning')
+
+    notifications = [args for name, args in calls if name == 'notification_hook']
+    assert notifications == [
+        ('update_report', {'hosts_status': {'nas': {'status': 'ok'}}, 'history': [{'host': 'nas'}]}),
+        ('update_error', {'host': 'nas', 'error': 'apt failed'}),
+        ('security', {'title': 'FleetPilot: sign-in locked', 'message': 'Too many attempts', 'level': 'warning'}),
+    ]
+

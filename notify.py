@@ -23,6 +23,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from addon_loader import fire_app_hook
 import secret_box
 
 logger = logging.getLogger(__name__)
@@ -202,6 +203,11 @@ def send(event, title, message, level='warning', wait=False, only=None):
     """
     if level not in LEVELS:
         level = 'warning'
+    fire_app_hook(
+        'notification_hook',
+        event,
+        {'title': title, 'message': message, 'level': level},
+    )
     rank = LEVELS.index(level)
     targets = [c for c in _load() if (only and c.get('id') == only) or
                (not only and c.get('enabled') and event in c.get('events', [])
