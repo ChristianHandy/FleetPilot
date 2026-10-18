@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional
 import textwrap
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("fleetpilot.plugins")
 
 HOOK_NAMES = [
     "device_buttons",
@@ -78,6 +78,7 @@ class AddonManager:
                 self.hooks.setdefault(k, []).extend(v if isinstance(v, list) else [v])
         self.css_files: List[str] = []
         self.plugins: List[PluginInfo] = []
+        self._hook_plugins: Dict[int, PluginInfo] = {}
         self._lock = threading.Lock()
 
     def load_addons(self, addon_dir: str = "addons",
@@ -152,6 +153,9 @@ class AddonManager:
         except Exception:
             info.status = "error"
             info.error = traceback.format_exc(limit=5)
+            logging.getLogger("fleetpilot.plugins").exception(
+                "Plugin %s failed to load", info.name
+            )
 
         with self._lock:
             self.plugins.append(info)
@@ -159,8 +163,23 @@ class AddonManager:
 
     def _register_hook(self, name: str, func: Callable, info: PluginInfo) -> None:
         self.hooks.setdefault(name, []).append(func)
+        self._hook_plugins[id(func)] = info
         if name not in info.hooks_registered:
             info.hooks_registered.append(name)
+
+    def _handle_hook_error(self, hookname: str, func: Callable) -> None:
+        info = self._hook_plugins.get(id(func))
+        plugin_name = (
+            info.name
+            if info is not None
+            else (getattr(func, "__name__", None) or getattr(func, "__module__", "unknown"))
+        )
+        if info is not None:
+            info.status = "error"
+            info.error = traceback.format_exc(limit=5)
+        logging.getLogger("fleetpilot.plugins").exception(
+            "Plugin %s hook %s failed", plugin_name, hookname
+        )
 
     def render_hooks(self, hookname: str, *args, **kwargs) -> str:
         parts = []
@@ -169,16 +188,17 @@ class AddonManager:
                 result = func(*args, **kwargs)
                 if result:
                     parts.append(str(result))
-            except Exception as exc:
-                parts.append(f"<!-- Hook {hookname} error: {exc} -->")
+            except Exception:
+                self._handle_hook_error(hookname, func)
+                parts.append("<!-- plugin hook failed, see log -->")
         return "\n".join(parts)
 
     def fire_hooks(self, hookname: str, *args, **kwargs) -> None:
         for func in self.hooks.get(hookname, []):
             try:
                 func(*args, **kwargs)
-            except Exception as exc:
-                print(f"[plugin] Hook {hookname} error: {exc}")
+            except Exception:
+                self._handle_hook_error(hookname, func)
 
     def get_sidebar_links(self) -> List[Dict]:
         links = []
@@ -189,8 +209,8 @@ class AddonManager:
                     links.append(result)
                 elif isinstance(result, list):
                     links.extend(result)
-            except Exception as exc:
-                print(f"[plugin] sidebar_links error: {exc}")
+            except Exception:
+                self._handle_hook_error("sidebar_links", func)
         return links
 
     def get_host_detail_tabs(self, host: dict) -> List[Dict]:
@@ -202,8 +222,8 @@ class AddonManager:
                     tabs.append(result)
                 elif isinstance(result, list):
                     tabs.extend(result)
-            except Exception as exc:
-                print(f"[plugin] host_detail_tabs error: {exc}")
+            except Exception:
+                self._handle_hook_error("host_detail_tabs", func)
         return tabs
 
     @property
