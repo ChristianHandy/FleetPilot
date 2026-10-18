@@ -67,7 +67,7 @@ COMMENT = re.compile(r"^\s*(#|//|<!--|\*|::|rem\s)", re.I)
 NOT_IN_DOCS = {"download-and-run"}
 REVIEW_IN_TESTS = {"ssh-key"}
 # Trojan Source (CVE-2021-42574) and invisible characters.
-HIDDEN_UNICODE = re.compile("[‪-‮⁦-⁩​-‍⁠﻿]")
+HIDDEN_UNICODE = re.compile(r"[\u202a-\u202e\u2066-\u2069\u200b-\u200d\u2060\ufeff]")
 LONG_BLOB = re.compile(r"[A-Za-z0-9+/]{400,}={0,2}")
 SVG_SCRIPT = re.compile(r"<script|\bon(load|error|click|mouseover)\s*=|javascript:", re.I)
 

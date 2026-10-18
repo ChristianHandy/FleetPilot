@@ -11,6 +11,10 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
   - ClamAV finds no virus in the changed files and `scripts/pr_threat_scan.py` finds no backdoor patterns in the added lines (reverse shells, obfuscated code that runs, downloads piped into a shell, crypto miners, hidden Unicode, SSH keys, binaries, scripts in SVGs). The scanner runs from the base branch, so a pull request cannot switch it off.
 - **Daily repository scan** (`.github/workflows/repo-scan.yml`, also on every push to main): the functional check, ClamAV over every tracked file and the backdoor scan of the whole repository.
 
+### Fixed
+
+- The two-factor page's "Back" button pointed to `/settings`, which doesn't exist; it now goes back to My Profile (found by the new smoke test).
+
 ## [1.8.0-beta.2] — 2026-10-18
 
 **Pre-release for testers.** Everything below is new since 1.7.0. Please try it on your own hardware and [report what breaks](https://github.com/ChristianHandy/FleetPilot/issues/new?template=bug_report.yml).

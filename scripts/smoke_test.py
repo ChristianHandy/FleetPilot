@@ -98,7 +98,7 @@ def sign_in(client, username, password):
     return final, page
 
 
-def crawl(client, start_path, start_page, limit):
+def crawl(client, start_path, start_page, limit, allow_404=False):
     """Breadth-first over the app's own links. Returns {path: status}."""
     seen = {start_path: 200}
     queue = deque([(start_path, start_page)])
@@ -122,7 +122,7 @@ def crawl(client, start_path, start_page, limit):
                 failures.append(f"{target}: {exc} (linked from {path})")
                 continue
             seen[target] = status
-            if status >= 500 or status == 404:
+            if status >= 500 or (status == 404 and not allow_404):
                 failures.append(f"{target}: HTTP {status} (linked from {path})")
             elif status == 200:
                 # After a redirect, links on the page are relative to where it ended.
@@ -137,6 +137,8 @@ def main():
     parser.add_argument("--user", default="admin")
     parser.add_argument("--limit", type=int, default=300, help="most pages to open")
     parser.add_argument("--wait", type=int, default=120, help="seconds to wait for /healthz")
+    parser.add_argument("--no-404", action="store_true",
+                        help="don't fail on broken links (for an old release that is about to be updated)")
     args = parser.parse_args()
     password = os.environ.get("FP_SMOKE_PASSWORD")
     if not password:
@@ -147,7 +149,7 @@ def main():
     print("ok  /healthz")
     start_path, start_page = sign_in(client, args.user, password)
     print(f"ok  signed in as {args.user}")
-    seen, failures = crawl(client, start_path, start_page, args.limit)
+    seen, failures = crawl(client, start_path, start_page, args.limit, allow_404=args.no_404)
     for target, status in sorted(seen.items(), key=lambda item: item[0]):
         print(f"{status!s:>5}  {target}")
     print(f"\n{len(seen)} pages opened, {len(failures)} failed")

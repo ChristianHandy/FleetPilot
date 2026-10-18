@@ -28,7 +28,7 @@ def test_backdoor_patterns_are_blocking():
     assert "exfiltration-host" in _rules("app.py", "requests.post('https://discord.com/api/webhooks/1/abc')")
     assert "ssh-key" in _rules("app.py", "KEY = 'ssh-ed25519 AAAA" + "C3NzaC1lZDI1NTE5" * 4 + "'")
     assert "persistence" in _rules("app.py", "open('/etc/cron.d/job', 'w').write(line)")
-    assert "hidden-unicode" in _rules("app.py", "if user != 'admin‮':")
+    assert "hidden-unicode" in _rules("app.py", "if user != 'admin\u202e':")
 
 
 def test_authorized_keys_writes_need_review_not_block():

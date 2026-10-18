@@ -95,7 +95,7 @@ jobs:
           curl -fsSL "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$latest/install.sh" -o "$RUNNER_TEMP/install-latest.sh"
           sudo FP_NONINTERACTIVE=1 FP_HTTPS=no FP_ADMIN_PASSWORD="$password" FP_BRANCH="$latest" \
             bash "$RUNNER_TEMP/install-latest.sh"
-          FP_SMOKE_PASSWORD="$password" python3 scripts/smoke_test.py --base http://127.0.0.1:5000
+          FP_SMOKE_PASSWORD="$password" python3 scripts/smoke_test.py --base http://127.0.0.1:5000 --no-404
 
       - name: Update it to this commit
         run: |
