@@ -73,9 +73,29 @@ def test_audit_log():
     audit_log.DB_PATH = original
 
 
+def test_app_startup_uses_logging_not_print():
+    import ast
+    import logging
+    import app as fp
+
+    assert isinstance(fp.logger, logging.Logger)
+    source = (ROOT / 'app.py').read_text(encoding='utf-8')
+    assert 'print(' not in source
+    tree = ast.parse(source)
+    print_calls = [
+        node.lineno
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == 'print'
+    ]
+    assert print_calls == []
+
+
 if __name__ == '__main__':
     test_runtime_defaults()
     test_templates_render()
     test_release_metadata()
     test_audit_log()
+    test_app_startup_uses_logging_not_print()
     print('production hardening tests: OK')
