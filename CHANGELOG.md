@@ -4,6 +4,13 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ## [Unreleased]
 
+### Fixed
+
+- **Plugin hooks `update_pre`, `update_post` and `notification` are fired now** ([#145](https://github.com/ChristianHandy/FleetPilot/issues/145)). They were registered by the add-on loader and documented on the plugin docs page, but nothing ever called `AddonManager.fire_hooks()`, so the bundled Slack example never sent a message and any third-party plugin built on these hooks silently did nothing:
+  - `update_pre` and `update_post` run around every host update (`updater.run_update`, which is also what the scheduler and the update routes call). `update_post` receives a result with `success`, `packages_updated`, `name`, `host` and `error`.
+  - `notification` fires with the event `new_version_available` when a newer release or commit appears — once per version, not on every 24-hour check.
+  - A hook runs after the update result is stored, and an exception inside a hook is logged instead of propagated, so a notification can never break or delay the update it reports on.
+
 ## [1.8.0-beta.2] — 2026-10-18
 
 **Pre-release for testers.** Everything below is new since 1.7.0. Please try it on your own hardware and [report what breaks](https://github.com/ChristianHandy/FleetPilot/issues/new?template=bug_report.yml).
