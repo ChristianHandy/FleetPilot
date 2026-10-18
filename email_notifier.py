@@ -10,17 +10,14 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 import logging
-import addon_loader
+from addon_loader import fire_app_hook
 import email_config
 
 logger = logging.getLogger(__name__)
-addon_mgr = None
 
 
 def _fire_notification_hook(event, data):
-    mgr = addon_mgr if addon_mgr is not None else addon_loader.get_addon_manager()
-    if mgr is not None:
-        mgr.fire_hooks("notification_hook", event, data)
+    fire_app_hook("notification_hook", event, data)
 
 SMTP_TIMEOUT = 20
 

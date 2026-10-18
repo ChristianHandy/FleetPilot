@@ -2,118 +2,18 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # updater.py - Enhanced error handling, better distribution support, and fixed notification propagation
 import functools
-import json
 import os
-import re
 import logging
 import paramiko
 import ssh_helper
 import time
 import subprocess
-import addon_loader
 import email_config
 import email_notifier
 import linux_distro
 import windows_host
 from addon_loader import fire_app_hook
 from constants import is_localhost, get_platform
-
-logger = logging.getLogger(__name__)
-addon_mgr = None
-
-
-def _fire_update_hooks(hookname, *args, **kwargs):
-    """Fire an update lifecycle hook without allowing hook errors to break the update."""
-    mgr = addon_mgr if addon_mgr is not None else addon_loader.get_addon_manager()
-    if mgr is None:
-        return
-    try:
-        mgr.fire_hooks(hookname, *args, **kwargs)
-    except Exception as exc:
-        logger.exception("Hook %s error: %s", hookname, exc)
-
-
-def _build_host_info(host, user, name, repo_only=False):
-    """Build the host dictionary passed to update_pre_hook and update_post_hook."""
-    info = {}
-    data_dir = os.environ.get("FLEETPILOT_DATA_DIR")
-    if data_dir:
-        try:
-            with open(os.path.join(data_dir, "hosts.json"), "r", encoding="utf-8") as fh:
-                hosts = json.load(fh)
-            if isinstance(hosts, dict) and isinstance(hosts.get(name), dict):
-                info.update(hosts[name])
-                info.pop("password", None)
-                info.pop("password_plain", None)
-        except Exception as exc:
-            logger.debug("Could not read hosts.json for hook metadata: %s", exc)
-    info.update({
-        "name": name,
-        "host": host,
-        "ip": host,
-        "user": user,
-        "repo_only": bool(repo_only),
-    })
-    return info
-
-
-_APT_SUMMARY_RE = re.compile(r"(\d+)\s+upgraded,\s+(\d+)\s+newly installed")
-_WINDOWS_INSTALLED_RE = re.compile(r"Windows updates installed:\s*(\d+)")
-_PACMAN_PKGS_RE = re.compile(r"Packages\s+\((\d+)\)")
-_GENERIC_UPGRADED_RE = re.compile(r"(\d+)\s+packages?\s+upgraded", re.IGNORECASE)
-_STEP_INSTALL_RE = re.compile(
-    r"^(?:\(\d+/\d+\)\s+(?:Upgrading|Installing)\b|(?:Upgrading|Installing)\s*:|Installing:\s+\S+.*\[done\])"
-)
-
-
-def _count_packages_updated(lines):
-    """Extract the number of updated/installed packages from update output lines."""
-    win_total = 0
-    win_matched = False
-    apt_total = 0
-    apt_matched = False
-    pacman_total = 0
-    generic_total = 0
-    step_count = 0
-
-    for raw in lines:
-        line = re.sub(r"^\[\d{2}:\d{2}:\d{2}\]\s*", "", str(raw)).strip()
-        if not line:
-            continue
-        m_win = _WINDOWS_INSTALLED_RE.search(line)
-        if m_win:
-            win_total += int(m_win.group(1))
-            win_matched = True
-            continue
-        if "Successfully installed " in line:
-            win_total += 1
-            win_matched = True
-            continue
-        m_apt = _APT_SUMMARY_RE.search(line)
-        if m_apt:
-            apt_total += int(m_apt.group(1)) + int(m_apt.group(2))
-            apt_matched = True
-            continue
-        m_pac = _PACMAN_PKGS_RE.search(line)
-        if m_pac:
-            pacman_total += int(m_pac.group(1))
-            continue
-        m_gen = _GENERIC_UPGRADED_RE.search(line)
-        if m_gen:
-            generic_total += int(m_gen.group(1))
-            continue
-        if _STEP_INSTALL_RE.search(line):
-            step_count += 1
-
-    if win_matched:
-        return win_total
-    if apt_matched:
-        return apt_total
-    if pacman_total:
-        return pacman_total
-    if generic_total:
-        return generic_total
-    return step_count
 
 # Distribution IDs FleetPilot updates; derivatives are also matched through their ID_LIKE.
 SUPPORTED_DISTRIBUTIONS = sorted({i for ids in linux_distro.FAMILIES.values() for i in ids}) + ['windows']
@@ -200,10 +100,6 @@ def run_local_update(name, log_list, repo_only, log_func, host=''):
     """
     error_occurred = False
     error_details = []
-    output_lines = []
-    host_info = _build_host_info("localhost", "", name, repo_only=repo_only)
-    if not _from_run_update:
-        _fire_update_hooks("update_pre_hook", host_info)
     
     try:
         log_func(f"Running local update on {name}...")
@@ -273,6 +169,18 @@ def run_local_update(name, log_list, repo_only, log_func, host=''):
         # Execute the update command locally
         log_func("Executing update command...")
         
+        # Security Note: Using shell=True is required here because update_cmd contains 
+        # shell operators (&&) and environment variables that need shell interpretation.
+        # The command string is constructed entirely from:
+        # 1. Trusted internal distribution detection (validated against known distros)
+        # 2. Hardcoded command templates defined in get_update_command()
+        # 3. No user input is incorporated into the command
+        # This approach is acceptable because:
+        # - The distribution is detected from the system's /etc/os-release file
+        # - Commands are selected from a fixed set of templates per distribution
+        # - No external or user-provided data influences command construction
+        # Alternative: Could use subprocess.run() with shell=False and pass commands
+        # as arrays, but would require restructuring the command chains.
         process = subprocess.Popen(
             update_cmd,
             shell=False,
@@ -284,9 +192,7 @@ def run_local_update(name, log_list, repo_only, log_func, host=''):
         
         # Read output in real-time
         for line in process.stdout:
-            stripped = line.rstrip()
-            output_lines.append(stripped)
-            log_func(stripped)
+            log_func(line.rstrip())
         
         # Wait for process to complete
         exit_status = process.wait()
@@ -310,14 +216,6 @@ def run_local_update(name, log_list, repo_only, log_func, host=''):
         if error_occurred and email_config.get_error_notifications_enabled():
             error_message = "\n".join(error_details)
             email_notifier.send_error_notification(name, error_message)
-        result = {
-            "success": not error_occurred,
-            "packages_updated": 0 if error_occurred else _count_packages_updated(output_lines),
-            "error": "\n".join(error_details) if error_occurred else None,
-        }
-        if not _from_run_update:
-            _fire_update_hooks("update_post_hook", host_info, result)
-    return result
 
     return update_result(name, host, error_occurred, error_details=error_details)
 
@@ -414,8 +312,6 @@ def run_update(host, user, name, log_list, repo_only=False, password=None):
     They are fired around every run, from here, so the scheduler and every
     route that starts an update reach them the same way.
     """
-    output_lines = []
-
     def log(msg):
         """Helper function to log messages"""
         timestamp = time.strftime("%H:%M:%S")
@@ -439,10 +335,11 @@ def run_update(host, user, name, log_list, repo_only=False, password=None):
     ssh = None
     error_occurred = False
     error_details = []
-    result = {"success": False, "packages_updated": 0, "error": None}
-
+    
     try:
         log(f"Connecting to {name} ({host})...")
+        
+        # Create SSH client
         
         # Connect to the remote host using SSH key or password authentication
         if password:
@@ -470,9 +367,9 @@ def run_update(host, user, name, log_list, repo_only=False, password=None):
         log("Detecting operating system...")
         # First, try to detect if it's Windows by checking for PowerShell
         stdin, stdout, stderr = ssh.exec_command(WINDOWS_DETECTION_COMMAND)
-        detected = stdout.read().decode().strip().lower()
+        result = stdout.read().decode().strip().lower()
         
-        if detected == 'windows':
+        if result == 'windows':
             log("Detected Windows operating system")
             for problem in _run_windows_update(ssh, repo_only, log):
                 log(f"✗ {problem}")

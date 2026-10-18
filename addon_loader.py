@@ -14,9 +14,7 @@ Supports plugins for ALL areas of the dashboard:
   - Settings panels
 """
 
-import logging
 import os
-import sys
 import importlib.util
 import logging
 import traceback
@@ -72,7 +70,6 @@ class AddonManager:
     """Universal plugin manager for FleetPilot."""
 
     def __init__(self, app, core, hookpoints: Optional[Dict] = None):
-        global addon_mgr, _default_app_mgr
         self.app = app
         self.core = core
         self.hooks: Dict[str, List[Callable]] = {h: [] for h in HOOK_NAMES}
@@ -82,11 +79,8 @@ class AddonManager:
         self.css_files: List[str] = []
         self.plugins: List[PluginInfo] = []
         self._lock = threading.Lock()
-        addon_mgr = self
         if app is not None:
             app.addon_mgr = self
-            if _default_app_mgr is None:
-                _default_app_mgr = self
 
     def load_addons(self, addon_dir: str = "addons",
                     template_target: str = "templates/addons") -> None:

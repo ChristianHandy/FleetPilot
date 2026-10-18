@@ -23,23 +23,16 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-import addon_loader
+from addon_loader import fire_app_hook
 import secret_box
 
 logger = logging.getLogger(__name__)
 _box = secret_box.SecretBox('sha256')
 _lock = threading.Lock()
-addon_mgr = None
 
 
 def _fire_notification_hook(event: str, data: dict) -> None:
-    mgr = addon_mgr if addon_mgr is not None else addon_loader.get_addon_manager()
-    if mgr is None:
-        return
-    try:
-        mgr.fire_hooks('notification_hook', event, data)
-    except Exception as exc:
-        logger.exception('Hook notification_hook error: %s', exc)
+    fire_app_hook('notification_hook', event, data)
 
 KINDS = {
     'ntfy': 'ntfy',

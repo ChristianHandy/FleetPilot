@@ -13,34 +13,10 @@ import subprocess
 import requests
 from addon_loader import fire_app_hook
 from datetime import datetime, timedelta
-import addon_loader
 from fleetpilot_version import TAG
 
 # Get logger for this module
 logger = logging.getLogger(__name__)
-addon_mgr = None
-
-
-def _fire_notification_hook(event, data):
-    mgr = addon_mgr if addon_mgr is not None else addon_loader.get_addon_manager()
-    if mgr is None:
-        return
-    try:
-        mgr.fire_hooks("notification_hook", event, data)
-    except Exception as exc:
-        logger.exception("Hook notification_hook error: %s", exc)
-
-
-def _notify_new_version(data):
-    hook_data = {
-        "version": data.get("latest_version") or "?",
-        "current_version": data.get("current_version"),
-        "latest_version": data.get("latest_version"),
-        "update_type": data.get("update_type"),
-        "update_url": data.get("update_url"),
-        "update_description": data.get("update_description"),
-    }
-    _fire_notification_hook("new_version_available", hook_data)
 
 # In the data directory: the code directory is read-only for the service.
 VERSION_CHECK_FILE = os.path.join(
