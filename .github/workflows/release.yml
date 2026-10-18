@@ -14,7 +14,15 @@ name: Release
 #   *.sigstore.json / *.intoto.jsonl        signed SLSA build provenance (Sigstore, keyless)
 # Verify with:  gh attestation verify fleetpilot-X.Y.Z.tar.gz --repo ChristianHandy/FleetPilot
 #
-# Files built elsewhere (the signed Android APK) go into a draft release for the
+#   FleetPilot-android-X.Y.Z.apk            the Android app, signed with the release key
+#
+# The APK is built here from the tag (job "android"). Its versionName in
+# FleetPilotAndroid/app/build.gradle.kts must equal the tag without the "v", and its
+# signing certificate must be the published one, or the release stops. The key comes
+# from the "android-release" environment's secrets ANDROID_KEYSTORE_BASE64 (the .jks,
+# base64) and ANDROID_KEYSTORE_PASSWORD.
+#
+# Other files built elsewhere go into a draft release for the
 # tag before the tag is pushed. The workflow then keeps the draft's notes, adds its
 # files to SHA256SUMS and the provenance, and publishes it. Without a draft it
 # creates the release with notes from CHANGELOG.md.
@@ -32,8 +40,85 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  android:
+    name: Build the signed Android app
+    runs-on: ubuntu-latest
+    environment: android-release
+    permissions:
+      contents: read
+    env:
+      # SHA-256 of the release signing certificate, as published in the 1.8.0 Beta 1 notes.
+      CERT_SHA256: 7d45c127edf448b6d8ca47b7d3a1f3520f7fb169149d1b6aeaeb04baef521720
+      GRADLE_VERSION: "9.8.1"
+      GRADLE_SHA256: dce76f55f8e251a3a1f130eb120f30b3d271de2b76c9b0729d316b5a1b6dc01f
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Check versionName matches the tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          name="$(sed -nE 's/^\s*versionName = "([^"]+)".*/\1/p' FleetPilotAndroid/app/build.gradle.kts)"
+          if [ "$name" != "${TAG#v}" ]; then
+            echo "::error::FleetPilotAndroid versionName is $name, the tag is $TAG; raise versionName and versionCode"
+            exit 1
+          fi
+
+      - name: Gradle and the Android SDK packages
+        run: |
+          curl -fsSLo "$RUNNER_TEMP/gradle.zip" "https://services.gradle.org/distributions/gradle-$GRADLE_VERSION-bin.zip"
+          echo "$GRADLE_SHA256  $RUNNER_TEMP/gradle.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/gradle.zip" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/gradle-$GRADLE_VERSION/bin" >> "$GITHUB_PATH"
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdkmanager" --licenses > /dev/null || true
+          "$sdkmanager" --install "platforms;android-37.0" "build-tools;36.0.0" > /dev/null
+
+      - name: Build the release APK
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          FLEETPILOT_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$FLEETPILOT_KEYSTORE_PASSWORD" ]; then
+            echo "::error::The android-release environment needs ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD"
+            exit 1
+          fi
+          export FLEETPILOT_KEYSTORE="$RUNNER_TEMP/release.jks"
+          (umask 077 && printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$FLEETPILOT_KEYSTORE")
+          cd FleetPilotAndroid
+          gradle --no-daemon assembleRelease
+          rm -f "$FLEETPILOT_KEYSTORE"
+
+      - name: Check the signature and name the APK
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          apk=FleetPilotAndroid/app/build/outputs/apk/release/app-release.apk
+          certs="$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$apk")"
+          echo "$certs"
+          if ! grep -qi "certificate SHA-256 digest: $CERT_SHA256" <<< "$certs"; then
+            echo "::error::The APK is not signed with the published release certificate"
+            exit 1
+          fi
+          mkdir apk
+          cp "$apk" "apk/FleetPilot-android-${TAG#v}.apk"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-apk
+          path: apk/
+          if-no-files-found: error
+          retention-days: 3
+
   release:
     name: Build, attest and publish
+    needs: android
     runs-on: ubuntu-latest
     permissions:
       contents: write       # create the release and upload its files
@@ -73,6 +158,12 @@ jobs:
             echo "draft=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: steps.existing.outputs.skip != 'true'
+        with:
+          name: android-apk
+          path: apk/
+
       - name: Source archive, SBOM and checksums
         if: steps.existing.outputs.skip != 'true'
         env:
@@ -89,6 +180,7 @@ jobs:
               "dist/fleetpilot-$v.sigstore.json" "dist/fleetpilot-$v.intoto.jsonl"
           fi
           git archive --format=tar.gz --prefix="fleetpilot-$v/" -o "dist/fleetpilot-$v.tar.gz" "$TAG"
+          cp apk/*.apk dist/
           # install.sh installs exactly requirements-lock.txt, so the SBOM describes that file.
           pip install --quiet --require-hashes -r requirements-lock.txt -r requirements-dev-lock.txt
           cyclonedx-py requirements requirements-lock.txt --of JSON -o "dist/fleetpilot-$v-sbom.cdx.json"
