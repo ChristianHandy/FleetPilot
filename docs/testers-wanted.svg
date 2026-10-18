@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 260" role="img" aria-labelledby="t d">
+  <title id="t">Testers wanted</title>
+  <desc id="d">FleetPilot needs testers: run it in your homelab and report what breaks. Proxmox, TrueNAS, Unraid, FRITZ!Box, OpenWrt, OPNsense, Windows machines and the Android app.</desc>
+  <style>
+    .bg { fill: #fff4d6; stroke: #e0a100; }
+    .stripe { fill: #e0a100; }
+    .title { fill: #3d2a00; font: 800 64px system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .sub { fill: #5c4300; font: 500 28px system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .chip { fill: #ffe7a3; }
+    .chiptext { fill: #3d2a00; font: 600 20px system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #2b2210; stroke: #e0a100; }
+      .title { fill: #ffd56b; }
+      .sub { fill: #f1deb0; }
+      .chip { fill: #4a3a12; }
+      .chiptext { fill: #ffe7a3; }
+    }
+  </style>
+  <rect class="bg" x="3" y="3" width="1194" height="254" rx="22" stroke-width="6"/>
+  <rect class="stripe" x="3" y="3" width="26" height="254" rx="13"/>
+  <text class="title" x="70" y="100">🧪 Testers wanted!</text>
+  <text class="sub" x="72" y="148">Run FleetPilot in your homelab and tell us what breaks.</text>
+  <g class="chiptext">
+    <rect class="chip" x="70" y="182" width="112" height="42" rx="21"/><text class="chiptext" x="126" y="210" text-anchor="middle">Proxmox</text>
+    <rect class="chip" x="194" y="182" width="112" height="42" rx="21"/><text class="chiptext" x="250" y="210" text-anchor="middle">TrueNAS</text>
+    <rect class="chip" x="318" y="182" width="100" height="42" rx="21"/><text class="chiptext" x="368" y="210" text-anchor="middle">Unraid</text>
+    <rect class="chip" x="430" y="182" width="124" height="42" rx="21"/><text class="chiptext" x="492" y="210" text-anchor="middle">FRITZ!Box</text>
+    <rect class="chip" x="566" y="182" width="112" height="42" rx="21"/><text class="chiptext" x="622" y="210" text-anchor="middle">OpenWrt</text>
+    <rect class="chip" x="690" y="182" width="124" height="42" rx="21"/><text class="chiptext" x="752" y="210" text-anchor="middle">OPNsense</text>
+    <rect class="chip" x="826" y="182" width="118" height="42" rx="21"/><text class="chiptext" x="885" y="210" text-anchor="middle">Windows</text>
+    <rect class="chip" x="956" y="182" width="164" height="42" rx="21"/><text class="chiptext" x="1038" y="210" text-anchor="middle">Android app</text>
+  </g>
+</svg>
