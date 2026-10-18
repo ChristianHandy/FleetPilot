@@ -125,7 +125,7 @@ def register(app, core):
                 ("scanner_action", "(ip: str, info: dict)", "HTML string", "Scanner results"),
                 ("update_pre", "(host: dict)", "None", "Before each update (updater.run_update)"),
                 ("update_post", "(host: dict, result: dict)", "None", "After each update (updater.run_update)"),
-                ("notification", "(event: str, data: dict)", "None", "System events (new_version_available)"),
+                ("notification", "(event: str, data: dict)", "None", "System events (new_version_available, update_report, update_error, notify.send)"),
                 ("sidebar_link", "()", '{"label": str, "url": str, "icon": str}', "Sidebar navigation"),
                 ("navbar_badge", "()", "HTML string", "Top navigation bar"),
                 ("settings_panel", "()", "HTML string", "Settings page"),
@@ -146,7 +146,14 @@ def register(app, core):
         <ul style="margin:0; padding-left:1.25rem; color:var(--text-secondary); font-size:0.85rem; line-height:1.6">
           <li><code>host</code> (update_pre, update_post): <code>{"name", "host", "user"}</code> — the display name, the address and the SSH user of the host being updated.</li>
           <li><code>result</code> (update_post): <code>{"success", "packages_updated", "name", "host", "error"}</code>. <code>success</code> is a bool, <code>error</code> the joined error text (empty when the update worked), and <code>packages_updated</code> is <code>0</code>: FleetPilot does not parse the package managers' output for a count.</li>
-          <li><code>notification</code>: fired with <code>event="new_version_available"</code> and <code>data={"type", "version", "description", "url"}</code> when a newer release or commit appears. It fires once per version, not on every 24-hour check.</li>
+          <li><code>notification</code>:
+            <ul style="margin:0.25rem 0 0; padding-left:1.25rem">
+              <li><code>event="new_version_available"</code>, <code>data={"type", "version", "description", "url"}</code> — when a newer release or commit appears (once per version, not on every 24-hour check).</li>
+              <li><code>event="update_report"</code>, <code>data={"hosts_status", "history"}</code> — when a scheduled email update report runs (<code>email_notifier.send_update_report</code>).</li>
+              <li><code>event="update_error"</code>, <code>data={"host", "error"}</code> — when a host update error notification is sent (<code>email_notifier.send_error_notification</code>).</li>
+              <li><code>event</code> in <code>notify.EVENTS</code> (<code>"smart"</code>, <code>"security"</code>, <code>"backup"</code>, <code>"router"</code>, <code>"vulnerability"</code>, or any event passed to <code>notify.send</code>), <code>data={"title", "message", "level"}</code> — when <code>notify.send()</code> dispatches a message.</li>
+            </ul>
+          </li>
           <li>Hooks run after the update result is stored, and an exception raised inside a hook is logged instead of propagated: a notification can never break the update it reports on.</li>
         </ul>
       </div>

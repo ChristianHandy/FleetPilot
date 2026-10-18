@@ -30,10 +30,6 @@ logger = logging.getLogger(__name__)
 _box = secret_box.SecretBox('sha256')
 _lock = threading.Lock()
 
-
-def _fire_notification_hook(event: str, data: dict) -> None:
-    fire_app_hook('notification_hook', event, data)
-
 KINDS = {
     'ntfy': 'ntfy',
     'gotify': 'Gotify',
@@ -207,7 +203,8 @@ def send(event, title, message, level='warning', wait=False, only=None):
     """
     if level not in LEVELS:
         level = 'warning'
-    _fire_notification_hook(
+    fire_app_hook(
+        'notification_hook',
         event,
         {'title': title, 'message': message, 'level': level},
     )

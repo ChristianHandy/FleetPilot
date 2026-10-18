@@ -15,10 +15,6 @@ import email_config
 
 logger = logging.getLogger(__name__)
 
-
-def _fire_notification_hook(event, data):
-    fire_app_hook("notification_hook", event, data)
-
 SMTP_TIMEOUT = 20
 
 
@@ -107,7 +103,8 @@ def send_update_report(hosts_status, history):
     Returns:
         tuple: (success: bool, error_message: str or None)
     """
-    _fire_notification_hook(
+    fire_app_hook(
+        "notification_hook",
         "update_report",
         {"hosts_status": hosts_status, "history": history},
     )
@@ -215,7 +212,8 @@ def send_error_notification(hostname, error_message):
     Returns:
         tuple: (success: bool, error_message: str or None)
     """
-    _fire_notification_hook(
+    fire_app_hook(
+        "notification_hook",
         "update_error",
         {"host": hostname, "error": error_message},
     )

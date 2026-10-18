@@ -79,8 +79,6 @@ class AddonManager:
         self.css_files: List[str] = []
         self.plugins: List[PluginInfo] = []
         self._lock = threading.Lock()
-        if app is not None:
-            app.addon_mgr = self
 
     def load_addons(self, addon_dir: str = "addons",
                     template_target: str = "templates/addons") -> None:
@@ -180,7 +178,6 @@ class AddonManager:
             try:
                 func(*args, **kwargs)
             except Exception as exc:
-                logger.exception("Hook %s error: %s", hookname, exc)
                 print(f"[plugin] Hook {hookname} error: {exc}")
 
     def get_sidebar_links(self) -> List[Dict]:
