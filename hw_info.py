@@ -497,6 +497,8 @@ def register_routes(app, login_required, csrf=None):
         import server_registry as _reg_mod
         reg = _reg_mod.get_registry(current_app.config.get('DATA_DIR', '.'))
         srv = reg.get_server(name=server_name)
+        if srv:
+            srv.update(reg.get_credentials(id=srv['id']) or {})
         if not srv:
             # Try hosts.json
             import json as _json

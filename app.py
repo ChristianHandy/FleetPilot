@@ -6221,7 +6221,7 @@ def api_registry_servers():
     module = request.args.get('module')
     reg = _registry.get_registry(DATA_DIR)
     servers = reg.list_servers(module=module)
-    return jsonify(servers)
+    return jsonify([reg.public(srv) for srv in servers])
 
 
 @app.route("/api/registry/servers/<int:server_id>")
@@ -6234,7 +6234,7 @@ def api_registry_server(server_id):
     srv = reg.get_server(id=server_id)
     if not srv:
         return jsonify({'error': 'Not found'}), 404
-    return jsonify(srv)
+    return jsonify(reg.public(srv))
 
 
 @app.route("/api/registry/servers", methods=["POST"])
