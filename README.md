@@ -1,5 +1,13 @@
 <div align="center">
 
+<a href="https://github.com/ChristianHandy/FleetPilot/issues/new?template=bug_report.yml"><img src="docs/testers-wanted.svg" alt="Testers wanted: run FleetPilot in your homelab and tell us what breaks. Proxmox, TrueNAS, Unraid, FRITZ!Box, OpenWrt, OPNsense, Windows machines and the Android app." width="100%"></a>
+
+**FleetPilot needs testers.** It's tested against an emulated homelab, but nothing beats real hardware.<br>
+Install it, or just [try the live demo](https://christianhandy.github.io/FleetPilot/demo/), and tell us what works and what doesn't:<br>
+**[🐞 Report a bug](https://github.com/ChristianHandy/FleetPilot/issues/new?template=bug_report.yml)** · **[💬 Share how it went](https://github.com/ChristianHandy/FleetPilot/discussions)** · [Open issues](https://github.com/ChristianHandy/FleetPilot/issues)
+
+---
+
 <img src="static/fleetpilot-logo.svg" alt="" width="88">
 
 # FleetPilot
