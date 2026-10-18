@@ -11,6 +11,7 @@ import os
 import re
 import subprocess
 import requests
+from addon_loader import fire_app_hook
 from datetime import datetime, timedelta
 import addon_loader
 from fleetpilot_version import TAG
@@ -150,6 +151,24 @@ def get_current_branch():
         logger.error(f"Error getting current branch: {e}")
     return "main"
 
+def _notify_new_version(data, previous_version):
+    """
+    Announce a new version through the plugin ``notification`` hook.
+
+    Only fires when the version actually changed. The check runs every 24 h,
+    so firing unconditionally would make every plugin that forwards to Slack
+    or mail repeat the same "new version" message every single day.
+    """
+    if previous_version == data.get("latest_version"):
+        return
+    fire_app_hook("notification_hook", "new_version_available", {
+        "type": data.get("update_type"),
+        "version": data.get("latest_version"),
+        "description": data.get("update_description"),
+        "url": data.get("update_url"),
+    })
+
+
 def check_for_updates():
     """
     Check GitHub for new versions (releases or commits).
@@ -161,6 +180,7 @@ def check_for_updates():
         return data  # no internet access allowed
     current_sha = get_current_commit_sha()
     branch = get_current_branch()
+    previous_version = data.get("latest_version")
     
     data["current_version"] = current_sha
     data["last_check"] = datetime.now().isoformat()
@@ -183,7 +203,7 @@ def check_for_updates():
                 data["update_description"] = release.get("name", "New release available")
                 data["notification_dismissed"] = False
                 save_version_data(data)
-                _notify_new_version(data)
+                _notify_new_version(data, previous_version)
                 return data
         
         # If no newer release, check for latest commit on current branch
@@ -203,7 +223,7 @@ def check_for_updates():
                 data["update_description"] = f"New commit: {commit_msg}"
                 data["notification_dismissed"] = False
                 save_version_data(data)
-                _notify_new_version(data)
+                _notify_new_version(data, previous_version)
                 return data
             else:
                 # No update available
