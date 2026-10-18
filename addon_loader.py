@@ -16,11 +16,14 @@ Supports plugins for ALL areas of the dashboard:
 
 import os
 import importlib.util
+import logging
 import traceback
 import threading
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 import textwrap
+
+logger = logging.getLogger(__name__)
 
 HOOK_NAMES = [
     "device_buttons",
@@ -213,3 +216,30 @@ class AddonManager:
             counts["total"] += 1
             counts[p.status if p.status in counts else "error"] += 1
         return counts
+
+
+def fire_app_hook(hook_name: str, *args, **kwargs) -> None:
+    """
+    Fire a hook on the addon manager of the running app, if there is one.
+
+    Core code calls this to announce that something happened: an update
+    finished, a new FleetPilot version is available. It says nothing at all
+    when there is no app context, which is the normal case for the scheduler,
+    the CLI helpers and most unit tests -- those import ``updater`` and
+    ``version_manager`` without ever starting Flask.
+
+    A hook is a notification, so it must never be able to break the thing it
+    reports on: ``AddonManager.fire_hooks`` already swallows what each hook
+    raises, and this wrapper logs anything the plumbing itself throws.
+    """
+    try:
+        from flask import current_app, has_app_context
+
+        if not has_app_context():
+            return
+        addon_mgr = getattr(current_app, "addon_mgr", None)
+        if addon_mgr is None:
+            return
+        addon_mgr.fire_hooks(hook_name, *args, **kwargs)
+    except Exception as exc:  # a notification must never break the caller
+        logger.warning("Plugin hook %s failed: %s", hook_name, exc)

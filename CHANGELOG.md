@@ -4,17 +4,12 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ## [Unreleased]
 
-### Added
-
-- **"Safe to merge" check on pull requests** (`.github/workflows/pr-check.yml`): one verdict that passes only when
-  - the functional check passes (`functional.yml`): `install.sh` installs the code on a fresh Ubuntu machine (HTTP and HTTPS), an admin signs in and every page the app links to opens (`scripts/smoke_test.py`), an installation of the latest release updates to the new code, and the Android app builds;
-  - ClamAV finds no virus in the changed files and `scripts/pr_threat_scan.py` finds no backdoor patterns in the added lines (reverse shells, obfuscated code that runs, downloads piped into a shell, crypto miners, hidden Unicode, SSH keys, binaries, scripts in SVGs). The scanner runs from the base branch, so a pull request cannot switch it off.
-- **Daily repository scan** (`.github/workflows/repo-scan.yml`, also on every push to main): the functional check, ClamAV over every tracked file and the backdoor scan of the whole repository.
-
 ### Fixed
 
-- The two-factor page's "Back" button pointed to `/settings`, which doesn't exist; it now goes back to My Profile (found by the new smoke test).
-- The SMART button on the Storage workspace pointed to `/disks/smart/<disk>`, which doesn't exist; it opens the disk's SMART report now (found by the smoke test).
+- **Plugin hooks `update_pre`, `update_post` and `notification` are fired now** ([#145](https://github.com/ChristianHandy/FleetPilot/issues/145)). They were registered by the add-on loader and documented on the plugin docs page, but nothing ever called `AddonManager.fire_hooks()`, so the bundled Slack example never sent a message and any third-party plugin built on these hooks silently did nothing:
+  - `update_pre` and `update_post` run around every host update (`updater.run_update`, which is also what the scheduler and the update routes call). `update_post` receives a result with `success`, `packages_updated`, `name`, `host` and `error`.
+  - `notification` fires with the event `new_version_available` when a newer release or commit appears — once per version, not on every 24-hour check.
+  - A hook runs after the update result is stored, and an exception inside a hook is logged instead of propagated, so a notification can never break or delay the update it reports on.
 
 ## [1.8.0-beta.2] — 2026-10-18
 
