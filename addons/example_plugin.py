@@ -1,5 +1,9 @@
 # SPDX-FileCopyrightText: Copyright the FleetPilot contributors
 # SPDX-License-Identifier: GPL-3.0-or-later
+import logging
+
+logger = logging.getLogger("fleetpilot.plugins")
+
 addon_meta = {
     "name": "example_plugin",
     "html": '''
@@ -18,4 +22,4 @@ addon_meta = {
 }
 
 def register(app, core):
-    print("[example_plugin] successfully registered.")
+    logger.info("[example_plugin] successfully registered.")
