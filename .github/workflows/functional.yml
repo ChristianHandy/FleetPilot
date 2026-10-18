@@ -82,6 +82,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # The installed release fetches this commit from here, so it needs the history
+          # that connects the two; a shallow checkout fails with "did not send all
+          # necessary objects".
+          fetch-depth: 0
 
       - name: Install the latest release
         env:
