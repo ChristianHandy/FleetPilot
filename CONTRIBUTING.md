@@ -14,6 +14,8 @@ Reports in English or German are fine; issues are usually answered within a few 
 
 ## Contributing code
 
+Before starting on an issue, comment "I'd like to work on this" and wait for a maintainer to assign it to you. Assigned issues without activity for two weeks become free again. Small fixes like typos don't need this.
+
 1. Fork the repository and create a branch from `main`.
 2. Make your change. Keep it focused: one fix or feature per pull request.
 3. Add or update tests (see the test policy below) and the documentation it touches (`docs/user-guide.md`, `docs/de/benutzerhandbuch.md`, `CHANGELOG.md` under "Unreleased").
