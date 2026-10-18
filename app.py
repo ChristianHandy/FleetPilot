@@ -6803,7 +6803,7 @@ if __name__ == "__main__":
     user_management.init_user_db()
     # Migrate environment variable user to database
     if user_management.migrate_env_user_to_db():
-        logger.info("Migrated environment variable user '%s' to database.", USERNAME)
+        logger.info("INFO: Migrated environment variable user '%s' to database.", USERNAME)
 
 
     # Configure automatic update scheduler
