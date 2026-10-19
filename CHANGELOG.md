@@ -6,6 +6,9 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ### Added
 
+- **AI share of the current code:** a README badge, rebuilt daily by the Pages workflow, shows how many of today's code lines come from AI-assisted commits (`git blame`, `scripts/ai_share.py --codebase-json/--badge`; per-area numbers in `ai-codebase.json`). At the start: 79.6 % of 68,983 lines.
+- **AI artifacts fail the pull request check:** leftovers that give AI-generated code away (chat text such as "Here's the updated code", elided-code placeholders, pasted Markdown code fences, placeholder secrets, "in a real implementation" stubs, model tokens and tool signatures) and AI tool files (`CLAUDE.md`, `AGENTS.md`, `.cursorrules`, `copilot-instructions.md`, ...). The daily repository scan checks all files for them (`scripts/ai_detect.py --all`).
+
 - **Pull requests must be free of AI-written code** (required check "AI assistance" in `pr-check.yml`, `scripts/ai_detect.py`): it fails when a commit declares AI help (same rules as the AI-share chart) or the pull request's "AI assistance" section does, or when style signals in the added code (section dividers, check-mark emoji, em dashes, stock phrases, boilerplate docstrings) reach 50 of 100. The score is an estimate; the job summary shows what it found. The detector runs from the base branch.
 
 ### Fixed

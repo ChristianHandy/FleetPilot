@@ -22,6 +22,16 @@ fill in the "AI assistance" section. It exits 0 either way unless --strict is gi
 With --block-ai (used by the required check on pull requests) it fails whenever AI help
 is declared or the style score is 50 or more: the project accepts only code written
 without AI there. An empty "AI assistance" section alone only warns.
+
+3. Artifacts: things that give AI-generated code away with near certainty, such as chat
+   leftovers ("Here's the updated code", "As an AI ..."), elided-code placeholders ("rest
+   of the code remains the same"), Markdown code fences pasted into source files,
+   placeholder secrets ("your_api_key_here"), "in a real implementation" stubs, model
+   tokens and tool signatures, and the config files AI coding tools add (CLAUDE.md,
+   AGENTS.md, .cursorrules, copilot-instructions.md, ...). An artifact always fails the
+   check, declared or not.
+
+    python3 scripts/ai_detect.py --all       # artifacts in every tracked file (daily scan)
 """
 import argparse
 import os
@@ -50,6 +60,36 @@ SIGNALS = [
     ("docstring sections", re.compile(r"^\s*(Args|Returns|Raises|Example[s]?)\s*:\s*$"), 2, 14),
 ]
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.S)
+
+# Telltale leftovers of AI-generated code. Checked in every code file, tests included.
+ARTIFACTS = [
+    ("chat leftover", re.compile(
+        r"\b(as an ai( language model)?|i hope this helps|certainly[!,] here|here'?s (the|an?) (updated|revised|"
+        r"complete|improved|corrected|fixed) (code|version|file|function|script)|let me know if you (need|want|have)|"
+        r"feel free to (adjust|modify|ask)|i('| ha)ve (updated|added|modified|fixed) the)\b", re.I)),
+    ("elided code", re.compile(
+        r"\.\.\.\s*(rest|remainder) of (the )?(code|file|function)|(rest|remainder) of (the )?(code|file|function) "
+        r"(remains|stays) (the same|unchanged)|existing code (here|remains|unchanged)|(#|//) \.\.\. ?(existing|"
+        r"previous|other) code|\[\.\.\. ?(existing|unchanged)", re.I)),
+    ("markdown code fence", re.compile(r"^\s*```[A-Za-z0-9_+-]*\s*$")),
+    ("placeholder secret", re.compile(
+        r"your[_-]?(api[_-]?key|token|secret|password)[_-]?here|<your[_ -](api[_ -]key|token|password)>|"
+        r"sk-[x*]{6,}|replace[_ ]with[_ ]your", re.I)),
+    ("stub instead of code", re.compile(
+        r"in a real (implementation|application|scenario|world)|this is a (simplified|mock|placeholder) "
+        r"(implementation|version)|for (demonstration|illustration) purposes|implement (actual|real) logic here|"
+        r"todo: implement (this|the actual)", re.I)),
+    ("model or tool signature", re.compile(
+        r"generated (by|with|using) (chatgpt|gpt-?\d|claude|copilot|cursor|gemini|codex|an ai)|"
+        r"<\|(endoftext|im_start|im_end)\|>|written by (chatgpt|claude|copilot|an ai)", re.I)),
+]
+ARTIFACT_FILES = ("source files", re.compile(r"\.(py|sh|js|ts|kt|kts|cs|ps1|html|j2|yml|yaml|toml|ini|cfg)$|"
+                                             r"^scripts/fleetpilot-"))
+# Files that AI coding tools create in a repository.
+AI_TOOL_FILES = re.compile(r"(^|/)(CLAUDE\.md|AGENTS\.md|GEMINI\.md|\.cursorrules|\.windsurfrules|\.clinerules|"
+                           r"copilot-instructions\.md|\.aider[^/]*|\.cursor/.*|\.claude/.*|\.continue/.*)$", re.I)
+# This detector and its tests contain the patterns on purpose.
+ARTIFACT_SELF = re.compile(r"(^|/)(ai_detect\.py|test_ai_detect\.py)$")
 NO_AI = re.compile(r"\b(no|none|not used|without|didn'?t use|did not use|nothing)\b", re.I)
 
 
@@ -83,6 +123,68 @@ def style_score(lines):
     for name, _, weight, cap in SIGNALS:
         score += min(cap, hits[name] * per_100 * weight)
     return min(100, round(score * SCALE)), {k: v for k, v in hits.items() if v}
+
+
+def added_lines_numbered(diff_text):
+    """[(path, line, text)] for every added line of a unified diff (-U0)."""
+    out, path, line = [], None, 0
+    for raw in diff_text.splitlines():
+        if raw.startswith("+++ "):
+            path = raw[6:] if raw.startswith("+++ b/") else None
+        elif raw.startswith("@@"):
+            match = re.search(r"\+(\d+)", raw)
+            line = int(match.group(1)) if match else 0
+        elif raw.startswith("+") and path:
+            out.append((path, line, raw[1:]))
+            line += 1
+    return out
+
+
+def find_artifacts(lines, paths=()):
+    """[(path, line, kind, text)] for AI artifacts in lines and AI tool files among paths."""
+    found = []
+    for path, number, text in lines:
+        if ARTIFACT_SELF.search(path) or not ARTIFACT_FILES[1].search(path):
+            continue
+        for kind, pattern in ARTIFACTS:
+            if pattern.search(text):
+                found.append((path, number, kind, text.strip()[:120]))
+    for path in paths:
+        if AI_TOOL_FILES.search(path):
+            found.append((path, 0, "AI tool file", "configuration file of an AI coding tool"))
+    return found
+
+
+def report_artifacts(found, title):
+    lines = [f"## {title}", ""]
+    if not found:
+        lines.append("No AI artifacts found.")
+    else:
+        lines += ["| File | Kind | Text |", "|---|---|---|"]
+        lines += [f"| `{p}{f':{n}' if n else ''}` | {k} | `{t.replace('|', '/')}` |" for p, n, k, t in found[:200]]
+    text = "\n".join(lines) + "\n"
+    out = os.environ.get("GITHUB_STEP_SUMMARY")
+    if out:
+        with open(out, "a", encoding="utf-8") as fh:
+            fh.write(text)
+    print(text)
+    for path, number, kind, _ in found:
+        where = f"file={path},line={number}" if number else f"file={path}"
+        print(f"::error {where},title=AI artifact::{kind}")
+
+
+def all_tracked():
+    """(lines, paths) of every tracked text file, for the regular scan of the whole repository."""
+    lines, paths = [], [p for p in git("ls-files", "-z").split("\0") if p]
+    for path in paths:
+        if not ARTIFACT_FILES[1].search(path) or not os.path.isfile(path):
+            continue
+        with open(path, "rb") as fh:
+            data = fh.read()
+        if b"\0" in data[:8192]:
+            continue
+        lines += [(path, n, t) for n, t in enumerate(data.decode("utf-8", "replace").splitlines(), 1)]
+    return lines, paths
 
 
 def declared_commits(span):
@@ -151,14 +253,22 @@ def report(declared, section, score, hits, level, message):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("base")
-    parser.add_argument("head")
+    parser.add_argument("base", nargs="?")
+    parser.add_argument("head", nargs="?")
+    parser.add_argument("--all", action="store_true", help="scan every tracked file for AI artifacts")
     parser.add_argument("--pr-body", help="file with the pull request description")
     parser.add_argument("--strict", action="store_true", help="fail when the AI section is unanswered or the "
                                                                "signals are strong without a declaration")
     parser.add_argument("--block-ai", action="store_true", help="fail when AI help is declared or the style "
                                                                  "score is 50 or more")
     args = parser.parse_args(argv)
+    if args.all:
+        lines, paths = all_tracked()
+        found = find_artifacts(lines, paths)
+        report_artifacts(found, "AI artifacts in the repository")
+        return 1 if found else 0
+    if not (args.base and args.head):
+        parser.error("BASE and HEAD are required unless --all is given")
     span = f"{args.base}...{args.head}"
     body = ""
     if args.pr_body and os.path.exists(args.pr_body):
@@ -169,6 +279,14 @@ def main(argv=None):
     score, hits = style_score(added_code_lines(git("diff", "-U0", "--no-color", "--no-ext-diff", span)))
     level, message = assess(declared, section, score)
     report(declared, section, score, hits, level, message)
+    diff = git("diff", "-U0", "--no-color", "--no-ext-diff", span)
+    changed = git("diff", "--name-only", "--diff-filter=ACMR", span).split()
+    artifacts = find_artifacts(added_lines_numbered(diff), changed)
+    report_artifacts(artifacts, "AI artifacts in the added code")
+    if artifacts:
+        print("::error title=AI assistance::The added code contains AI artifacts (see the table); "
+              "AI-generated code can't be merged.")
+        return 1
     if args.block_ai and level in ("declared", "check"):
         print("::error title=AI assistance::This pull request contains AI-assisted code"
               f"{' (declared)' if level == 'declared' else ' (style score ' + str(score) + '/100)'}; "

@@ -11,6 +11,12 @@ its author is a known coding agent, or its message names an AI co-author or tool
 goal is to bring this share down as far as possible (ROADMAP.md).
 
 The figure is a lower bound: AI help that a commit does not declare is not counted.
+
+    python scripts/ai_share.py --codebase-json OUT.json --badge OUT.svg
+
+The codebase share answers a different question: of the code as it is now, how many
+lines come from AI-assisted commits? It runs git blame on every tracked code file and
+attributes each line to the commit that last changed it.
 """
 import argparse
 import datetime
@@ -71,6 +77,77 @@ def monthly(ref):
     return OrderedDict(sorted(months.items()))
 
 
+# Code the codebase share counts; vendored libraries are not ours.
+CODE_FILES = re.compile(r"\.(py|sh|js|ts|css|html|j2|kt|kts|cs|ps1|yml|yaml|toml|ini|conf|service)$|"
+                        r"^scripts/fleetpilot-")
+NOT_OURS = re.compile(r"(^|/)(vendor|node_modules|dist|build)/|\.min\.(js|css)$")
+
+
+def ai_commit_shas(ref):
+    """(AI-assisted commit SHAs, bot commit SHAs) reachable from ``ref``."""
+    out = subprocess.run(["git", "log", ref, f"--format={SEP}%H%x00%an <%ae>%x00%B"],
+                         check=True, capture_output=True, text=True, errors="replace").stdout
+    ai, bots = set(), set()
+    for record in out.split(SEP)[1:]:
+        sha, author, message = (record.split("\x00", 2) + ["", ""])[:3]
+        if BOTS.search(author):
+            bots.add(sha)
+        elif AI_AUTHORS.search(author) or AI_MESSAGE.search(message):
+            ai.add(sha)
+    return ai, bots
+
+
+def blame_counts(ref, path):
+    """{commit sha: lines} for the current lines of ``path`` at ``ref``."""
+    out = subprocess.run(["git", "blame", "--incremental", "-w", "-M", ref, "--", path],
+                         check=True, capture_output=True, text=True, errors="replace").stdout
+    counts = {}
+    for line in out.splitlines():
+        parts = line.split(" ")
+        if len(parts) == 4 and len(parts[0]) == 40 and all(p.isdigit() for p in parts[1:]):
+            counts[parts[0]] = counts.get(parts[0], 0) + int(parts[3])
+    return counts
+
+
+def codebase(ref="HEAD"):
+    """AI share of the code as it is at ``ref``: totals and a breakdown per top-level area."""
+    ai, bots = ai_commit_shas(ref)
+    files = subprocess.run(["git", "ls-tree", "-r", "--name-only", ref], check=True, capture_output=True,
+                           text=True).stdout.splitlines()
+    total = {"ai": 0, "all": 0, "files": 0}
+    areas = {}
+    for path in files:
+        if not CODE_FILES.search(path) or NOT_OURS.search(path) or SKIP_FILES.search(path):
+            continue
+        counts = blame_counts(ref, path)
+        lines = sum(n for sha, n in counts.items() if sha not in bots)
+        ai_lines = sum(n for sha, n in counts.items() if sha in ai)
+        if not lines:
+            continue
+        area = path.split("/", 1)[0] if "/" in path else ("tests" if path.startswith("test_") else "core")
+        a = areas.setdefault(area, {"ai": 0, "all": 0})
+        a["ai"] += ai_lines
+        a["all"] += lines
+        total["ai"] += ai_lines
+        total["all"] += lines
+        total["files"] += 1
+    result = dict(total, share=share(total), ref=ref,
+                  areas={k: dict(v, share=share(v)) for k, v in sorted(areas.items(), key=lambda kv: -kv[1]["all"])})
+    return result
+
+
+def badge(percent):
+    """A flat badge "AI-written code | NN %", readable on light and dark backgrounds."""
+    label, value = "AI-written code", f"{percent:.0f} %"
+    lw, vw = 7 * len(label) + 12, 7 * len(value) + 14
+    colour = "#2f9e44" if percent < 25 else "#e8a317" if percent < 60 else "#d64545"
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{lw + vw}" height="20" role="img" '
+            f'aria-label="{label}: {value}"><title>{label}: {value}</title>'
+            f'<rect width="{lw}" height="20" fill="#555"/><rect x="{lw}" width="{vw}" height="20" fill="{colour}"/>'
+            f'<g fill="#fff" font-family="Verdana,DejaVu Sans,sans-serif" font-size="11" text-anchor="middle">'
+            f'<text x="{lw / 2}" y="14">{label}</text><text x="{lw + vw / 2}" y="14">{value}</text></g></svg>\n')
+
+
 def share(m):
     return round(100 * m["ai"] / m["all"], 1) if m["all"] else 0.0
 
@@ -120,7 +197,23 @@ def main(argv=None):
     parser.add_argument("--ref", default="HEAD")
     parser.add_argument("--svg")
     parser.add_argument("--json")
+    parser.add_argument("--codebase-json", help="write the AI share of the current code (git blame) here")
+    parser.add_argument("--badge", help="write a badge with the current code's AI share here")
     args = parser.parse_args(argv)
+    if args.codebase_json or args.badge:
+        current = codebase(args.ref)
+        print(f"current code: {current['share']:.1f} % of {current['all']} lines in {current['files']} files "
+              f"come from AI-assisted commits")
+        for area, a in current["areas"].items():
+            print(f"  {area:<20} {a['share']:5.1f} % of {a['all']:6d} lines")
+        if args.codebase_json:
+            with open(args.codebase_json, "w", encoding="utf-8") as fh:
+                json.dump(current, fh, indent=2)
+        if args.badge:
+            with open(args.badge, "w", encoding="utf-8") as fh:
+                fh.write(badge(current["share"]))
+        if not (args.svg or args.json):
+            return 0
     months = monthly(args.ref)
     if not months:
         print("no commits found (is this a shallow clone?)", file=sys.stderr)

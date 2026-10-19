@@ -23,6 +23,7 @@ Updates for Linux and Windows machines, SMART disk health, FRITZ!Box / OpenWrt /
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15465/badge)](https://www.bestpractices.dev/projects/15465)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue)](https://python.org)
+[![AI-written code](https://christianhandy.github.io/FleetPilot/ai-code-badge.svg)](#how-much-of-fleetpilot-is-written-by-ai)
 
 <img src="docs/screenshots/routers.png" alt="FleetPilot routers page: FRITZ!Box, repeater, OpenWrt and OPNsense with status, firmware, uptime and connected devices" width="100%">
 
@@ -205,6 +206,10 @@ This component was previously the separate `HAOS_SMART_Monitor` repository. The 
 **Too much, and this number needs to be as low as we can get.** Most of FleetPilot so far was written with AI coding assistants (GitHub Copilot, Manus, Claude). Every change goes through the same tests, CodeQL, fuzzing and review. But software that holds the keys to your servers should be written and reviewed by people, and that's the goal of the [roadmap](ROADMAP.md#project-more-people-less-ai-written-code).
 
 The chart counts the lines each commit changed, per month, and marks a commit as AI-assisted when its author is a coding agent or its message names an AI co-author. Dependency bots are left out. It's a lower bound: AI help that isn't declared isn't counted. It's rebuilt daily from the git history by [`scripts/ai_share.py`](scripts/ai_share.py).
+
+**In the code as it is today:** the badge at the top shows the share of all current code lines that come from AI-assisted commits (by `git blame`, rebuilt daily, details per area in [ai-codebase.json](https://christianhandy.github.io/FleetPilot/ai-codebase.json)). It drops as people rewrite AI-written code ([#201](https://github.com/ChristianHandy/FleetPilot/issues/201)).
+
+**New code must be AI-free:** every pull request gets the required **AI assistance** check. It fails when AI help is declared, when the added code shows strong AI style signals, or when it contains leftovers that give AI-generated code away (chat text like "Here's the updated code", "rest of the code remains the same", pasted Markdown fences, placeholder secrets, tool signatures, or AI tool files like `CLAUDE.md` or `.cursorrules`). The daily repository scan looks for the same leftovers in all files.
 
 **You can help push it down:** pick a [good first issue](https://github.com/ChristianHandy/FleetPilot/labels/good%20first%20issue), review a pull request, or [translate FleetPilot](https://github.com/ChristianHandy/FleetPilot/labels/translation).
 
