@@ -6,6 +6,8 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ### Added
 
+- **More pull request checks:** at least 70 % of the changed Python lines must be run by the tests (part of the pytest check; the summary lists the untested lines), and the new *Change checks* job, part of *Safe to merge*, runs ShellCheck on the install, update and root helper scripts, requires a `CHANGELOG.md` entry for changes users notice (label `no changelog` to skip), fails when a change adds interface text without a German translation, and warns above 800 changed lines (`scripts/pr_checks.py`).
+
 - **AI share of the current code:** a README badge, rebuilt daily by the Pages workflow, shows how many of today's code lines come from AI-assisted commits (`git blame`, `scripts/ai_share.py --codebase-json/--badge`; per-area numbers in `ai-codebase.json`). At the start: 79.6 % of 68,983 lines.
 - **AI artifacts fail the pull request check:** leftovers that give AI-generated code away (chat text such as "Here's the updated code", elided-code placeholders, pasted Markdown code fences, placeholder secrets, "in a real implementation" stubs, model tokens and tool signatures) and AI tool files (`CLAUDE.md`, `AGENTS.md`, `.cursorrules`, `copilot-instructions.md`, ...). The daily repository scan checks all files for them (`scripts/ai_detect.py --all`).
 
