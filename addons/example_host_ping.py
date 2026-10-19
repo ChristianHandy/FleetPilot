@@ -85,14 +85,15 @@ def probe_host(ip: str, ports=PROBE_PORTS, timeout=PROBE_TIMEOUT) -> dict:
 
 def _ping_button(host: dict) -> str:
     """Return an HTML button that triggers a client-side ping request."""
-    ip = host.get("ip", "")
+   ip = host.get("address") 
     if not ip:
         return ""
     return f"""
 <button
   class="btn btn-sm btn-secondary"
   style="font-size:0.75rem; padding:0.25rem 0.6rem"
-  onclick="fpPing(this, '{ip}')"
+ data-host="{ip}"
+onclick="fpPing(this, this.dataset.host)"
   title="Ping {ip}">
   <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"
        viewBox="0 0 24 24" style="margin-right:4px; vertical-align:-1px">
