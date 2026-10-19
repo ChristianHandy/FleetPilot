@@ -268,3 +268,22 @@ def test_ping_route_without_ip_is_rejected(ping_client, create_connection):
     assert response.status_code == 400
     assert response.get_json() == {"ok": False, "error": "no ip"}
     assert fake.attempts == []
+
+
+def test_button_uses_the_host_key():
+    html = example_host_ping._ping_button({"name": "web", "host": "10.0.0.5"})
+
+    assert 'data-host="10.0.0.5"' in html
+
+
+def test_button_falls_back_to_ip_and_skips_hosts_without_address():
+    assert 'data-host="10.0.0.6"' in example_host_ping._ping_button({"ip": "10.0.0.6"})
+    assert example_host_ping._ping_button({"name": "web"}) == ""
+
+
+def test_button_escapes_the_host_address():
+    html = example_host_ping._ping_button({"host": "a'\"<>b"})
+
+    assert 'data-host="a&#39;&#34;&lt;&gt;b"' in html
+    assert "a'\"<>b" not in html
+    assert "fpPing(this, " not in html

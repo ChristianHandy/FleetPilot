@@ -16,6 +16,8 @@ import socket
 import time
 import logging
 
+from markupsafe import escape
+
 logger = logging.getLogger("fleetpilot.host_ping")
 
 
@@ -85,14 +87,19 @@ def probe_host(ip: str, ports=PROBE_PORTS, timeout=PROBE_TIMEOUT) -> dict:
 
 def _ping_button(host: dict) -> str:
     """Return an HTML button that triggers a client-side ping request."""
-    ip = host.get("ip", "")
+    # Host entries keep the address under "host"; "ip" is only a fallback
+    ip = host.get("host") or host.get("ip") or ""
     if not ip:
         return ""
+    # Escaped for the HTML attributes; the script reads it from data-host, so
+    # the address is never built into JavaScript
+    ip = escape(ip)
     return f"""
 <button
   class="btn btn-sm btn-secondary"
   style="font-size:0.75rem; padding:0.25rem 0.6rem"
-  onclick="fpPing(this, '{ip}')"
+  data-host="{ip}"
+  onclick="fpPing(this)"
   title="Ping {ip}">
   <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"
        viewBox="0 0 24 24" style="margin-right:4px; vertical-align:-1px">
@@ -105,7 +112,8 @@ def _ping_button(host: dict) -> str:
 /* Injected once per page by example_host_ping plugin */
 if (!window._fpPingLoaded) {{
   window._fpPingLoaded = true;
-  window.fpPing = function(btn, ip) {{
+  window.fpPing = function(btn) {{
+    const ip = btn.dataset.host;
     btn.disabled = true;
     btn.textContent = '…';
     fetch('/plugins/ping?ip=' + encodeURIComponent(ip))

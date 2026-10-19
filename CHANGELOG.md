@@ -6,6 +6,8 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ### Fixed
 
+- **Host Ping example plugin shows its button** ([#212](https://github.com/ChristianHandy/FleetPilot/issues/212)). `addons/example_host_ping.py` read `host["ip"]`, but host entries store the address under `"host"`, so the Ping button never appeared. It now reads `"host"` (falling back to `"ip"`), escapes the address for the HTML attributes and passes it to the script through a `data-host` attribute instead of building JavaScript from it.
+
 - **Example dashboard widget and `dashboard_widget` hook receive host reachability counts** ([#144](https://github.com/ChristianHandy/FleetPilot/issues/144)). `templates/index.html` passed raw host dicts without a `status` key and `stats={}`, so `addons/example_dashboard_widget.py` always reported 0% Fleet Health with every host offline. Each host passed to `dashboard_widget` now includes `name` and `status` (`"online"`, `"offline"` or `"unknown"`) from the last capability check, `stats` provides `{"total", "online", "offline", "unknown"}`, and unchecked hosts are shown as unknown rather than offline.
 
 ## [1.8.0] — 2026-10-18
