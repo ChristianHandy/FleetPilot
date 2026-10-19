@@ -114,3 +114,12 @@ def test_block_ai_passes_plain_code_without_a_declaration(tmp_path, monkeypatch,
     body.write_text(TEMPLATE.format(answer="None."))
     assert detect.main(["HEAD~1", "HEAD", "--pr-body", str(body), "--block-ai"]) == 0
     assert "::error" not in capsys.readouterr().out
+
+
+def test_comment_check_is_fast_on_hostile_input():
+    import time
+    start = time.monotonic()
+    assert detect._empty("<!--" + "--><!--" * 20000 + "-->")
+    assert not detect._empty("<!--" + "--><!--" * 20000)       # unclosed comment: not empty
+    assert not detect._empty("<!-- x --> Used Copilot")
+    assert time.monotonic() - start < 1

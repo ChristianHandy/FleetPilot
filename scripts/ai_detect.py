@@ -49,7 +49,7 @@ SIGNALS = [
     ("labelled comments", re.compile(r"#\s*(Security|Note|Important|Safe|Step \d+|Fallback|Helper)\s*:", re.I), 3, 18),
     ("docstring sections", re.compile(r"^\s*(Args|Returns|Raises|Example[s]?)\s*:\s*$"), 2, 14),
 ]
-EMPTY_ANSWER = re.compile(r"^\s*(<!--.*?-->\s*)*$", re.S)
+HTML_COMMENT = re.compile(r"<!--.*?-->", re.S)
 NO_AI = re.compile(r"\b(no|none|not used|without|didn'?t use|did not use|nothing)\b", re.I)
 
 
@@ -101,6 +101,11 @@ def declared_commits(span):
     return out
 
 
+def _empty(section):
+    """True when the section holds nothing but the template's HTML comment (or nothing at all)."""
+    return not HTML_COMMENT.sub("", section or "").strip()
+
+
 def ai_section(body):
     """The text of the pull request's "AI assistance" section, or None when it is missing."""
     match = re.search(r"^##\s*AI assistance\s*$(.*?)(?=^##\s|\Z)", body or "", re.M | re.S | re.I)
@@ -109,7 +114,7 @@ def ai_section(body):
 
 def assess(declared, section, score):
     """(level, message): level is 'declared', 'none-declared', 'check', 'unanswered' or 'ok'."""
-    answered = section is not None and not EMPTY_ANSWER.fullmatch(section)
+    answered = section is not None and not _empty(section)
     says_no_ai = answered and NO_AI.search(section) and not re.search(r"\b(yes|claude|copilot|chatgpt|gpt|gemini|"
                                                                         r"cursor|codex|llm|assist)", section, re.I)
     if declared or (answered and not says_no_ai):
@@ -126,7 +131,7 @@ def report(declared, section, score, hits, level, message):
     lines = ["## AI assistance", "", f"**{message}**", ""]
     if declared:
         lines += ["Declared in commits:", ""] + [f"- `{sha}`: {how}" for sha, how in declared[:20]] + [""]
-    if section is not None and not EMPTY_ANSWER.fullmatch(section):
+    if section is not None and not _empty(section):
         lines += ["Pull request says:", "", "> " + section.replace("\n", "\n> ")[:1500], ""]
     if score is None:
         lines.append("Style signals: too little added code to estimate.")
