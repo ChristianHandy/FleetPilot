@@ -3,6 +3,8 @@
 name: Pull request check
 
 # One verdict per pull request: the "Safe to merge" check passes only when
+#   - the change checks pass (ShellCheck, a changelog entry, no new untranslated German
+#     text; see scripts/pr_checks.py), and
 #   - the functional check passes (install, sign in, every page, update, Android build;
 #     see functional.yml), and
 #   - the malware check finds nothing: ClamAV scans every file the pull request adds or
@@ -74,6 +76,46 @@ jobs:
           xargs -0 clamscan --no-summary --infected --alert-encrypted=yes --alert-macros=yes < "$RUNNER_TEMP/changed"
           echo "ClamAV: no viruses in $(tr -cd '\0' < "$RUNNER_TEMP/changed" | wc -c) changed files." >> "$GITHUB_STEP_SUMMARY"
 
+  changes:
+    name: Change checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: ShellCheck (install, update and root helper scripts)
+        run: |
+          # Every tracked file whose first line is a sh/bash shebang, plus *.sh files.
+          # proxmox/community-scripts follows that project's own conventions.
+          git ls-files ':!proxmox/community-scripts/**' ':!**/vendor/**' | while IFS= read -r f; do
+            case "$f" in *.sh) echo "$f"; continue ;; esac
+            if [ -f "$f" ] && head -n1 "$f" | grep -Eq '^#!.*/(env +)?(ba|da|k)?sh( |$)'; then echo "$f"; fi
+          done > "$RUNNER_TEMP/shell-files"
+          tr '\n' '\0' < "$RUNNER_TEMP/shell-files" | xargs -0 -r shellcheck --severity=warning --format=gcc
+          echo "ShellCheck: no warnings." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Changelog entry
+        if: github.event_name == 'pull_request' && (success() || failure())
+        run: |
+          jq -r '.pull_request.labels[].name' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/labels.txt"
+          python3 scripts/pr_checks.py changelog "$BASE_SHA" "$HEAD_SHA" --labels "$RUNNER_TEMP/labels.txt"
+
+      - name: No new untranslated German text
+        if: github.event_name == 'pull_request' && (success() || failure())
+        run: python3 scripts/pr_checks.py translations "$BASE_SHA" "$HEAD_SHA"
+
+      - name: Size (warning only)
+        if: github.event_name == 'pull_request' && (success() || failure())
+        run: python3 scripts/pr_checks.py size "$BASE_SHA" "$HEAD_SHA"
+
   ai-disclosure:
     # Required for merging: passes only for code written without AI. Fails when a commit or
     # the pull request declares AI help, or when the added code's style score is 50+
@@ -113,7 +155,7 @@ jobs:
   verdict:
     name: Safe to merge
     if: always()
-    needs: [functional, malware]
+    needs: [functional, malware, changes]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {}
@@ -122,6 +164,7 @@ jobs:
         env:
           FUNCTIONAL: ${{ needs.functional.result }}
           MALWARE: ${{ needs.malware.result }}
+          CHANGES: ${{ needs.changes.result }}
         run: |
           {
             echo "## Safe to merge?"
@@ -130,8 +173,9 @@ jobs:
             echo "|---|---|"
             echo "| Functional (install, pages, update, Android) | $FUNCTIONAL |"
             echo "| Viruses and backdoors | $MALWARE |"
+            echo "| Change checks (ShellCheck, changelog, translations) | $CHANGES |"
           } >> "$GITHUB_STEP_SUMMARY"
-          if [ "$FUNCTIONAL" = "success" ] && [ "$MALWARE" = "success" ]; then
+          if [ "$FUNCTIONAL" = "success" ] && [ "$MALWARE" = "success" ] && [ "$CHANGES" = "success" ]; then
             echo "✅ **Safe to merge** as far as these checks can tell. Still read the change, especially anything the scanner listed for review." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "❌ **Not safe to merge** until the failed checks pass." >> "$GITHUB_STEP_SUMMARY"
