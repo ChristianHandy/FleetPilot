@@ -81,3 +81,36 @@ def test_main_warns_and_strict_fails_without_a_declaration(tmp_path, monkeypatch
     assert detect.main(["HEAD~1", "HEAD", "--pr-body", str(body)]) == 0
     assert "::warning title=AI assistance::" in capsys.readouterr().out
     assert detect.main(["HEAD~1", "HEAD", "--pr-body", str(body), "--strict"]) == 1
+
+
+def test_block_ai_fails_on_declared_ai_and_on_a_high_score(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    declared = tmp_path / "declared"
+    declared.mkdir()
+    _repo(declared, "Add helpers\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>")
+    monkeypatch.chdir(declared)
+    assert detect.main(["HEAD~1", "HEAD", "--block-ai"]) == 1
+    assert "(declared)" in capsys.readouterr().out
+    styled = tmp_path / "styled"
+    styled.mkdir()
+    _repo(styled, "Add helpers")
+    monkeypatch.chdir(styled)
+    body = tmp_path / "body.md"
+    body.write_text(TEMPLATE.format(answer="No AI tools were used."))
+    assert detect.main(["HEAD~1", "HEAD", "--pr-body", str(body), "--block-ai"]) == 1
+    assert "style score" in capsys.readouterr().out
+
+
+def test_block_ai_passes_plain_code_without_a_declaration(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    run = lambda *a: subprocess.run(["git", *a], cwd=tmp_path, check=True, capture_output=True)  # noqa: E731
+    run("init", "-q")
+    run("-c", "user.name=Dev", "-c", "user.email=dev@example.org", "commit", "-q", "--allow-empty", "-m", "base")
+    (tmp_path / "app.py").write_text("\n".join(text for _, text in PLAIN) + "\n")
+    run("add", "app.py")
+    run("-c", "user.name=Dev", "-c", "user.email=dev@example.org", "commit", "-q", "-m", "Add values")
+    monkeypatch.chdir(tmp_path)
+    body = tmp_path / "body.md"
+    body.write_text(TEMPLATE.format(answer="None."))
+    assert detect.main(["HEAD~1", "HEAD", "--pr-body", str(body), "--block-ai"]) == 0
+    assert "::error" not in capsys.readouterr().out

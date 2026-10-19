@@ -75,9 +75,10 @@ jobs:
           echo "ClamAV: no viruses in $(tr -cd '\0' < "$RUNNER_TEMP/changed" | wc -c) changed files." >> "$GITHUB_STEP_SUMMARY"
 
   ai-disclosure:
-    # Informational, not part of the "Safe to merge" verdict: AI help is welcome when it
-    # is named (ROADMAP.md). Shows declared AI help and warns when the added code looks
-    # AI-written but nothing is declared (scripts/ai_detect.py, an estimate).
+    # Required for merging: passes only for code written without AI. Fails when a commit or
+    # the pull request declares AI help, or when the added code's style score is 50+
+    # (scripts/ai_detect.py; the score is an estimate). See ROADMAP.md, "Move away from
+    # AI-written code".
     name: AI assistance
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
@@ -107,7 +108,7 @@ jobs:
           done
           # The description comes from the event file, never through an expression in this script.
           jq -r '.pull_request.body // ""' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/pr-body.md"
-          python3 "$RUNNER_TEMP/ai/ai_detect.py" "$BASE_SHA" "$HEAD_SHA" --pr-body "$RUNNER_TEMP/pr-body.md"
+          python3 "$RUNNER_TEMP/ai/ai_detect.py" "$BASE_SHA" "$HEAD_SHA" --pr-body "$RUNNER_TEMP/pr-body.md" --block-ai
 
   verdict:
     name: Safe to merge

@@ -6,7 +6,7 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ### Added
 
-- **AI assistance report on pull requests** (job "AI assistance" in `pr-check.yml`, `scripts/ai_detect.py`): lists AI help declared in the commits (same rules as the AI-share chart) and in the pull request's "AI assistance" section, and estimates from style signals in the added code (section dividers, check-mark emoji, em dashes, stock phrases, boilerplate docstrings) whether undeclared AI help is likely. It warns and asks the author to fill in the section; it does not block merging. The detector runs from the base branch.
+- **Pull requests must be free of AI-written code** (required check "AI assistance" in `pr-check.yml`, `scripts/ai_detect.py`): it fails when a commit declares AI help (same rules as the AI-share chart) or the pull request's "AI assistance" section does, or when style signals in the added code (section dividers, check-mark emoji, em dashes, stock phrases, boilerplate docstrings) reach 50 of 100. The score is an estimate; the job summary shows what it found. The detector runs from the base branch.
 
 ### Fixed
 

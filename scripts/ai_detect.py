@@ -18,6 +18,10 @@ contribution; it makes AI help visible:
 
 It warns when the signals are strong but nothing is declared, and asks the author to
 fill in the "AI assistance" section. It exits 0 either way unless --strict is given.
+
+With --block-ai (used by the required check on pull requests) it fails whenever AI help
+is declared or the style score is 50 or more: the project accepts only code written
+without AI there. An empty "AI assistance" section alone only warns.
 """
 import argparse
 import os
@@ -147,6 +151,8 @@ def main(argv=None):
     parser.add_argument("--pr-body", help="file with the pull request description")
     parser.add_argument("--strict", action="store_true", help="fail when the AI section is unanswered or the "
                                                                "signals are strong without a declaration")
+    parser.add_argument("--block-ai", action="store_true", help="fail when AI help is declared or the style "
+                                                                 "score is 50 or more")
     args = parser.parse_args(argv)
     span = f"{args.base}...{args.head}"
     body = ""
@@ -158,6 +164,11 @@ def main(argv=None):
     score, hits = style_score(added_code_lines(git("diff", "-U0", "--no-color", "--no-ext-diff", span)))
     level, message = assess(declared, section, score)
     report(declared, section, score, hits, level, message)
+    if args.block_ai and level in ("declared", "check"):
+        print("::error title=AI assistance::This pull request contains AI-assisted code"
+              f"{' (declared)' if level == 'declared' else ' (style score ' + str(score) + '/100)'}; "
+              "only code written without AI can be merged.")
+        return 1
     return 1 if args.strict and level in ("check", "unanswered") else 0
 
 
