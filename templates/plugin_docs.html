@@ -144,6 +144,7 @@ def register(app, core):
         </div>
         <h3 style="margin:1.25rem 0 0.5rem; font-size:0.95rem; font-weight:600">Payloads</h3>
         <ul style="margin:0; padding-left:1.25rem; color:var(--text-secondary); font-size:0.85rem; line-height:1.6">
+          <li><code>hosts</code>, <code>stats</code> (dashboard_widget): each entry in <code>hosts</code> is a host dict with <code>{"name", "host", "user", "status", ...}</code> where <code>status</code> is <code>"online"</code>, <code>"offline"</code> or <code>"unknown"</code> from the last reachability check; <code>stats</code> is <code>{"total", "online", "offline", "unknown"}</code>.</li>
           <li><code>host</code> (update_pre, update_post): <code>{"name", "host", "user"}</code> — the display name, the address and the SSH user of the host being updated.</li>
           <li><code>result</code> (update_post): <code>{"success", "packages_updated", "name", "host", "error"}</code>. <code>success</code> is a bool, <code>error</code> the joined error text (empty when the update worked), and <code>packages_updated</code> is <code>0</code>: FleetPilot does not parse the package managers' output for a count.</li>
           <li><code>notification</code>:

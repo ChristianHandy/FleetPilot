@@ -2051,6 +2051,34 @@ def _home_manageability_summary(hosts):
     return states
 
 
+def _dashboard_widget_payload(hosts):
+    """Build ``(hosts_list, stats_dict)`` for the ``dashboard_widgets`` hook.
+
+    Each host dict carries its registered ``name`` and a ``status`` key
+    (``'online'``, ``'offline'`` or ``'unknown'``) from the last known
+    reachability check. ``stats`` contains ``{'total', 'online', 'offline', 'unknown'}``.
+    """
+    widget_hosts = []
+    counts = {'total': 0, 'online': 0, 'offline': 0, 'unknown': 0}
+    for name, host in hosts.items():
+        entry = dict(host)
+        entry.setdefault('name', name)
+        status = entry.get('status')
+        if status not in ('online', 'offline', 'unknown'):
+            state = (entry.get('management') or {}).get('state', 'unknown')
+            if state in ('manageable', 'web_only'):
+                status = 'online'
+            elif state in ('unreachable', 'invalid'):
+                status = 'offline'
+            else:
+                status = 'unknown'
+        entry['status'] = status
+        counts['total'] += 1
+        counts[status] += 1
+        widget_hosts.append(entry)
+    return widget_hosts, counts
+
+
 def _invalidate_service_map_cache():
     for cache_key in list(_cache):
         if cache_key.startswith('service_map:'):
@@ -2239,6 +2267,7 @@ def index():
     server_service_map = _build_server_service_map(hosts, service_map)
     home_pages = _home_page_catalog(is_admin)
     manageability = _home_manageability_summary(hosts)
+    dashboard_widget_hosts, dashboard_widget_stats = _dashboard_widget_payload(hosts)
 
     # Per-user dashboard layout
     layout = user_management.get_dashboard_layout(user_id) if user_id else user_management.DEFAULT_DASHBOARD_LAYOUT
@@ -2265,6 +2294,8 @@ def index():
         service_map=service_map,
         server_service_map=server_service_map,
         manageability=manageability,
+        dashboard_widget_hosts=dashboard_widget_hosts,
+        dashboard_widget_stats=dashboard_widget_stats,
     )
 
 
