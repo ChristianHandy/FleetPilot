@@ -85,6 +85,7 @@ def init_db(data_dir: str):
                                 "AND password NOT LIKE 'gAAAAA%'").fetchall():
             conn.execute('UPDATE schedules SET password=? WHERE id=?', (_box.encrypt(row['password']), row['id']))
         conn.commit()
+    _fired.clear()
     logger.info('scheduled_shutdown: DB initialised at %s', _DB_FILE)
 
 
@@ -225,43 +226,52 @@ def _log_run(schedule_id, host, action, status, message):
 
 # ── Background thread ─────────────────────────────────────────────────────────
 
+_fired: Dict[int, str] = {}  # id -> "YYYY-MM-DD HH:MM"
+
+
+def _run_due(now: Optional[datetime] = None, fired: Optional[Dict[int, str]] = None):
+    """Run one pass of the scheduler for ``now`` (defaults to ``datetime.now()``)."""
+    if now is None:
+        now = datetime.now()
+    if fired is None:
+        fired = _fired
+    current_minute = now.strftime('%Y-%m-%d %H:%M')
+    current_time   = now.strftime('%H:%M')
+    current_day    = DAYS_OF_WEEK[now.weekday()]
+
+    schedules = list_schedules()
+    for s in schedules:
+        if not s['enabled']:
+            continue
+        if s['shutdown_time'] != current_time:
+            continue
+        try:
+            days = json.loads(s['days']) if isinstance(s['days'], str) else s['days']
+        except Exception:
+            days = DAYS_OF_WEEK
+        if current_day not in days:
+            continue
+        # Already fired this minute?
+        if fired.get(s['id']) == current_minute:
+            continue
+
+        logger.info('scheduled_shutdown: firing %s → %s (%s)',
+                    s['name'], s['host'], s['action'])
+        fired[s['id']] = current_minute
+        ok, msg = _execute_action(s)
+        status = 'success' if ok else 'error'
+        _log_run(s['id'], s['host'], s['action'], status, msg)
+        logger.info('scheduled_shutdown: %s %s — %s', s['host'], status, msg[:120])
+
+
 def _scheduler_loop():
     global _running
     logger.info('scheduled_shutdown: background thread started')
-    # Track which schedules already fired this minute
-    fired: Dict[int, str] = {}  # id -> "YYYY-MM-DD HH:MM"
+    _fired.clear()
 
     while _running:
         try:
-            now = datetime.now()
-            current_minute = now.strftime('%Y-%m-%d %H:%M')
-            current_time   = now.strftime('%H:%M')
-            current_day    = DAYS_OF_WEEK[now.weekday()]
-
-            schedules = list_schedules()
-            for s in schedules:
-                if not s['enabled']:
-                    continue
-                if s['shutdown_time'] != current_time:
-                    continue
-                try:
-                    days = json.loads(s['days']) if isinstance(s['days'], str) else s['days']
-                except Exception:
-                    days = DAYS_OF_WEEK
-                if current_day not in days:
-                    continue
-                # Already fired this minute?
-                if fired.get(s['id']) == current_minute:
-                    continue
-
-                logger.info('scheduled_shutdown: firing %s → %s (%s)',
-                            s['name'], s['host'], s['action'])
-                fired[s['id']] = current_minute
-                ok, msg = _execute_action(s)
-                status = 'success' if ok else 'error'
-                _log_run(s['id'], s['host'], s['action'], status, msg)
-                logger.info('scheduled_shutdown: %s %s — %s', s['host'], status, msg[:120])
-
+            _run_due(datetime.now(), _fired)
         except Exception as e:
             logger.error('scheduled_shutdown loop error: %s', e)
 
