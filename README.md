@@ -23,7 +23,7 @@ Updates for Linux and Windows machines, SMART disk health, FRITZ!Box / OpenWrt /
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15465/badge)](https://www.bestpractices.dev/projects/15465)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue)](https://python.org)
-[![AI-written code](https://christianhandy.github.io/FleetPilot/ai-code-badge.svg)](#how-much-of-fleetpilot-is-written-by-ai)
+[![AI-written code](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fchristianhandy.github.io%2FFleetPilot%2Fai-codebase.json&query=%24.share&suffix=%20%25&label=AI-written%20code&color=e05d44)](#how-much-of-fleetpilot-is-written-by-ai)
 
 <img src="docs/screenshots/routers.png" alt="FleetPilot routers page: FRITZ!Box, repeater, OpenWrt and OPNsense with status, firmware, uptime and connected devices" width="100%">
 
