@@ -200,6 +200,8 @@
 
     # ── Hook registrations (pick any) ───────────────────────────────────────
     # Render HTML on the Home dashboard
+    # hosts: [{"name", "host", "user", "status": "online"|"offline"|"unknown", ...}]
+    # stats: {"total": int, "online": int, "offline": int, "unknown": int}
     "dashboard_widget": lambda hosts, stats: "&lt;div class='card'&gt;Hello!&lt;/div&gt;",
 
     # Add action buttons to each host card

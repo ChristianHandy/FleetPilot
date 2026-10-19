@@ -4,6 +4,10 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ## [Unreleased]
 
+### Fixed
+
+- **Example dashboard widget and `dashboard_widget` hook receive host reachability counts** ([#144](https://github.com/ChristianHandy/FleetPilot/issues/144)). `templates/index.html` passed raw host dicts without a `status` key and `stats={}`, so `addons/example_dashboard_widget.py` always reported 0% Fleet Health with every host offline. Each host passed to `dashboard_widget` now includes `name` and `status` (`"online"`, `"offline"` or `"unknown"`) from the last capability check, `stats` provides `{"total", "online", "offline", "unknown"}`, and unchecked hosts are shown as unknown rather than offline.
+
 ## [1.8.0] — 2026-10-18
 
 **Stable release with two security fixes. Please update.** It contains everything from 1.8.0-beta.2 (below: Windows support for every supported release, the Android app, the live demo, stricter checks and much more) plus the changes here. After updating, change the SSH passwords that were stored for scheduled shutdowns or in the server registry.
