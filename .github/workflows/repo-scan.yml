@@ -8,6 +8,7 @@ name: Repository scan
 #   - functional check (functional.yml)
 #   - ClamAV over every tracked file
 #   - scripts/pr_threat_scan.py --all over every tracked file
+#   - scripts/ai_detect.py --all: leftovers of AI-generated code (chat text, elided code, ...)
 on:
   push:
     branches: [main]
@@ -41,6 +42,10 @@ jobs:
 
       - name: Backdoor patterns in every tracked file
         run: python3 scripts/pr_threat_scan.py --all
+
+      - name: AI artifacts in every tracked file
+        if: success() || failure()
+        run: python3 scripts/ai_detect.py --all
 
       - name: ClamAV virus scan of every tracked file
         if: success() || failure()
