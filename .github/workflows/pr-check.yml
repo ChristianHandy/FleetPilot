@@ -74,6 +74,41 @@ jobs:
           xargs -0 clamscan --no-summary --infected --alert-encrypted=yes --alert-macros=yes < "$RUNNER_TEMP/changed"
           echo "ClamAV: no viruses in $(tr -cd '\0' < "$RUNNER_TEMP/changed" | wc -c) changed files." >> "$GITHUB_STEP_SUMMARY"
 
+  ai-disclosure:
+    # Informational, not part of the "Safe to merge" verdict: AI help is welcome when it
+    # is named (ROADMAP.md). Shows declared AI help and warns when the added code looks
+    # AI-written but nothing is declared (scripts/ai_detect.py, an estimate).
+    name: AI assistance
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Declared AI help and style signals
+        run: |
+          # The detector from the base branch, so a pull request cannot change its own assessment.
+          mkdir -p "$RUNNER_TEMP/ai"
+          for f in ai_detect.py ai_share.py; do
+            if git cat-file -e "$BASE_SHA:scripts/$f" 2>/dev/null; then
+              git show "$BASE_SHA:scripts/$f" > "$RUNNER_TEMP/ai/$f"
+            else
+              echo "::notice::The base branch has no scripts/$f yet; using the pull request's copy."
+              cp "scripts/$f" "$RUNNER_TEMP/ai/$f"
+            fi
+          done
+          # The description comes from the event file, never through an expression in this script.
+          jq -r '.pull_request.body // ""' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/pr-body.md"
+          python3 "$RUNNER_TEMP/ai/ai_detect.py" "$BASE_SHA" "$HEAD_SHA" --pr-body "$RUNNER_TEMP/pr-body.md"
+
   verdict:
     name: Safe to merge
     if: always()
