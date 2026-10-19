@@ -97,7 +97,7 @@ jobs:
           # proxmox/community-scripts follows that project's own conventions.
           git ls-files ':!proxmox/community-scripts/**' ':!**/vendor/**' | while IFS= read -r f; do
             case "$f" in *.sh) echo "$f"; continue ;; esac
-            [ -f "$f" ] && head -n1 "$f" | grep -Eq '^#!.*/(env +)?(ba|da|k)?sh( |$)' && echo "$f"
+            if [ -f "$f" ] && head -n1 "$f" | grep -Eq '^#!.*/(env +)?(ba|da|k)?sh( |$)'; then echo "$f"; fi
           done > "$RUNNER_TEMP/shell-files"
           tr '\n' '\0' < "$RUNNER_TEMP/shell-files" | xargs -0 -r shellcheck --severity=warning --format=gcc
           echo "ShellCheck: no warnings." >> "$GITHUB_STEP_SUMMARY"
