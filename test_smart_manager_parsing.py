@@ -43,7 +43,7 @@ Percentage Used:                    2%
 Data Units Read:                    12,345,678 [6.32 TB]
 Data Units Written:                 8,765,432 [4.48 TB]
 Power Cycles:                       142
-Power On Hours:                     1,234
+Power On Hours:                     12,345
 Unsafe Shutdowns:                   12
 Media and Data Integrity Errors:    0
 Error Information Log Entries:      0
@@ -119,7 +119,7 @@ def test_parse_smartctl_output_nvme_fallback():
 
     assert parsed["overall_status"] == "PASSED"
     assert parsed["temp"] == 38
-    assert parsed["poh"] == 1234
+    assert parsed["poh"] == 12345
     assert parsed["reallocated"] == 0
     assert parsed["pending"] == 0
     assert parsed["uncorrectable"] == 0
@@ -169,11 +169,11 @@ def test_classify_health_nonzero_sector_counters_are_critical(field):
     "temp,expected_rating",
     [
         (None, "GOOD"),
-        (44, "GOOD"),
-        (45, "WARNING"),
-        (54, "WARNING"),
-        (55, "CRITICAL"),
-        (65, "CRITICAL"),
+        (smart_manager.TEMP_WARNING - 1, "GOOD"),
+        (smart_manager.TEMP_WARNING, "WARNING"),
+        (smart_manager.TEMP_CRITICAL - 1, "WARNING"),
+        (smart_manager.TEMP_CRITICAL, "CRITICAL"),
+        (smart_manager.TEMP_CRITICAL + 10, "CRITICAL"),
     ],
 )
 def test_classify_health_temperature_bands(temp, expected_rating):
@@ -182,15 +182,29 @@ def test_classify_health_temperature_bands(temp, expected_rating):
 
 
 def test_classify_health_power_on_hours_thresholds():
-    # POH_CRITICAL (50,000h) returns WARNING.
-    assert smart_manager.classify_health(_base_parsed(poh=50_000)) == "WARNING"
-    assert smart_manager.classify_health(_base_parsed(poh=60_000)) == "WARNING"
+    # POH_CRITICAL returns WARNING.
+    assert (
+        smart_manager.classify_health(_base_parsed(poh=smart_manager.POH_CRITICAL))
+        == "WARNING"
+    )
+    assert (
+        smart_manager.classify_health(
+            _base_parsed(poh=smart_manager.POH_CRITICAL + 10_000)
+        )
+        == "WARNING"
+    )
 
     # POH_WARNING (30,000h) is defined in smart_manager.py but not checked in
-    # classify_health, so disks between 30,000 and 49,999 hours are rated GOOD.
-    assert smart_manager.POH_WARNING == 30_000
-    assert smart_manager.classify_health(_base_parsed(poh=30_000)) == "GOOD"
-    assert smart_manager.classify_health(_base_parsed(poh=49_999)) == "GOOD"
+    # classify_health, so disks between POH_WARNING and POH_CRITICAL - 1 are rated GOOD.
+    assert smart_manager.POH_WARNING < smart_manager.POH_CRITICAL
+    assert (
+        smart_manager.classify_health(_base_parsed(poh=smart_manager.POH_WARNING))
+        == "GOOD"
+    )
+    assert (
+        smart_manager.classify_health(_base_parsed(poh=smart_manager.POH_CRITICAL - 1))
+        == "GOOD"
+    )
 
 
 @pytest.mark.parametrize("attr_id,attr_name", list(smart_manager.CRITICAL_ATTRS.items()))
