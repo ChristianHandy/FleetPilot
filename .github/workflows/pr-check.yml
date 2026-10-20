@@ -120,16 +120,21 @@ jobs:
     # Required for merging: passes only for code written without AI. Fails when a commit or
     # the pull request declares AI help, or when the added code's style score is 50+
     # (scripts/ai_detect.py; the score is an estimate). See ROADMAP.md, "Move away from
-    # AI-written code".
+    # AI-written code". A maintainer can allow one pull request anyway by commenting
+    # "/allow-ai <head commit> <reason>" (scripts/ai_override.py; ai-override.yml re-runs
+    # this job when such a comment arrives).
     name: AI assistance
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
+      issues: read            # read the pull request's comments for a maintainer override
+      pull-requests: read
     env:
       BASE_SHA: ${{ github.event.pull_request.base.sha }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -137,10 +142,12 @@ jobs:
           fetch-depth: 0
 
       - name: Declared AI help and style signals
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           # The detector from the base branch, so a pull request cannot change its own assessment.
           mkdir -p "$RUNNER_TEMP/ai"
-          for f in ai_detect.py ai_share.py; do
+          for f in ai_detect.py ai_share.py ai_override.py; do
             if git cat-file -e "$BASE_SHA:scripts/$f" 2>/dev/null; then
               git show "$BASE_SHA:scripts/$f" > "$RUNNER_TEMP/ai/$f"
             else
@@ -150,7 +157,12 @@ jobs:
           done
           # The description comes from the event file, never through an expression in this script.
           jq -r '.pull_request.body // ""' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/pr-body.md"
-          python3 "$RUNNER_TEMP/ai/ai_detect.py" "$BASE_SHA" "$HEAD_SHA" --pr-body "$RUNNER_TEMP/pr-body.md" --block-ai
+          if python3 "$RUNNER_TEMP/ai/ai_detect.py" "$BASE_SHA" "$HEAD_SHA" --pr-body "$RUNNER_TEMP/pr-body.md" --block-ai; then
+            exit 0
+          fi
+          # Failed: a maintainer may have allowed this exact commit in a comment.
+          jq -r '.pull_request.user.login' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/pr-author"
+          GITHUB_TOKEN="$GH_TOKEN" python3 "$RUNNER_TEMP/ai/ai_override.py" "$PR_NUMBER" "$HEAD_SHA" "$(cat "$RUNNER_TEMP/pr-author")"
 
   verdict:
     name: Safe to merge
