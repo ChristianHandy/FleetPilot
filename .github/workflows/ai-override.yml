@@ -1,0 +1,43 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: AI assistance override
+
+# When a maintainer comments "/allow-ai <head commit> <reason>" on a pull request, re-run
+# the failed jobs of that pull request's check so the required "AI assistance" job can
+# see the comment (scripts/ai_override.py decides whether it counts). This workflow
+# checks out no code and only asks GitHub to re-run a run; the decision itself is made
+# by the AI assistance job, from the base branch's scripts.
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+jobs:
+  rerun:
+    name: Re-run the AI assistance check
+    if: >-
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/allow-ai') &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write          # re-run the pull request check
+      pull-requests: read
+    steps:
+      - name: Re-run the failed jobs of the latest pull request check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          head="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)"
+          run="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow pr-check.yml --commit "$head" \
+                 --json databaseId --jq '.[0].databaseId')"
+          if [ -z "$run" ]; then
+            echo "No pull request check run for $head yet; it will see the comment when it runs."
+            exit 0
+          fi
+          echo "Re-running failed jobs of run $run for $head."
+          gh run rerun "$run" --repo "$GITHUB_REPOSITORY" --failed || \
+            echo "Nothing to re-run (the run is still in progress or already passed)."
