@@ -12,7 +12,7 @@ import pytest
 
 import app as fp
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _make_read_only(root):

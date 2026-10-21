@@ -58,7 +58,7 @@ All Python dependencies, with exact versions and hashes, are in `requirements-lo
 
 ## Test policy
 
-- **New functionality must come with automated tests** in a `test_*.py` file at the top level (pytest). This is a rule, not a wish: a pull request that adds major functionality without tests is not merged until they are added.
+- **New functionality must come with automated tests** in a `test_*.py` file under `tests/` (pytest). This is a rule, not a wish: a pull request that adds major functionality without tests is not merged until they are added.
 - **Bug fixes come with a test** that fails without the fix whenever that is practical.
 - Code that talks to devices is tested against recorded or emulated output. See `test_routers.py` and the emulated lab in `demo/live/lab`.
 - Parsers for data from the network belong in the fuzzer (`fuzz/fuzz_parsers.py`).

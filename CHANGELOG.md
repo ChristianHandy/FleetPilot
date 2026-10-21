@@ -19,6 +19,10 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 - **Pull requests must be free of AI-written code** (required check "AI assistance" in `pr-check.yml`, `scripts/ai_detect.py`): it fails when a commit declares AI help (same rules as the AI-share chart) or the pull request's "AI assistance" section does, or when style signals in the added code (section dividers, check-mark emoji, em dashes, stock phrases, boilerplate docstrings) reach 50 of 100. The score is an estimate; the job summary shows what it found. The detector runs from the base branch.
 
+### Changed
+
+- Tests moved from the repository root into tests/ (#171).
+
 ### Fixed
 
 - **Example dashboard widget and `dashboard_widget` hook receive host reachability counts** ([#144](https://github.com/ChristianHandy/FleetPilot/issues/144)). `templates/index.html` passed raw host dicts without a `status` key and `stats={}`, so `addons/example_dashboard_widget.py` always reported 0% Fleet Health with every host offline. Each host passed to `dashboard_widget` now includes `name` and `status` (`"online"`, `"offline"` or `"unknown"`) from the last capability check, `stats` provides `{"total", "online", "offline", "unknown"}`, and unchecked hosts are shown as unknown rather than offline.

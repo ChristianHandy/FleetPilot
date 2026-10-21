@@ -7,8 +7,7 @@
 branch = True
 source = .
 omit =
-    test_*.py
-    conftest.py
+    tests/*
     demo/*
     fuzz/*
     hw_monitor/hw_stress_test.py

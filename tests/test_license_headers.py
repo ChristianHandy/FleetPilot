@@ -22,9 +22,10 @@ def _source_files():
 
 
 def test_every_source_file_has_an_spdx_header():
+    root = pathlib.Path(__file__).resolve().parent.parent
     missing = []
     for path in _source_files():
-        head = pathlib.Path(path).read_text(encoding="utf-8")[:600]
+        head = (root / path).read_text(encoding="utf-8")[:600]
         if ("SPDX-License-Identifier: GPL-3.0-or-later" not in head
                 or "SPDX-FileCopyrightText: Copyright the FleetPilot contributors" not in head):
             missing.append(path)

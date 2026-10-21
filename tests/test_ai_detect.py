@@ -6,7 +6,7 @@ import pathlib
 import subprocess
 import sys
 
-_SCRIPTS = pathlib.Path(__file__).parent / "scripts"
+_SCRIPTS = pathlib.Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(_SCRIPTS))
 _spec = importlib.util.spec_from_file_location("ai_detect", _SCRIPTS / "ai_detect.py")
 detect = importlib.util.module_from_spec(_spec)
@@ -164,5 +164,5 @@ def test_an_artifact_fails_the_pull_request_check_even_when_nothing_is_declared(
 
 def test_whole_repository_has_no_ai_artifacts(monkeypatch, capsys):
     monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
-    monkeypatch.chdir(pathlib.Path(__file__).parent)
+    monkeypatch.chdir(pathlib.Path(__file__).resolve().parent.parent)
     assert detect.main(["--all"]) == 0

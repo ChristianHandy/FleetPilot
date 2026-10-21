@@ -7,7 +7,7 @@ import subprocess
 
 import pytest
 
-SCRIPT = pathlib.Path(__file__).with_name("scripts") / "ai_share.py"
+SCRIPT = pathlib.Path(__file__).resolve().parent.parent / "scripts" / "ai_share.py"
 
 
 @pytest.fixture
