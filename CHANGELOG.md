@@ -4,9 +4,13 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ## [Unreleased]
 
+### Security
+
+- **certifi updated to 2026.10.19** (PYSEC-2026-4320 in 2026.7.22, found by `pip-audit`), in `requirements-lock.txt` and `requirements-dev-lock.txt`.
+
 ### Added
 
-- **Maintainer override for the AI assistance check:** the check stays required, but the repository owner, a member or a collaborator (not the pull request's author) can allow one pull request by commenting `/allow-ai <head commit> <reason>`. The approval counts only for that commit, and the reason is shown in the check summary. The comment re-runs the check (`ai-override.yml`, `scripts/ai_override.py`).
+- **Maintainer override for the AI assistance check:** the check stays required, but the repository owner, a member or a collaborator can allow one pull request by commenting `/allow-ai <head commit> <reason>`. Members and collaborators cannot allow their own pull requests; the owner can, since nobody else could approve them. The approval counts only for that commit, and the reason is shown in the check summary. The comment re-runs the check (`ai-override.yml`, `scripts/ai_override.py`).
 
 - **More pull request checks:** at least 70 % of the changed Python lines must be run by the tests (part of the pytest check; the summary lists the untested lines), and the new *Change checks* job, part of *Safe to merge*, runs ShellCheck on the install, update and root helper scripts, requires a `CHANGELOG.md` entry for changes users notice (label `no changelog` to skip), fails when a change adds interface text without a German translation, and warns above 800 changed lines (`scripts/pr_checks.py`).
 

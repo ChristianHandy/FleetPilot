@@ -41,9 +41,15 @@ def test_no_override_without_reason_for_another_commit_or_from_the_wrong_person(
         assert override.find_override([comment], HEAD, "someone") is None, comment["body"]
 
 
-def test_the_pull_request_author_cannot_allow_their_own_pull_request():
+def test_members_and_collaborators_cannot_allow_their_own_pull_request():
+    for association in ("MEMBER", "COLLABORATOR"):
+        assert override.find_override([_comment("helper", "/allow-ai d6b1f82 mine", association)], HEAD,
+                                      "helper") is None
+
+
+def test_the_owner_can_allow_their_own_pull_request():
     assert override.find_override([_comment("ChristianHandy", "/allow-ai d6b1f82 mine")], HEAD,
-                                  "ChristianHandy") is None
+                                  "ChristianHandy")[0] == "ChristianHandy"
 
 
 def test_the_newest_valid_override_wins():

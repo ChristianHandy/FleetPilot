@@ -12,8 +12,9 @@ A maintainer can still let one specific pull request through by commenting on it
 for example "/allow-ai d6b1f82 release PR, reviewed line by line". The override counts
 only when:
 
-- the comment's author is the repository owner, a member or a collaborator, and not
-  the pull request's own author (no self-approval);
+- the comment's author is the repository owner, a member or a collaborator; members
+  and collaborators cannot allow their own pull requests, the owner can (nobody else
+  could approve the owner's pull requests);
 - <commit> is the pull request's current head commit (at least 7 characters of its
   SHA), so new pushes need a new approval;
 - a reason follows the commit.
@@ -35,7 +36,8 @@ def find_override(comments, head_sha, pr_author):
     """The (login, reason, url) of the newest valid override among ``comments``, or None."""
     for comment in reversed(comments):
         login = (comment.get("user") or {}).get("login", "")
-        if comment.get("author_association") not in ALLOWED or not login or login == pr_author:
+        association = comment.get("author_association")
+        if association not in ALLOWED or not login or (login == pr_author and association != "OWNER"):
             continue
         for sha, reason in COMMAND.findall(comment.get("body") or ""):
             if head_sha.lower().startswith(sha.lower()):
