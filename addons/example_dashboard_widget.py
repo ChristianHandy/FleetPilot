@@ -26,12 +26,32 @@ addon_meta = {
 
 def _render_widget(hosts: list, stats: dict) -> str:
     """Build a simple fleet-health summary card."""
-    total = len(hosts)
-    online = sum(1 for h in hosts if h.get("status") == "online")
-    offline = total - online
+    hosts = list(hosts or [])
+    stats = stats if isinstance(stats, dict) else {}
+    total = int(stats["total"]) if "total" in stats else len(hosts)
+    online = int(
+        stats["online"]
+        if "online" in stats
+        else sum(1 for h in hosts if h.get("status") == "online")
+    )
+    offline = int(
+        stats["offline"]
+        if "offline" in stats
+        else sum(1 for h in hosts if h.get("status") == "offline")
+    )
+    unknown = int(
+        stats["unknown"]
+        if "unknown" in stats
+        else max(0, total - online - offline)
+    )
     pct = int(online / total * 100) if total else 0
 
     bar_color = "#10b981" if pct >= 80 else "#f59e0b" if pct >= 50 else "#ef4444"
+    unknown_span = (
+        f'\n      <span>⚪ Unknown: <strong style="color:var(--text-primary)">{unknown}</strong></span>'
+        if unknown
+        else ""
+    )
 
     return f"""
 <div class="card" style="border-left:4px solid {bar_color}">
@@ -50,7 +70,7 @@ def _render_widget(hosts: list, stats: dict) -> str:
     </div>
     <div style="display:flex; gap:1.5rem; font-size:0.85rem; color:var(--text-secondary)">
       <span>🟢 Online: <strong style="color:var(--text-primary)">{online}</strong></span>
-      <span>🔴 Offline: <strong style="color:var(--text-primary)">{offline}</strong></span>
+      <span>🔴 Offline: <strong style="color:var(--text-primary)">{offline}</strong></span>{unknown_span}
       <span>📦 Total: <strong style="color:var(--text-primary)">{total}</strong></span>
     </div>
   </div>

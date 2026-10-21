@@ -702,7 +702,7 @@
 {# ── PLUGIN WIDGETS ── #}
 {% if wid == 'plugin_widgets' %}
 {% if addon_mgr is defined %}
-  {% set _plugin_widgets = addon_mgr.render_hooks('dashboard_widgets', hosts=hosts.values()|list, stats={}) %}
+  {% set _plugin_widgets = addon_mgr.render_hooks('dashboard_widgets', hosts=dashboard_widget_hosts|default(hosts.values()|list), stats=dashboard_widget_stats|default({})) %}
   {% if _plugin_widgets %}
   <div class="dash-widget{% if not w.visible %} hidden-widget{% endif %}"
        data-widget-id="plugin_widgets" data-widget-title="{{ _('Plugin Widgets') }}" data-size="{{ w.size }}" style="margin-bottom:1.5rem;">

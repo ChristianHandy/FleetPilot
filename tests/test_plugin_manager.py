@@ -305,6 +305,51 @@ def test_example_and_tutorial_plugins_use_logger_not_print(caplog, capsys):
     assert any("tutorial_plugin" in m for m in messages)
 
 
+def test_example_dashboard_widget_renders_online_offline_and_unknown_counts():
+    """Test that example_dashboard_widget and _dashboard_widget_payload report real status counts (#144)."""
+    import app as fp_app
+    from addons import example_dashboard_widget
+
+    hosts_cfg = {
+        "pve1": {"host": "10.0.0.1", "user": "root", "management": {"state": "manageable"}},
+        "nas": {"host": "10.0.0.2", "user": "admin", "management": {"state": "web_only"}},
+        "old-box": {"host": "10.0.0.3", "user": "root", "management": {"state": "unreachable"}},
+        "new-box": {"host": "10.0.0.4", "user": "root"},
+    }
+    widget_hosts, widget_stats = fp_app._dashboard_widget_payload(hosts_cfg)
+
+    assert widget_stats == {"total": 4, "online": 2, "offline": 1, "unknown": 1}
+    by_name = {h["name"]: h["status"] for h in widget_hosts}
+    assert by_name == {
+        "pve1": "online",
+        "nas": "online",
+        "old-box": "offline",
+        "new-box": "unknown",
+    }
+
+    html = example_dashboard_widget._render_widget(widget_hosts, widget_stats)
+    assert "50%" in html
+    assert "Online: <strong" in html and ">2</strong>" in html
+    assert "Offline: <strong" in html and ">1</strong>" in html
+    assert "Unknown: <strong" in html and ">1</strong>" in html
+    assert "Total: <strong" in html and ">4</strong>" in html
+
+    # Direct host-list call without stats dictionary (known online and offline only)
+    direct_html = example_dashboard_widget._render_widget(
+        [
+            {"name": "h1", "status": "online"},
+            {"name": "h2", "status": "online"},
+            {"name": "h3", "status": "online"},
+            {"name": "h4", "status": "offline"},
+        ],
+        {},
+    )
+    assert "75%" in direct_html
+    assert ">3</strong>" in direct_html
+    assert ">1</strong>" in direct_html
+    assert "Unknown:" not in direct_html
+
+
 if __name__ == "__main__":
     import pytest
     sys.exit(pytest.main([__file__, "-q"]))

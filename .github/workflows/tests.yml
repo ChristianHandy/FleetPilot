@@ -26,6 +26,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0        # the changed-lines check compares with the base branch
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python }}
@@ -45,6 +46,13 @@ jobs:
         run: |
           python -m coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY" || true
           python -m coverage report --format=total
+      - name: Changed lines are tested (pull requests)
+        if: github.event_name == 'pull_request' && matrix.python == '3.13'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          python -m coverage json -q -o "$RUNNER_TEMP/coverage.json"
+          python scripts/pr_checks.py changed-coverage "$BASE_SHA" "$RUNNER_TEMP/coverage.json"
       - name: Check dependencies for known vulnerabilities
         run: pip-audit --require-hashes --disable-pip -r requirements-lock.txt
       - name: Bandit (high severity fails the build)

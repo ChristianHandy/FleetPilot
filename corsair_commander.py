@@ -202,13 +202,20 @@ def _liquidctl_cmd(dev: Dict, subcmd: str) -> str:
     return f"{sudo}liquidctl --match '{match}' {direct} {subcmd} --json 2>/dev/null".strip()
 
 
+_VALID_CHANNELS = frozenset(
+    {"fan1", "fan2", "fan3", "fan4", "fan5", "fan6", "sync"}
+)
+
+
 def _parse_liquidctl_json(raw: str) -> List[Dict]:
     """Parse liquidctl --json output. Returns list of device result dicts."""
     try:
         data = json.loads(raw)
         if isinstance(data, list):
-            return data
-        return [data]
+            return [d for d in data if isinstance(d, dict)]
+        if isinstance(data, dict):
+            return [data]
+        return []
     except Exception:
         return []
 
@@ -250,14 +257,29 @@ def fetch_status(dev: Dict) -> Dict:
         status_cmd = _liquidctl_cmd(dev, "status")
         out, err, code = _run_remote(ssh, status_cmd, timeout=20)
 
+        if code != 0:
+            result["error"] = err or out or f"liquidctl exited with status {code}"
+            return result
+
         if not out:
             # Fallback: try without --json flag and parse text output
             status_cmd_text = f"liquidctl --match '{dev.get('match_str','Commander Pro')}' status 2>&1"
-            out_text, _, _ = _run_remote(ssh, status_cmd_text, timeout=20)
+            out_text, err_text, code_text = _run_remote(ssh, status_cmd_text, timeout=20)
+            if code_text != 0 or not out_text.strip():
+                result["error"] = (
+                    err_text or err or out_text or "Empty output from liquidctl"
+                )
+                return result
             result["raw"] = [{"text_output": out_text}]
             _parse_text_status(out_text, result)
+            if not (result["temperatures"] or result["fans"] or result["voltages"]):
+                result["error"] = "No status readings returned by liquidctl"
+                return result
         else:
             devices = _parse_liquidctl_json(out)
+            if not devices:
+                result["error"] = "Invalid or empty JSON output from liquidctl"
+                return result
             result["raw"] = devices
             for device_data in devices:
                 _parse_json_status(device_data, result)
@@ -344,22 +366,56 @@ def set_fan_speed(dev: Dict, channel: str, speed) -> Dict:
     Returns {"ok": bool, "message": str}
     """
     result = {"ok": False, "message": ""}
+    if not isinstance(channel, str) or channel not in _VALID_CHANNELS:
+        result["message"] = f"Invalid channel: {channel}"
+        return result
+
+    if isinstance(speed, bool):
+        result["message"] = "Invalid speed format"
+        return result
+    if isinstance(speed, (int, float)):
+        if speed < 0 or speed > 100:
+            result["message"] = "Fan speed must be between 0 and 100"
+            return result
+        speed_arg = str(int(speed))
+    elif isinstance(speed, list):
+        if not speed:
+            result["message"] = "Invalid speed format"
+            return result
+        pair_tokens = []
+        for pair in speed:
+            if (
+                not isinstance(pair, (tuple, list))
+                or len(pair) != 2
+                or isinstance(pair[0], bool)
+                or isinstance(pair[1], bool)
+                or not isinstance(pair[0], (int, float))
+                or not isinstance(pair[1], (int, float))
+            ):
+                result["message"] = "Invalid speed format"
+                return result
+            t, r = pair
+            if t < 0 or t > 100 or r < 0 or r > 100:
+                result["message"] = "Fan speed must be between 0 and 100"
+                return result
+            pair_tokens.append(f"{int(t)} {int(r)}")
+        speed_arg = " ".join(pair_tokens)
+    else:
+        result["message"] = "Invalid speed format"
+        return result
+
     ssh = None
     try:
         ssh = _ssh_connect(dev)
         match = dev.get("match_str", "Commander Pro")
         direct = "--direct-access" if dev.get("use_direct") else ""
-
-        if isinstance(speed, (int, float)):
-            # Fixed duty
-            cmd = f"liquidctl --match {shlex.quote(match)} {direct} set {shlex.quote(channel)} speed {int(speed)} --json 2>&1"
-        elif isinstance(speed, list):
-            # Temperature profile: [(temp, rpm), ...]
-            pairs = " ".join(f"{int(t)} {int(r)}" for t, r in speed)
-            cmd = f"liquidctl --match {shlex.quote(match)} {direct} set {shlex.quote(channel)} speed {pairs} --json 2>&1"
-        else:
-            result["message"] = "Invalid speed format"
-            return result
+        cmd_parts = ["liquidctl", "--match", shlex.quote(match)]
+        if direct:
+            cmd_parts.append(direct)
+        cmd_parts.extend(
+            ["set", shlex.quote(channel), "speed", speed_arg, "--json", "2>&1"]
+        )
+        cmd = " ".join(cmd_parts)
 
         out, err, code = _run_remote(ssh, cmd.strip(), timeout=30)
         result["ok"] = (code == 0)
