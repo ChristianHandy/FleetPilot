@@ -5,7 +5,7 @@ import importlib.util
 import pathlib
 
 _spec = importlib.util.spec_from_file_location("ai_override",
-                                               pathlib.Path(__file__).parent / "scripts" / "ai_override.py")
+                                               pathlib.Path(__file__).resolve().parent.parent / "scripts" / "ai_override.py")
 override = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(override)
 

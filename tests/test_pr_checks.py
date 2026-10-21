@@ -6,7 +6,7 @@ import json
 import pathlib
 import subprocess
 
-_spec = importlib.util.spec_from_file_location("pr_checks", pathlib.Path(__file__).parent / "scripts" / "pr_checks.py")
+_spec = importlib.util.spec_from_file_location("pr_checks", pathlib.Path(__file__).resolve().parent.parent / "scripts" / "pr_checks.py")
 checks = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(checks)
 

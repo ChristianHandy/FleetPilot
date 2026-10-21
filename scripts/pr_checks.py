@@ -23,7 +23,7 @@ MIN_CHANGED = 10          # fewer changed executable lines than this: nothing to
 LARGE_PR = 800            # changed lines (lock files left out) above which reviews get hard
 NO_CHANGELOG_LABEL = "no changelog"
 # Changes that users don't notice and that need no changelog entry.
-NO_ENTRY_NEEDED = re.compile(r"^(test_[^/]*\.py|conftest\.py|docs/|\.github/|demo/|fuzz/|\.clusterfuzzlite/|"
+NO_ENTRY_NEEDED = re.compile(r"^(tests/|test_[^/]*\.py|conftest\.py|docs/|\.github/|demo/|fuzz/|\.clusterfuzzlite/|"
                              r"integrations/home-assistant/tests/)|\.md$|(^|/)requirements[^/]*-lock\.txt$|"
                              r"^(ruff\.toml|pytest\.ini|\.coveragerc|\.gitignore|\.gitattributes)$")
 LOCK_FILES = re.compile(r"(^|/)(requirements[^/]*-lock\.txt|package-lock\.json)$")
