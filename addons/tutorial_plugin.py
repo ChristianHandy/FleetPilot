@@ -10,6 +10,10 @@
 #  - einen Button für jede Festplatte, der auf eine eigene Ansicht verweist
 #  - Nutzung von base.html und Übergabe von "device" ins Template
 
+import logging
+
+logger = logging.getLogger("fleetpilot.plugins")
+
 addon_meta = {
     "name": "tutorial_plugin",
 
@@ -40,4 +44,4 @@ addon_meta = {
 
 # This function is called when the plugin is loaded
 def register(app, core):
-    print("[tutorial_plugin] successfully loaded.")
+    logger.info("[tutorial_plugin] successfully loaded.")

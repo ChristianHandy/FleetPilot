@@ -53,3 +53,26 @@ def test_monthly_share_counts_declared_ai_and_skips_bots_and_lock_files(tmp_path
     assert months["2026-02"] == {"ai": 60, "all": 60, "ai_commits": 1, "commits": 2}
     chart = ai_share.svg(months)
     assert chart.startswith("<svg") and "Jan 2026: 25.0 %" in chart and "goal: as low as we can get" in chart
+
+
+def test_codebase_share_attributes_current_lines_by_blame(tmp_path, ai_share, monkeypatch):
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    day = "2026-03-01T12:00:00+00:00"
+    _commit(tmp_path, "Ann <ann@example.org>", "by hand", {"app.py": 30, "notes.md": 50}, day)
+    _commit(tmp_path, "Ann <ann@example.org>", "with help\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>",
+            {"lib/tool.py": 10}, day)
+    _commit(tmp_path, "dependabot[bot] <2+dependabot[bot]@users.noreply.github.com>", "bump",
+            {"lib/bot.py": 100}, day)
+    _commit(tmp_path, "Ann <ann@example.org>", "vendored", {"static/vendor/x.js": 400}, day)
+    monkeypatch.chdir(tmp_path)
+    result = ai_share.codebase("HEAD")
+    assert (result["ai"], result["all"], result["files"]) == (10, 40, 2)   # md, bot and vendor lines left out
+    assert result["share"] == 25.0
+    assert result["areas"]["lib"] == {"ai": 10, "all": 10, "share": 100.0}
+    assert result["areas"]["core"]["share"] == 0.0
+
+
+def test_badge_shows_the_rounded_share(ai_share):
+    svg = ai_share.badge(79.6)
+    assert 'aria-label="AI-written code: 80 %"' in svg and svg.startswith("<svg") and "#d64545" in svg
+    assert "#2f9e44" in ai_share.badge(10)

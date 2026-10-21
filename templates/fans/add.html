@@ -20,7 +20,7 @@
         {% for s in known_servers %}
         <div class="col-12 col-md-6">
           <button type="button" class="btn btn-outline-secondary w-100 text-start py-2"
-                  onclick="pickKnownServer({{ (s.host)|tojson|forceescape }}, {{ s.port|default(22) }}, {{ (s.user|default('root'))|tojson|forceescape }}, {{ (s.password|default(''))|tojson|forceescape }}, {{ (s.ssh_key|default(''))|tojson|forceescape }}, {{ (s.name)|tojson|forceescape }})">
+                  onclick="pickKnownServer({{ (s.host)|tojson|forceescape }}, {{ s.port|default(22) }}, {{ (s.user|default('root'))|tojson|forceescape }}, '', {{ (s.ssh_key|default(''))|tojson|forceescape }}, {{ (s.name)|tojson|forceescape }})">
             <div class="fw-semibold"><i class="bi bi-hdd-network me-1"></i>{{ s.name }}</div>
             <div class="text-muted small">{{ s.host }}{% if s.port and s.port != 22 %}:{{ s.port }}{% endif %} — {{ s.user|default('root') }}</div>
           </button>

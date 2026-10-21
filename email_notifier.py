@@ -10,6 +10,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 import logging
+from addon_loader import fire_app_hook
 import email_config
 
 logger = logging.getLogger(__name__)
@@ -102,6 +103,11 @@ def send_update_report(hosts_status, history):
     Returns:
         tuple: (success: bool, error_message: str or None)
     """
+    fire_app_hook(
+        "notification_hook",
+        "update_report",
+        {"hosts_status": hosts_status, "history": history},
+    )
     if not email_config.get_report_enabled():
         return False, "Scheduled reports are disabled"
     
@@ -206,6 +212,11 @@ def send_error_notification(hostname, error_message):
     Returns:
         tuple: (success: bool, error_message: str or None)
     """
+    fire_app_hook(
+        "notification_hook",
+        "update_error",
+        {"host": hostname, "error": error_message},
+    )
     if not email_config.get_error_notifications_enabled():
         return False, "Error notifications are disabled"
     

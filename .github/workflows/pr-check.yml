@@ -1,0 +1,195 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Pull request check
+
+# One verdict per pull request: the "Safe to merge" check passes only when
+#   - the change checks pass (ShellCheck, a changelog entry, no new untranslated German
+#     text; see scripts/pr_checks.py), and
+#   - the functional check passes (install, sign in, every page, update, Android build;
+#     see functional.yml), and
+#   - the malware check finds nothing: ClamAV scans every file the pull request adds or
+#     changes, and scripts/pr_threat_scan.py reads the added lines for backdoors.
+# The scanner script is taken from the base branch, so a pull request cannot switch it
+# off by editing it. A pull request that edits the workflows themselves can still change
+# what runs here, so changes under .github/ always need a careful human review
+# (CODEOWNERS). The scanner lists those and other sensitive files in the job summary.
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  functional:
+    name: Functional
+    permissions:
+      contents: read
+    uses: $/.github/workflows/functional.yml
+
+  malware:
+    name: Viruses and backdoors
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Backdoor patterns in the added lines
+        run: |
+          if [ -z "$BASE_SHA" ] || ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            BASE_SHA="$(git rev-parse origin/main)"
+          fi
+          # The scanner from the base branch, not from the pull request.
+          if git cat-file -e "$BASE_SHA:scripts/pr_threat_scan.py" 2>/dev/null; then
+            git show "$BASE_SHA:scripts/pr_threat_scan.py" > "$RUNNER_TEMP/pr_threat_scan.py"
+          else
+            echo "::warning::The base branch has no scanner yet; using the pull request's own copy."
+            cp scripts/pr_threat_scan.py "$RUNNER_TEMP/pr_threat_scan.py"
+          fi
+          python3 "$RUNNER_TEMP/pr_threat_scan.py" "$BASE_SHA" "$HEAD_SHA"
+
+      - name: ClamAV virus scan of the changed files
+        run: |
+          if [ -z "$BASE_SHA" ] || ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            BASE_SHA="$(git rev-parse origin/main)"
+          fi
+          git diff --name-only -z --diff-filter=ACMRT "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/changed"
+          if [ ! -s "$RUNNER_TEMP/changed" ]; then
+            echo "No added or changed files."
+            exit 0
+          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends clamav clamav-freshclam > /dev/null
+          sudo systemctl stop clamav-freshclam || true
+          sudo freshclam --quiet || { sleep 30; sudo freshclam --quiet; }
+          xargs -0 clamscan --no-summary --infected --alert-encrypted=yes --alert-macros=yes < "$RUNNER_TEMP/changed"
+          echo "ClamAV: no viruses in $(tr -cd '\0' < "$RUNNER_TEMP/changed" | wc -c) changed files." >> "$GITHUB_STEP_SUMMARY"
+
+  changes:
+    name: Change checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: ShellCheck (install, update and root helper scripts)
+        run: |
+          # Every tracked file whose first line is a sh/bash shebang, plus *.sh files.
+          # proxmox/community-scripts follows that project's own conventions.
+          git ls-files ':!proxmox/community-scripts/**' ':!**/vendor/**' | while IFS= read -r f; do
+            case "$f" in *.sh) echo "$f"; continue ;; esac
+            if [ -f "$f" ] && head -n1 "$f" | grep -Eq '^#!.*/(env +)?(ba|da|k)?sh( |$)'; then echo "$f"; fi
+          done > "$RUNNER_TEMP/shell-files"
+          tr '\n' '\0' < "$RUNNER_TEMP/shell-files" | xargs -0 -r shellcheck --severity=warning --format=gcc
+          echo "ShellCheck: no warnings." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Changelog entry
+        if: github.event_name == 'pull_request' && (success() || failure())
+        run: |
+          jq -r '.pull_request.labels[].name' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/labels.txt"
+          python3 scripts/pr_checks.py changelog "$BASE_SHA" "$HEAD_SHA" --labels "$RUNNER_TEMP/labels.txt"
+
+      - name: No new untranslated German text
+        if: github.event_name == 'pull_request' && (success() || failure())
+        run: python3 scripts/pr_checks.py translations "$BASE_SHA" "$HEAD_SHA"
+
+      - name: Size (warning only)
+        if: github.event_name == 'pull_request' && (success() || failure())
+        run: python3 scripts/pr_checks.py size "$BASE_SHA" "$HEAD_SHA"
+
+  ai-disclosure:
+    # Required for merging: passes only for code written without AI. Fails when a commit or
+    # the pull request declares AI help, or when the added code's style score is 50+
+    # (scripts/ai_detect.py; the score is an estimate). See ROADMAP.md, "Move away from
+    # AI-written code". A maintainer can allow one pull request anyway by commenting
+    # "/allow-ai <head commit> <reason>" (scripts/ai_override.py; ai-override.yml re-runs
+    # this job when such a comment arrives).
+    name: AI assistance
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: read            # read the pull request's comments for a maintainer override
+      pull-requests: read
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Declared AI help and style signals
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The detector from the base branch, so a pull request cannot change its own assessment.
+          mkdir -p "$RUNNER_TEMP/ai"
+          for f in ai_detect.py ai_share.py ai_override.py; do
+            if git cat-file -e "$BASE_SHA:scripts/$f" 2>/dev/null; then
+              git show "$BASE_SHA:scripts/$f" > "$RUNNER_TEMP/ai/$f"
+            else
+              echo "::notice::The base branch has no scripts/$f yet; using the pull request's copy."
+              cp "scripts/$f" "$RUNNER_TEMP/ai/$f"
+            fi
+          done
+          # The description comes from the event file, never through an expression in this script.
+          jq -r '.pull_request.body // ""' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/pr-body.md"
+          if python3 "$RUNNER_TEMP/ai/ai_detect.py" "$BASE_SHA" "$HEAD_SHA" --pr-body "$RUNNER_TEMP/pr-body.md" --block-ai; then
+            exit 0
+          fi
+          # Failed: a maintainer may have allowed this exact commit in a comment.
+          jq -r '.pull_request.user.login' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/pr-author"
+          GITHUB_TOKEN="$GH_TOKEN" python3 "$RUNNER_TEMP/ai/ai_override.py" "$PR_NUMBER" "$HEAD_SHA" "$(cat "$RUNNER_TEMP/pr-author")"
+
+  verdict:
+    name: Safe to merge
+    if: always()
+    needs: [functional, malware, changes]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: All checks passed?
+        env:
+          FUNCTIONAL: ${{ needs.functional.result }}
+          MALWARE: ${{ needs.malware.result }}
+          CHANGES: ${{ needs.changes.result }}
+        run: |
+          {
+            echo "## Safe to merge?"
+            echo ""
+            echo "| Check | Result |"
+            echo "|---|---|"
+            echo "| Functional (install, pages, update, Android) | $FUNCTIONAL |"
+            echo "| Viruses and backdoors | $MALWARE |"
+            echo "| Change checks (ShellCheck, changelog, translations) | $CHANGES |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$FUNCTIONAL" = "success" ] && [ "$MALWARE" = "success" ] && [ "$CHANGES" = "success" ]; then
+            echo "✅ **Safe to merge** as far as these checks can tell. Still read the change, especially anything the scanner listed for review." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ **Not safe to merge** until the failed checks pass." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
