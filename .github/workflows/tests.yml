@@ -56,4 +56,4 @@ jobs:
       - name: Check dependencies for known vulnerabilities
         run: pip-audit --require-hashes --disable-pip -r requirements-lock.txt
       - name: Bandit (high severity fails the build)
-        run: bandit -q -r . -x ./FleetPilotCS,./FleetPilotAndroid,./hw_monitor/hw_stress_test.py,./test_*.py --severity-level high
+        run: bandit -q -r . -x ./FleetPilotCS,./FleetPilotAndroid,./hw_monitor/hw_stress_test.py,./tests --severity-level high

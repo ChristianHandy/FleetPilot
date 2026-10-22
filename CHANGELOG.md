@@ -10,6 +10,8 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ### Added
 
+- **Pull request summary comment:** one comment per pull request, updated whenever a check finishes, says whether it is ready to merge (required checks, merge conflicts, draft), lists the changed files by area and gives a fix hint for each failed check (`pr-summary.yml`, `scripts/pr_summary.py`). Copilot code review is also requested automatically on pull requests to `main`.
+
 - **Maintainer override for the AI assistance check:** the check stays required, but the repository owner, a member or a collaborator can allow one pull request by commenting `/allow-ai <head commit> <reason>`. Members and collaborators cannot allow their own pull requests; the owner can, since nobody else could approve them. The approval counts only for that commit, and the reason is shown in the check summary. The comment re-runs the check (`ai-override.yml`, `scripts/ai_override.py`).
 
 - **More pull request checks:** at least 70 % of the changed Python lines must be run by the tests (part of the pytest check; the summary lists the untested lines), and the new *Change checks* job, part of *Safe to merge*, runs ShellCheck on the install, update and root helper scripts, requires a `CHANGELOG.md` entry for changes users notice (label `no changelog` to skip), fails when a change adds interface text without a German translation, and warns above 800 changed lines (`scripts/pr_checks.py`).
@@ -18,6 +20,10 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 - **AI artifacts fail the pull request check:** leftovers that give AI-generated code away (chat text such as "Here's the updated code", elided-code placeholders, pasted Markdown code fences, placeholder secrets, "in a real implementation" stubs, model tokens and tool signatures) and AI tool files (`CLAUDE.md`, `AGENTS.md`, `.cursorrules`, `copilot-instructions.md`, ...). The daily repository scan checks all files for them (`scripts/ai_detect.py --all`).
 
 - **Pull requests must be free of AI-written code** (required check "AI assistance" in `pr-check.yml`, `scripts/ai_detect.py`): it fails when a commit declares AI help (same rules as the AI-share chart) or the pull request's "AI assistance" section does, or when style signals in the added code (section dividers, check-mark emoji, em dashes, stock phrases, boilerplate docstrings) reach 50 of 100. The score is an estimate; the job summary shows what it found. The detector runs from the base branch.
+
+### Changed
+
+- Tests moved from the repository root into tests/ (#171).
 
 ### Fixed
 

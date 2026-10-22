@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: Copyright the FleetPilot contributors
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Non-destructive regression test for Disk Tools validation output."""
+import pathlib
 from types import SimpleNamespace
 
 from flask import Flask, render_template
@@ -27,7 +28,8 @@ finally:
     disktool_core.subprocess.run = original_subprocess_run
     disktool_core._present_block_devices = original_devices
 
-app = Flask(__name__, template_folder="templates")
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+app = Flask(__name__, template_folder=str(ROOT / "templates"))
 app.jinja_env.globals["_"] = lambda value: value
 app.jinja_env.globals["fleetpilot_release"] = fleetpilot_version.release_metadata()
 ui_icons.register(app)

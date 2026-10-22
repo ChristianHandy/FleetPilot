@@ -7,7 +7,7 @@ import re
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _pins(path):
