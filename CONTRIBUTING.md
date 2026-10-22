@@ -92,6 +92,8 @@ Every change, including the maintainer's own, goes through a pull request and is
 
 A pull request that does not meet these is not merged, however small.
 
+Two comments help with this on every pull request: Copilot's automatic code review (a repository ruleset; a suggestion, not a required check), and the *Pull request summary* comment (`pr-summary.yml`, `scripts/pr_summary.py`), which lists the changed files by area, the result of each required check and how to fix the usual failures. It is updated whenever a check finishes.
+
 ## Coding style
 
 - **Python:** Python 3.11+ following [PEP 8](https://peps.python.org/pep-0008/), enforced by [ruff](https://docs.astral.sh/ruff/) with the rules in `ruff.toml`; CI fails on any finding. Lines up to 120 columns. Follow the style of the surrounding code. A rare, justified exception is marked where it happens: `# noqa: <rule>  (reason)`.
