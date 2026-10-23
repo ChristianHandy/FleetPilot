@@ -7,6 +7,7 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 ### Security
 
 - **certifi updated to 2026.10.19** (PYSEC-2026-4320 in 2026.7.22, found by `pip-audit`), in `requirements-lock.txt` and `requirements-dev-lock.txt`.
+- **brotli updated to 1.2.1** (PYSEC-2026-4322 in 1.2.0, found by `pip-audit`), in `requirements-lock.txt`.
 
 ### Added
 
