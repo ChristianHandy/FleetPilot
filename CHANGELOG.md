@@ -25,6 +25,7 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 ### Changed
 
 - Tests moved from the repository root into tests/ (#171).
+- `hw_monitor.py` and `fan_controller.py` route warnings and errors through `logging.getLogger(__name__)` instead of `print()` or `warnings.warn()` ([#160](https://github.com/ChristianHandy/FleetPilot/issues/160)).
 
 ### Fixed
 

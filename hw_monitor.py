@@ -13,6 +13,7 @@ New in this version:
 - Correct CPU temp: prefer Tdie/Tctl over generic max
 """
 
+import logging
 import safe_errors
 import secret_box
 import ssh_helper
@@ -25,6 +26,8 @@ import shlex
 import sqlite3
 import datetime
 import uuid
+
+logger = logging.getLogger(__name__)
 
 _box = secret_box.SecretBox("sha256")
 
@@ -95,8 +98,7 @@ def _auto_import_from_hosts(data_dir):
         conn.commit()
         conn.close()
     except Exception as e:
-        import warnings
-        warnings.warn(f'[HW Monitor] Auto-import from hosts.json failed: {e}')
+        logger.warning("[HW Monitor] Auto-import from hosts.json failed: %s", safe_errors.log_text(e))
 
 
 def init_db(data_dir):
@@ -218,7 +220,7 @@ def ssh_run_script(ip, port, user, pw, script_content, timeout=15):
 
 COLLECT_SCRIPT = """\
 import json
-import re, os, time, re, subprocess, glob
+import re, os, sys, time, subprocess, glob
 
 d = {}
 # ── CPU Usage ──
@@ -398,11 +400,11 @@ try:
                 d['stress_failure'] = l.split('[CRITICAL]')[-1].strip(); break
 except Exception: pass
 d['ts'] = time.time()
-print(json.dumps(d))
+sys.stdout.write(json.dumps(d) + "\\n")
 """
 
 FAN_DETECT_SCRIPT = """\
-import glob, os, json, re
+import glob, os, json, re, sys
 fans = []
 for hwmon in sorted(glob.glob('/sys/class/hwmon/hwmon*')):
     name_f = hwmon+'/name'
@@ -425,7 +427,7 @@ for hwmon in sorted(glob.glob('/sys/class/hwmon/hwmon*')):
             rpm = int(open(fan_in).read().strip())
             fans.append({'hwmon':hwmon,'name':name,'type':'rpm','channel':ch,'rpm':rpm,'path':fan_in})
         except Exception: pass
-print(json.dumps(fans))
+sys.stdout.write(json.dumps(fans) + "\\n")
 """
 
 # ─── Task Manager ─────────────────────────────────────────────────────────────
@@ -597,7 +599,7 @@ def _polling_loop():
             for t in threads:
                 t.join(timeout=18)
         except Exception as e:
-            print(f"[HW Monitor] Poll error: {e}")
+            logger.warning("[HW Monitor] Poll error: %s", safe_errors.log_text(e))
         waited = 0
         while waited < _poll_interval():   # re-checked each second, so opening a page speeds up at once
             time.sleep(1)
