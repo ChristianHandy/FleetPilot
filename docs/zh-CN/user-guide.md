@@ -455,4 +455,3 @@ rest:
 **我的数据在哪里？** 在 FleetPilot 所在机器的 `/opt/fleetpilot/data` 中。不会向任何其他地方发送数据；检查更新会访问 GitHub，设置 `FLEETPILOT_OFFLINE=true` 可将其关闭。
 
 **我忘了管理员密码。** 在 FleetPilot 机器上运行 `sudo bash /opt/fleetpilot/reset-password.sh`。
-  
