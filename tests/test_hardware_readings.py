@@ -67,3 +67,111 @@ def test_hw_monitor_scripts_run_on_a_linux_host():
                          text=True, timeout=60, check=True).stdout
     data = json.loads(out)
     assert data["ram_total_mb"] > 0 and data["cpu_cores"] >= 1 and "ts" in data
+
+
+def test_fan_controller_and_hw_monitor_use_logging_not_print(tmp_path, monkeypatch, caplog, capsys):
+    """fan_controller.py and hw_monitor.py use logging.getLogger(__name__) instead of print() (#160)."""
+    import ast
+    import logging
+    from pathlib import Path
+    import hw_monitor
+
+    class _StopPoll(Exception):
+        pass
+
+    def _raise_db_down(*_a, **_kw):
+        raise RuntimeError("db down")
+
+    def _stop_sleep(_s):
+        raise _StopPoll()
+
+    def _raise_ssh(_dev):
+        raise OSError("ssh unreachable")
+
+    root = Path(__file__).resolve().parent.parent
+    assert isinstance(fan_controller.logger, logging.Logger)
+    assert fan_controller.logger.name == "fan_controller"
+    assert isinstance(hw_monitor.logger, logging.Logger)
+    assert hw_monitor.logger.name == "hw_monitor"
+
+    for filename in ("fan_controller.py", "hw_monitor.py"):
+        source = (root / filename).read_text(encoding="utf-8")
+        assert "print(" not in source, filename
+        tree = ast.parse(source)
+        print_calls = [
+            node.lineno
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "print"
+        ]
+        assert print_calls == [], filename
+
+    ast.parse(fan_controller._ARCTIC_READ_SCRIPT)
+    ast.parse(fan_controller._ARCTIC_SET_SCRIPT)
+
+    # Malformed hosts.json logs via hw_monitor.logger instead of warnings.warn or print()
+    (tmp_path / "hosts.json").write_text("{invalid json", encoding="utf-8")
+    with caplog.at_level(logging.WARNING, logger="hw_monitor"):
+        hw_monitor._auto_import_from_hosts(str(tmp_path))
+    assert capsys.readouterr().out == ""
+    assert any("Auto-import from hosts.json failed" in rec.getMessage() for rec in caplog.records)
+
+    # Poll loop error logs via hw_monitor.logger instead of print()
+    caplog.clear()
+    monkeypatch.setattr(hw_monitor, "get_db", _raise_db_down)
+    monkeypatch.setattr(hw_monitor, "_poll_interval", lambda: 1)
+    monkeypatch.setattr(hw_monitor.time, "sleep", _stop_sleep)
+    with caplog.at_level(logging.WARNING, logger="hw_monitor"):
+        try:
+            hw_monitor._polling_loop()
+        except _StopPoll:
+            pass
+    assert capsys.readouterr().out == ""
+    assert any("Poll error: db down" in rec.getMessage() for rec in caplog.records)
+
+    # fan_controller fetch, setter, test_connection, store_sample, and poll_all errors log via logger
+    caplog.clear()
+    monkeypatch.setattr(fan_controller, "_ssh_connect", _raise_ssh)
+    with caplog.at_level(logging.WARNING, logger="fan_controller"):
+        for ctype in ("lm_sensors", "ipmi", "nbfc", "liquidctl", "pwm_sysfs", "rpi_gpio_fan", "arctic_usb"):
+            fres = fan_controller.fetch_status(
+                {"name": "node-01", "host": "192.0.2.10", "controller_type": ctype},
+            )
+            assert not fres["ok"]
+        for ctype in ("lm_sensors", "ipmi", "nbfc", "liquidctl", "pwm_sysfs", "arctic_usb"):
+            res = fan_controller.set_fan_speed(
+                {"name": "node-01", "host": "192.0.2.10", "controller_type": ctype},
+                "pwm1",
+                50,
+            )
+            assert not res["ok"]
+        monkeypatch.setattr(
+            fan_controller,
+            "get_device",
+            lambda _id: {"id": _id, "name": "node-01", "host": "192.0.2.10", "controller_type": "lm_sensors"},
+        )
+        conn_res = fan_controller.test_connection(1)
+        assert not conn_res["ok"]
+
+        monkeypatch.setattr(fan_controller, "_get_db", _raise_db_down)
+        fan_controller._store_sample(1, {})
+
+        monkeypatch.setattr(fan_controller, "_poll_running", True)
+        monkeypatch.setattr(fan_controller, "list_devices", _raise_db_down)
+        monkeypatch.setattr(fan_controller.time, "sleep", _stop_sleep)
+        try:
+            fan_controller._poll_all()
+        except _StopPoll:
+            pass
+
+    assert capsys.readouterr().out == ""
+    messages = [rec.getMessage() for rec in caplog.records]
+    for ctype in ("lm_sensors", "ipmi", "nbfc", "liquidctl", "pwm_sysfs", "rpi_gpio_fan", "arctic_usb"):
+        assert any(f"{ctype} fetch error for node-01" in m for m in messages), ctype
+    for ctype in ("lm_sensors", "ipmi", "nbfc", "liquidctl", "pwm_sysfs", "arctic_usb"):
+        assert any(f"{ctype} set error for node-01" in m for m in messages), ctype
+    assert any("test_connection error for node-01" in m for m in messages)
+    assert any("store_sample error: db down" in m for m in messages)
+    assert any("poll_all error: db down" in m for m in messages)
+
