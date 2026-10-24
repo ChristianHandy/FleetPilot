@@ -117,4 +117,15 @@ Two comments help with this on every pull request: Copilot's automatic code revi
 ## Releases
 
 - **Versioning:** [semantic versioning](https://semver.org) (`vMAJOR.MINOR.PATCH`). Tags are signed, and the release workflow publishes the release with an SBOM and the notes from `CHANGELOG.md`. Pre-releases use tags like `v1.8.0-beta.2`. Files built elsewhere (the Android APK) go into a draft release for the tag before the tag is pushed; the workflow then keeps the draft's notes, adds the files to `SHA256SUMS` and the signed provenance, and publishes the draft.
+- **Kinds of release** (Actions → **Prepare release** → Run workflow; `prepare-release.yml`, `scripts/release.py`):
+
+  | Kind | From | Example |
+  |---|---|---|
+  | `beta` | `main` | 1.8.0 → 1.9.0-beta.1, then 1.9.0-beta.2 |
+  | `release` (main release) | `main` | 1.9.0-beta.2 → 1.9.0 |
+  | `patch` (subrelease) | `main` | 1.8.0 → 1.8.1, only while `main` is not on a beta |
+  | `hotfix` | `release/X.Y` | 1.8.0 → 1.8.1 while `main` already has unreleased 1.9 work |
+  | `major` | `main` | 1.9.0 → 2.0.0 |
+
+  The workflow sets the version (`fleetpilot_version.py`, Android `versionName`/`versionCode`), moves the changelog's Unreleased entries into the version's section and pushes the branch `prepare-release/vX.Y.Z`. Its summary links to the pull request; open it, merge it when the checks pass, then sign and push the tag (`git tag -s vX.Y.Z -m "FleetPilot vX.Y.Z" && git push origin vX.Y.Z`), which starts the release workflow. For a **hotfix**, the first run creates `release/X.Y` from the newest stable tag: merge the fix into that branch with a pull request (cherry-picked from `main`, with its changelog line), run **hotfix** again, and after the release merge `release/X.Y` back into `main`. A hotfix of an older line does not become the "Latest" release.
 - **Security fixes** are listed in the release notes with their CVE or advisory where one exists.

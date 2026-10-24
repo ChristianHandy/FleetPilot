@@ -229,9 +229,12 @@ jobs:
           TAG: ${{ github.ref_name }}
           DRAFT: ${{ steps.existing.outputs.draft }}
         run: |
+          # A hotfix of an older line (v1.8.1 after v1.9.0) must not become "Latest".
+          latest="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>/dev/null || true)"
+          newest="$(printf '%s\n%s\n' "$latest" "$TAG" | grep . | sort -V | tail -n 1)"
           case "$TAG" in
             *-*) channel=(--prerelease) ;;
-            *) channel=(--latest) ;;
+            *) if [ "$newest" = "$TAG" ]; then channel=(--latest); else channel=(--latest=false); fi ;;
           esac
           if [ "$DRAFT" = "true" ]; then
             gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber dist/*
