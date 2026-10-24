@@ -4,6 +4,8 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ## [Unreleased]
 
+## [1.8.1] — 2026-10-24
+
 ### Security
 
 - **certifi updated to 2026.10.19** (PYSEC-2026-4320 in 2026.7.22, found by `pip-audit`), in `requirements-lock.txt` and `requirements-dev-lock.txt`.
