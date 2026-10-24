@@ -33,7 +33,7 @@ import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import requests
 import urllib3
@@ -46,6 +46,50 @@ logger = logging.getLogger(__name__)
 _box = secret_box.SecretBox("raw32")
 _encrypt = _box.encrypt
 _decrypt = _box.decrypt
+
+_DISABLED_SSL_VALUES = frozenset({"0", "false", "no", "off"})
+_ENABLED_SSL_VALUES = frozenset({"1", "true", "yes", "on"})
+
+
+def _verify(srv: Optional[Dict] = None) -> Union[bool, str]:
+    """Certificate check for backup server HTTPS requests (on by default).
+
+    FLEETPILOT_BACKUP_CA (or per-server ca_cert) names a CA bundle or the
+    server's certificate; per-server verify_ssl=0/false turns the check off.
+    """
+    ca = os.environ.get("FLEETPILOT_BACKUP_CA")
+    if srv is not None:
+        ca_cert = srv.get("ca_cert")
+        if isinstance(ca_cert, str) and ca_cert.strip():
+            ca = ca_cert.strip()
+        raw = srv.get("verify_ssl")
+        if raw is not None:
+            if isinstance(raw, str):
+                text = raw.strip()
+                low = text.lower()
+                if text and low not in _DISABLED_SSL_VALUES and low not in _ENABLED_SSL_VALUES:
+                    return text
+                enabled = bool(text) and low not in _DISABLED_SSL_VALUES
+            else:
+                enabled = bool(raw)
+            if enabled and ca and ca.strip():
+                return ca.strip()
+            return enabled
+    if ca and ca.strip():
+        return ca.strip()
+    return True
+
+
+def _http_error(exc: Exception, action: str = "The request") -> str:
+    """Return a clear user-facing message for TLS verification vs general errors."""
+    if isinstance(exc, requests.exceptions.SSLError):
+        logger.warning("%s failed (TLS): %s: %s", action, type(exc).__name__, safe_errors.log_text(exc))
+        return (
+            f"{action} failed: SSL/TLS certificate verification failed. "
+            "Install the server's CA certificate (or set FLEETPILOT_BACKUP_CA) "
+            "or uncheck 'Verify SSL certificate' for this backup server."
+        )
+    return safe_errors.public_error(exc, action)
 
 # ── Server type registry ──────────────────────────────────────────────────────
 
@@ -178,7 +222,7 @@ def init_db(data_dir: str) -> None:
                 password    TEXT,
                 api_token   TEXT,
                 ssh_key     TEXT,
-                verify_ssl  INTEGER NOT NULL DEFAULT 0,
+                verify_ssl  INTEGER NOT NULL DEFAULT 1,
                 use_sudo    INTEGER NOT NULL DEFAULT 0,
                 notes       TEXT,
                 enabled     INTEGER NOT NULL DEFAULT 1,
@@ -252,7 +296,7 @@ def _db() -> sqlite3.Connection:
 def add_server(name: str, server_type: str, host: str, port: int,
                protocol: str, username: str = "", password: str = "",
                api_token: str = "", ssh_key: str = "",
-               verify_ssl: bool = False, use_sudo: bool = False, notes: str = "") -> int:
+               verify_ssl: bool = True, use_sudo: bool = False, notes: str = "") -> int:
     with _db_lock:
         conn = _db()
         c = conn.cursor()
@@ -431,7 +475,7 @@ def poll_server(server_id: int) -> Dict:
         else:
             result = {"ok": False, "error": f"Unknown server type: {stype}"}
     except Exception as e:
-        result = {"ok": False, "error": safe_errors.public_error(e)}
+        result = {"ok": False, "error": _http_error(e)}
 
     # Update last_poll and last_status
     status_str = "ok" if result.get("ok") else "error"
@@ -450,7 +494,7 @@ def poll_server(server_id: int) -> Dict:
 
 def _pbs_session(srv: Dict) -> requests.Session:
     sess = requests.Session()
-    sess.verify = bool(srv.get("verify_ssl"))
+    sess.verify = _verify(srv)
     token = srv.get("api_token", "")
     if token:
         # Format: USER@REALM!TOKENID=SECRET
@@ -470,6 +514,8 @@ def _pbs_session(srv: Dict) -> requests.Session:
                 data = r.json().get("data", {})
                 sess.headers["CSRFPreventionToken"] = data.get("CSRFPreventionToken", "")
                 sess.cookies.set("PBSAuthCookie", data.get("ticket", ""))
+        except requests.exceptions.SSLError:
+            raise
         except Exception:
             pass
     return sess
@@ -477,13 +523,18 @@ def _pbs_session(srv: Dict) -> requests.Session:
 
 def _poll_pbs(srv: Dict) -> Dict:
     base = f"{srv['protocol']}://{srv['host']}:{srv['port']}/api2/json"
-    sess = _pbs_session(srv)
+    try:
+        sess = _pbs_session(srv)
+    except Exception as e:
+        return {"ok": False, "error": _http_error(e)}
     jobs_ok = jobs_warn = jobs_error = 0
 
     # Get datastores
     try:
         r = sess.get(f"{base}/nodes/localhost/storage", timeout=15)
         datastores = r.json().get("data", []) if r.ok else []
+    except requests.exceptions.SSLError as e:
+        return {"ok": False, "error": _http_error(e)}
     except Exception:
         datastores = []
 
@@ -493,6 +544,8 @@ def _poll_pbs(srv: Dict) -> Dict:
                      params={"limit": 50, "typefilter": "backup"},
                      timeout=15)
         tasks = r.json().get("data", []) if r.ok else []
+    except requests.exceptions.SSLError as e:
+        return {"ok": False, "error": _http_error(e)}
     except Exception:
         tasks = []
 
@@ -577,10 +630,12 @@ def _duplicati_auth(srv: Dict) -> Optional[str]:
         # Duplicati checks the password itself; use HTTPS for servers outside this host.
         r = requests.post(f"{base}/api/v1/auth/login",
                           json={"Password": password, "RememberMe": False},
-                          timeout=10, verify=True)
+                          timeout=10, verify=_verify(srv))
         if r.ok:
             return r.json().get("AccessToken")
         logger.debug("Duplicati sign-in refused: HTTP %s", r.status_code)
+    except requests.exceptions.SSLError:
+        raise
     except Exception as e:
         logger.debug(f"Duplicati auth error: {e}")
     return None
@@ -588,7 +643,11 @@ def _duplicati_auth(srv: Dict) -> Optional[str]:
 
 def _poll_duplicati(srv: Dict) -> Dict:
     base = f"{srv['protocol']}://{srv['host']}:{srv['port']}"
-    token = srv.get("api_token") or _duplicati_auth(srv)
+    verify = _verify(srv)
+    try:
+        token = srv.get("api_token") or _duplicati_auth(srv)
+    except Exception as e:
+        return {"ok": False, "error": _http_error(e)}
     headers = {}
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -597,10 +656,10 @@ def _poll_duplicati(srv: Dict) -> Dict:
 
     try:
         r = requests.get(f"{base}/api/v1/backups",
-                         headers=headers, timeout=15, verify=True)
+                         headers=headers, timeout=15, verify=verify)
         backups = r.json() if r.ok else []
     except Exception as e:
-        return {"ok": False, "error": safe_errors.public_error(e)}
+        return {"ok": False, "error": _http_error(e)}
 
     with _db_lock:
         conn = _db()
@@ -616,7 +675,7 @@ def _poll_duplicati(srv: Dict) -> Dict:
             # Get last result
             try:
                 r2 = requests.get(f"{base}/api/v1/backup/{bk_id}/filesets",
-                                  headers=headers, timeout=10, verify=True)
+                                  headers=headers, timeout=10, verify=verify)
                 filesets = r2.json() if r2.ok else []
                 last_status = "ok" if filesets else "warning"
                 if last_status == "ok":
@@ -654,27 +713,29 @@ def _poll_duplicati(srv: Dict) -> Dict:
 def trigger_duplicati_backup(srv: Dict, backup_id: str) -> Dict:
     """Trigger a Duplicati backup job."""
     base = f"{srv['protocol']}://{srv['host']}:{srv['port']}"
-    token = srv.get("api_token") or _duplicati_auth(srv)
-    headers = {}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
+    verify = _verify(srv)
     try:
+        token = srv.get("api_token") or _duplicati_auth(srv)
+        headers = {}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
         # Use the ID as Duplicati lists it, so nothing from the request ends up in the URL.
-        listed = requests.get(f"{base}/api/v1/backups", headers=headers, timeout=15, verify=True)
+        listed = requests.get(f"{base}/api/v1/backups", headers=headers, timeout=15, verify=verify)
         ids = [str((b.get("Backup") or {}).get("ID", "")) for b in (listed.json() if listed.ok else [])]
         if backup_id not in ids:
             return {"ok": False, "error": "Duplicati does not list this backup job."}
         known = ids[ids.index(backup_id)]
         r = requests.post(f"{base}/api/v1/backup/{known}/run",
-                          headers=headers, timeout=15, verify=True)
+                          headers=headers, timeout=15, verify=verify)
         return {"ok": r.ok, "status_code": r.status_code, "message": r.text[:200]}
     except Exception as e:
-        return {"ok": False, "error": safe_errors.public_error(e)}
+        return {"ok": False, "error": _http_error(e)}
 
 # ── Restic REST-Server ────────────────────────────────────────────────────────
 
 def _poll_restic(srv: Dict) -> Dict:
     base = f"{srv['protocol']}://{srv['host']}:{srv['port']}"
+    verify = _verify(srv)
     auth = None
     if srv.get("username") and srv.get("password"):
         auth = (srv["username"], srv["password"])
@@ -683,12 +744,12 @@ def _poll_restic(srv: Dict) -> Dict:
 
     try:
         # List repos (top-level directories)
-        r = requests.get(f"{base}/", auth=auth, timeout=15, verify=True)
+        r = requests.get(f"{base}/", auth=auth, timeout=15, verify=verify)
         if not r.ok:
             return {"ok": False, "error": f"HTTP {r.status_code}: {r.text[:100]}"}
         repos = r.json() if r.headers.get("content-type", "").startswith("application/json") else []
     except Exception as e:
-        return {"ok": False, "error": safe_errors.public_error(e)}
+        return {"ok": False, "error": _http_error(e)}
 
     with _db_lock:
         conn = _db()
@@ -697,7 +758,7 @@ def _poll_restic(srv: Dict) -> Dict:
             repo_name = repo if isinstance(repo, str) else repo.get("name", "")
             try:
                 r2 = requests.get(f"{base}/{repo_name}/snapshots/",
-                                  auth=auth, timeout=15, verify=True)
+                                  auth=auth, timeout=15, verify=verify)
                 snaps = r2.json() if r2.ok else []
                 jobs_ok += 1
                 for snap in snaps[-10:]:
@@ -732,17 +793,18 @@ def _poll_restic(srv: Dict) -> Dict:
 
 def _poll_borgwarehouse(srv: Dict) -> Dict:
     base = f"{srv['protocol']}://{srv['host']}:{srv['port']}"
+    verify = _verify(srv)
     token = srv.get("api_token", "")
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
     try:
         r = requests.get(f"{base}/api/v1/repositories",
-                         headers=headers, timeout=15, verify=True)
+                         headers=headers, timeout=15, verify=verify)
         if not r.ok:
             return {"ok": False, "error": f"HTTP {r.status_code}: {r.text[:100]}"}
         repos = r.json().get("repoList", [])
     except Exception as e:
-        return {"ok": False, "error": safe_errors.public_error(e)}
+        return {"ok": False, "error": _http_error(e)}
 
     jobs_ok = jobs_warn = jobs_error = 0
     now_ts = int(time.time())
@@ -806,11 +868,13 @@ def _urbackup_login(srv: Dict) -> Optional[str]:
         r = requests.get(f"{base}/x?a=login",
                          params={"username": srv.get("username", "admin"),
                                  "password": srv.get("password", "")},
-                         timeout=10, verify=True)
+                         timeout=10, verify=_verify(srv))
         if r.ok:
             data = r.json()
             if data.get("success"):
                 return r.cookies.get("URBACKUP_SESSIONID") or data.get("session")
+    except requests.exceptions.SSLError:
+        raise
     except Exception:
         pass
     return None
@@ -818,7 +882,11 @@ def _urbackup_login(srv: Dict) -> Optional[str]:
 
 def _poll_urbackup(srv: Dict) -> Dict:
     base = f"{srv['protocol']}://{srv['host']}:{srv['port']}"
-    session = _urbackup_login(srv)
+    verify = _verify(srv)
+    try:
+        session = _urbackup_login(srv)
+    except Exception as e:
+        return {"ok": False, "error": _http_error(e)}
     params = {}
     if session:
         params["ses"] = session
@@ -826,13 +894,13 @@ def _poll_urbackup(srv: Dict) -> Dict:
     jobs_ok = jobs_warn = jobs_error = 0
 
     try:
-        r = requests.get(f"{base}/x", params={**params, "a": "status"}, timeout=15, verify=True)
+        r = requests.get(f"{base}/x", params={**params, "a": "status"}, timeout=15, verify=verify)
         if not r.ok:
             return {"ok": False, "error": f"HTTP {r.status_code}"}
         data = r.json()
         clients = data.get("clients", [])
     except Exception as e:
-        return {"ok": False, "error": safe_errors.public_error(e)}
+        return {"ok": False, "error": _http_error(e)}
 
     with _db_lock:
         conn = _db()
@@ -1010,23 +1078,24 @@ def test_connection(server_id: int) -> Dict:
             return {"ok": rc == 0, "message": out.strip() or err.strip()}
         else:
             base = f"{srv['protocol']}://{srv['host']}:{srv['port']}"
+            verify = _verify(srv)
             if stype == "pbs":
                 url = f"{base}/api2/json/version"
                 sess = _pbs_session(srv)
                 r = sess.get(url, timeout=10)
             elif stype == "duplicati":
                 url = f"{base}/api/v1/serverstate"
-                r = requests.get(url, timeout=10, verify=True)
+                r = requests.get(url, timeout=10, verify=verify)
             elif stype == "restic":
                 url = f"{base}/"
                 auth = (srv.get("username"), srv.get("password")) if srv.get("username") else None
-                r = requests.get(url, auth=auth, timeout=10, verify=True)
+                r = requests.get(url, auth=auth, timeout=10, verify=verify)
             elif stype == "borgwarehouse":
                 url = f"{base}/api/v1/version"
-                r = requests.get(url, timeout=10, verify=True)
+                r = requests.get(url, timeout=10, verify=verify)
             elif stype == "urbackup":
                 url = f"{base}/x?a=login"
-                r = requests.get(url, timeout=10, verify=True)
+                r = requests.get(url, timeout=10, verify=verify)
             else:
                 return {"ok": False, "error": "Unknown type"}
             return {
@@ -1035,7 +1104,7 @@ def test_connection(server_id: int) -> Dict:
                 "message": f"HTTP {r.status_code}",
             }
     except Exception as e:
-        return {"ok": False, "error": safe_errors.public_error(e)}
+        return {"ok": False, "error": _http_error(e)}
 
 # ── Trigger backup ────────────────────────────────────────────────────────────
 
@@ -1055,12 +1124,12 @@ def trigger_backup(server_id: int, job_id: str = "") -> Dict:
         return trigger_duplicati_backup(srv, job_id)
     elif stype == "pbs":
         base = f"{srv['protocol']}://{srv['host']}:{srv['port']}/api2/json"
-        sess = _pbs_session(srv)
         try:
+            sess = _pbs_session(srv)
             r = sess.post(f"{base}/nodes/localhost/backup", json={"job-id": job_id}, timeout=15)
             return {"ok": r.ok, "message": r.text[:200]}
         except Exception as e:
-            return {"ok": False, "error": safe_errors.public_error(e)}
+            return {"ok": False, "error": _http_error(e)}
     elif stype == "bacula":
         cmd = f"printf 'run job=%s yes\\nquit\\n' {shlex.quote(job_id)} | bconsole 2>&1"
         rc, out, err = _ssh_run(
