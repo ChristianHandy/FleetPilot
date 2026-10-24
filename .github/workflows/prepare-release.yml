@@ -126,11 +126,9 @@ jobs:
 
           ## After merging
 
-          ```bash
-          git fetch origin && git checkout {base} && git pull
-          git tag -s {tag} -m "{label}"
-          git push origin {tag}
-          ```
+              git fetch origin && git checkout {base} && git pull
+              git tag -s {tag} -m "{label}"
+              git push origin {tag}
 
           The tag starts the release workflow (archive, SBOM, signed APK, checksums, provenance). The release is named "{label}".
 
