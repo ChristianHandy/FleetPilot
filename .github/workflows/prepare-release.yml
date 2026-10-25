@@ -1,0 +1,146 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Prepare release
+
+# Run from the Actions tab ("Run workflow") to prepare one of four kinds of release:
+#
+#   beta     the next beta from main          1.8.0 -> 1.9.0-beta.1 -> 1.9.0-beta.2
+#   release  the main release from main       1.9.0-beta.2 -> 1.9.0 (or 1.8.0 -> 1.9.0)
+#   patch    a subrelease from main           1.8.0 -> 1.8.1 (only while main is not on a beta)
+#   hotfix   a patch of the newest stable release, made on its release branch
+#            (release/1.8 for v1.8.0), so unreleased work on main is not shipped
+#   major    the next major version from main 1.9.0 -> 2.0.0
+#
+# The job sets the version (fleetpilot_version.py, Android versionName/versionCode),
+# turns CHANGELOG.md's Unreleased section into the version's section
+# (scripts/release.py) and pushes that commit to a branch prepare-release/vX.Y.Z. The
+# job summary has a link that opens the pull request; the maintainer opens it (so the
+# pull request checks run), merges it, then signs and pushes the tag, which starts
+# release.yml. Tags are signed with the maintainer's own key, so this workflow never
+# creates them.
+#
+# Hotfix: the first run creates release/X.Y from the newest stable tag and stops. Merge
+# the fix into release/X.Y with a pull request (cherry-picked from main, with its
+# changelog line), then run "hotfix" again.
+on:
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: "beta, release (main release), patch (subrelease like 1.8.1), hotfix or major"
+        type: choice
+        options: [beta, release, patch, hotfix, major]
+        required: true
+      version:
+        description: "Exact version instead of the computed one (optional, e.g. 1.8.1)"
+        type: string
+        required: false
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare the release branch
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write         # push the release preparation branch (and release/X.Y for a hotfix)
+    env:
+      KIND: ${{ inputs.kind }}
+      WANTED: ${{ inputs.version }}
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_ROOT: ${{ github.workspace }}   # the checkout, for the copy of scripts/release.py
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Choose the base branch
+        id: base
+        run: |
+          # Run the release script from main, also on an older release branch.
+          cp scripts/release.py "$RUNNER_TEMP/release.py"
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if [ "$KIND" != "hotfix" ]; then
+            echo "branch=main" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          tag="$(python3 "$RUNNER_TEMP/release.py" stable-base)"
+          version="${tag#v}"
+          branch="release/${version%.*}"
+          if git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
+            git fetch --quiet origin "$branch"
+            git checkout --quiet -B "$branch" "origin/$branch"
+            # The tag runs the release workflow of the tagged commit: bring main's, which
+            # names the release a hotfix and does not mark an older line as Latest.
+            git checkout main -- .github/workflows/release.yml
+            echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          else
+            git push --quiet "$remote" "refs/tags/$tag:refs/heads/$branch"
+            {
+              echo "## Hotfix: created \`$branch\` from \`$tag\`"
+              echo
+              echo "1. Open a pull request with the fix against \`$branch\` (cherry-pick it from main if it is already there), with a \`CHANGELOG.md\` line under Unreleased."
+              echo "2. Merge it, then run **Prepare release** with **hotfix** again."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "stop=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set the version and close the changelog section
+        if: steps.base.outputs.stop != 'true'
+        id: version
+        run: |
+          if [ -n "$WANTED" ]; then version="$WANTED"; else version="$(python3 "$RUNNER_TEMP/release.py" next "$KIND")"; fi
+          python3 "$RUNNER_TEMP/release.py" apply "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Push the release branch
+        if: steps.base.outputs.stop != 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BASE: ${{ steps.base.outputs.branch }}
+        run: |
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          branch="prepare-release/v$VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --quiet -b "$branch"
+          if [ "$KIND" = "hotfix" ]; then name="Hotfix $VERSION"; else name="Release $VERSION"; fi
+          git commit --quiet --signoff -am "$name"
+          git push --quiet "$remote" "HEAD:refs/heads/$branch"
+          python3 - "$VERSION" "$BASE" "$branch" "$KIND" >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          import os, sys, urllib.parse
+          version, base, branch, kind = sys.argv[1:]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          tag = f"v{version}"
+          name = f"Hotfix {version}" if kind == "hotfix" else f"Release {version}"
+          label = f"FleetPilot {tag} (hotfix)" if kind == "hotfix" else f"FleetPilot {tag}"
+          body = f"""## What changes for users
+
+          Release **{version}** ({kind}). Sets the version in `fleetpilot_version.py` and the Android app and moves the Unreleased entries of `CHANGELOG.md` into the section [{version}].
+
+          ## After merging
+
+              git fetch origin && git checkout {base} && git pull
+              git tag -s {tag} -m "{label}"
+              git push origin {tag}
+
+          The tag starts the release workflow (archive, SBOM, signed APK, checksums, provenance). The release is named "{label}".
+
+          ## AI assistance
+
+          None: generated by the Prepare release workflow (scripts/release.py).
+          """
+          query = urllib.parse.urlencode({"quick_pull": 1, "title": name, "body": body})
+          url = f"https://github.com/{repo}/compare/{base}...{branch}?{query}"
+          print(f"## {name} prepared on `{branch}`\n")
+          print(f"1. **[Open the pull request]({url})** into `{base}` and merge it when the checks pass.")
+          print(f"2. Sign and push the tag `{tag}` (commands in the pull request).")
+          if base != "main":
+              print(f"3. Afterwards bring the fix and the changelog section into main: a pull request from `{base}` into `main`.")
+          EOF
