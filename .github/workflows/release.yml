@@ -229,14 +229,25 @@ jobs:
           TAG: ${{ github.ref_name }}
           DRAFT: ${{ steps.existing.outputs.draft }}
         run: |
+          # A hotfix of an older line (v1.8.1 after v1.9.0) must not become "Latest".
+          latest="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name 2>/dev/null || true)"
+          newest="$(printf '%s\n%s\n' "$latest" "$TAG" | grep . | sort -V | tail -n 1)"
           case "$TAG" in
             *-*) channel=(--prerelease) ;;
-            *) channel=(--latest) ;;
+            *) if [ "$newest" = "$TAG" ]; then channel=(--latest); else channel=(--latest=false); fi ;;
           esac
+          # A hotfix is tagged on a release/X.Y branch, so its commit is not on main.
+          # A draft keeps its own title, except that a hotfix is always named one.
+          title="FleetPilot $TAG"
+          rename=()
+          if git fetch --quiet origin main && ! git merge-base --is-ancestor "$TAG^{commit}" FETCH_HEAD; then
+            title="FleetPilot $TAG (hotfix)"
+            rename=(--title "$title")
+          fi
           if [ "$DRAFT" = "true" ]; then
             gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber dist/*
           else
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft \
-              --title "FleetPilot $TAG" --notes-file notes.md dist/*
+              --title "$title" --notes-file notes.md dist/*
           fi
-          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false "${channel[@]}"
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false "${rename[@]}" "${channel[@]}"

@@ -94,7 +94,7 @@ CONTROLLER_TYPES = {
         "icon": "❄",
         "packages_apt": ["libhidapi-hidraw0", "libhidapi-libusb0", "python3-hid"],
         "packages_pip": ["hid"],
-        "check_cmd": "python3 -c 'import hid; devs=[d for d in hid.enumerate() if d[\"vendor_id\"]==0x3904 and d[\"product_id\"]==0xF001]; print(f\"Arctic Fan Controller: {len(devs)} device(s) found\")' 2>&1 || lsusb | grep 3904",
+        "check_cmd": "python3 -c 'import hid, sys; devs=[d for d in hid.enumerate() if d[\"vendor_id\"]==0x3904 and d[\"product_id\"]==0xF001]; sys.stdout.write(f\"Arctic Fan Controller: {len(devs)} device(s) found\\n\")' 2>&1 || lsusb | grep 3904",
         "detect_cmd": "lsusb | grep -i '3904:f001' 2>/dev/null; ls /sys/class/hwmon/*/name 2>/dev/null | xargs grep -l arctic 2>/dev/null | head -3",
         "install_note": "Requires USB access. On Proxmox/Linux: run as root or add udev rule: SUBSYSTEM==\"usb\", ATTR{idVendor}==\"3904\", ATTR{idProduct}==\"f001\", MODE=\"0666\"",
     },
@@ -326,7 +326,7 @@ def install_packages(dev_id: int, progress_key: str = None) -> Dict:
 
     def _log(msg: str):
         lines.append(msg)
-        logger.info("[fan_controller] install: %s", msg)
+        logger.info("[fan_controller] install: %s", safe_errors.log_text(msg))
         if progress_key:
             try:
                 from app import _progress_logs
@@ -559,7 +559,11 @@ def _fetch_lm_sensors(dev: Dict) -> Dict:
         result["ok"] = True
     except Exception as exc:
         result["error"] = safe_errors.public_error(exc)
-        logger.warning("[fan_controller] lm_sensors fetch error for %s: %s", dev.get("name"), exc)
+        logger.warning(
+            "[fan_controller] lm_sensors fetch error for %s: %s",
+            safe_errors.log_text(dev.get("name")),
+            safe_errors.log_text(exc),
+        )
     finally:
         if ssh:
             try:
@@ -626,7 +630,11 @@ def _fetch_ipmi(dev: Dict) -> Dict:
         result["ok"] = True
     except Exception as exc:
         result["error"] = safe_errors.public_error(exc)
-        logger.warning("[fan_controller] ipmi fetch error for %s: %s", dev.get("name"), exc)
+        logger.warning(
+            "[fan_controller] ipmi fetch error for %s: %s",
+            safe_errors.log_text(dev.get("name")),
+            safe_errors.log_text(exc),
+        )
     finally:
         if ssh:
             try:
@@ -696,7 +704,11 @@ def _fetch_nbfc(dev: Dict) -> Dict:
         result["ok"] = True
     except Exception as exc:
         result["error"] = safe_errors.public_error(exc)
-        logger.warning("[fan_controller] nbfc fetch error for %s: %s", dev.get("name"), exc)
+        logger.warning(
+            "[fan_controller] nbfc fetch error for %s: %s",
+            safe_errors.log_text(dev.get("name")),
+            safe_errors.log_text(exc),
+        )
     finally:
         if ssh:
             try:
@@ -775,7 +787,11 @@ def _fetch_liquidctl(dev: Dict) -> Dict:
         result["ok"] = True
     except Exception as exc:
         result["error"] = safe_errors.public_error(exc)
-        logger.warning("[fan_controller] liquidctl fetch error for %s: %s", dev.get("name"), exc)
+        logger.warning(
+            "[fan_controller] liquidctl fetch error for %s: %s",
+            safe_errors.log_text(dev.get("name")),
+            safe_errors.log_text(exc),
+        )
     finally:
         if ssh:
             try:
@@ -873,7 +889,11 @@ done
         result["ok"] = True
     except Exception as exc:
         result["error"] = safe_errors.public_error(exc)
-        logger.warning("[fan_controller] pwm_sysfs fetch error for %s: %s", dev.get("name"), exc)
+        logger.warning(
+            "[fan_controller] pwm_sysfs fetch error for %s: %s",
+            safe_errors.log_text(dev.get("name")),
+            safe_errors.log_text(exc),
+        )
     finally:
         if ssh:
             try:
@@ -963,7 +983,11 @@ printf 'MODEL|%s\\nTEMP|%s\\nOVERLAY|%s\\n' "$model" "$temp" "$overlay"
         result["ok"] = True
     except Exception as exc:
         result["error"] = safe_errors.public_error(exc)
-        logger.warning("[fan_controller] rpi_gpio_fan fetch error for %s: %s", dev.get("name"), exc)
+        logger.warning(
+            "[fan_controller] rpi_gpio_fan fetch error for %s: %s",
+            safe_errors.log_text(dev.get("name")),
+            safe_errors.log_text(exc),
+        )
     finally:
         if ssh:
             try:
@@ -1016,27 +1040,27 @@ if arctic_hwmon:
             pwms.append(pwm)
         except Exception:
             pwms.append(0)
-    print("METHOD:sysfs")
-    print("HWMON:" + arctic_hwmon)
+    sys.stdout.write("METHOD:sysfs\\n")
+    sys.stdout.write("HWMON:" + arctic_hwmon + "\\n")
     for i, (rpm, pwm) in enumerate(zip(fans, pwms), 1):
         pct = round(pwm / 255 * 100)
-        print(f"CH{i}:{rpm}:{pwm}:{pct}")
+        sys.stdout.write(f"CH{i}:{rpm}:{pwm}:{pct}\\n")
 else:
     # Fallback: direct USB HID
     try:
         import hid
     except ImportError:
-        print("ERROR:python-hid not installed. Run: pip3 install hid")
+        sys.stdout.write("ERROR:python-hid not installed. Run: pip3 install hid\\n")
         sys.exit(1)
     devs = [d for d in hid.enumerate() if d["vendor_id"]==0x3904 and d["product_id"]==0xF001]
     if not devs:
-        print("ERROR:Arctic Fan Controller not found (VID:3904 PID:F001). Check USB connection.")
+        sys.stdout.write("ERROR:Arctic Fan Controller not found (VID:3904 PID:F001). Check USB connection.\\n")
         sys.exit(1)
     h = hid.device()
     h.open(0x3904, 0xF001)
     h.set_nonblocking(0)
-    print("METHOD:hid")
-    print("DEVICE:" + (devs[0].get("product_string", "Arctic Fan Controller")))
+    sys.stdout.write("METHOD:hid\\n")
+    sys.stdout.write("DEVICE:" + (devs[0].get("product_string", "Arctic Fan Controller")) + "\\n")
     # Read one IN report (64 bytes), retry up to 5 times
     data = None
     for _ in range(5):
@@ -1053,9 +1077,9 @@ else:
         # bytes 11-30: 10 x uint16 LE = RPM values
         rpms = struct.unpack_from("<10H", bytes(data), 11)
         for i, rpm in enumerate(rpms, 1):
-            print(f"CH{i}:{rpm}:0:0")
+            sys.stdout.write(f"CH{i}:{rpm}:0:0\\n")
     else:
-        print("ERROR:Could not read data from device")
+        sys.stdout.write("ERROR:Could not read data from device\\n")
         sys.exit(1)
 '''
 
@@ -1086,17 +1110,17 @@ if arctic_hwmon:
                 f.write(str(pwm_val))
             ok_count += 1
         except Exception as e:
-            print(f"WARN:ch{ch}: {e}")
-    print(f"OK:sysfs:{ok_count} channel(s) set to {pwm_val}/255 ({speed_pct}%)")
+            sys.stdout.write(f"WARN:ch{ch}: {e}\\n")
+    sys.stdout.write(f"OK:sysfs:{ok_count} channel(s) set to {pwm_val}/255 ({speed_pct}%)\\n")
 else:
     try:
         import hid
     except ImportError:
-        print("ERROR:python-hid not installed")
+        sys.stdout.write("ERROR:python-hid not installed\\n")
         sys.exit(1)
     devs = [d for d in hid.enumerate() if d["vendor_id"]==0x3904 and d["product_id"]==0xF001]
     if not devs:
-        print("ERROR:Arctic Fan Controller not found")
+        sys.stdout.write("ERROR:Arctic Fan Controller not found\\n")
         sys.exit(1)
     # Build OUT report: 10 channel values (0-100%)
     # First read current values to avoid overwriting other channels
@@ -1124,11 +1148,11 @@ else:
         # Wait for ACK (Report ID 0x02)
         ack = h.read(64, timeout_ms=1500)
         if ack and len(ack) >= 2 and ack[0] == 0x02 and ack[1] == 0x00:
-            print(f"OK:hid:channel {channel} set to {speed_pct}% (ACK received)")
+            sys.stdout.write(f"OK:hid:channel {channel} set to {speed_pct}% (ACK received)\\n")
         else:
-            print(f"OK:hid:channel {channel} set to {speed_pct}% (no ACK — may still work)")
+            sys.stdout.write(f"OK:hid:channel {channel} set to {speed_pct}% (no ACK — may still work)\\n")
     except Exception as e:
-        print(f"ERROR:{e}")
+        sys.stdout.write(f"ERROR:{e}\\n")
     h.close()
 '''
 
@@ -1186,7 +1210,11 @@ def _fetch_arctic_usb(dev: Dict) -> Dict:
             result["error"] = "No fan data received. Check USB connection and permissions."
     except Exception as exc:
         result["error"] = safe_errors.public_error(exc)
-        logger.warning("[fan_controller] arctic_usb fetch error for %s: %s", dev.get("name"), exc)
+        logger.warning(
+            "[fan_controller] arctic_usb fetch error for %s: %s",
+            safe_errors.log_text(dev.get("name")),
+            safe_errors.log_text(exc),
+        )
     finally:
         if ssh:
             try:
@@ -1243,6 +1271,11 @@ def _set_fan_arctic_usb(dev: Dict, channel: str, speed, extra: dict) -> Dict:
         result["message"] = combined.strip() or ("OK" if result["ok"] else "No output")
     except Exception as exc:
         result["message"] = safe_errors.public_error(exc)
+        logger.warning(
+            "[fan_controller] arctic_usb set error for %s: %s",
+            safe_errors.log_text(dev.get("name")),
+            safe_errors.log_text(exc),
+        )
     finally:
         if ssh:
             try:
@@ -1317,6 +1350,11 @@ def _set_fan_lm_sensors(dev: Dict, channel: str, speed, extra: dict) -> Dict:
         result["message"] = f"Set {pwm_path} to {pwm_val}/255 ({speed}%). {out2 or err2}"
     except Exception as exc:
         result["message"] = safe_errors.public_error(exc)
+        logger.warning(
+            "[fan_controller] lm_sensors set error for %s: %s",
+            safe_errors.log_text(dev.get("name")),
+            safe_errors.log_text(exc),
+        )
     finally:
         if ssh:
             try:
@@ -1379,6 +1417,11 @@ def _set_fan_ipmi(dev: Dict, channel: str, speed, extra: dict) -> Dict:
         result["message"] = "\n".join(output_lines)
     except Exception as exc:
         result["message"] = safe_errors.public_error(exc)
+        logger.warning(
+            "[fan_controller] ipmi set error for %s: %s",
+            safe_errors.log_text(dev.get("name")),
+            safe_errors.log_text(exc),
+        )
     finally:
         if ssh:
             try:
@@ -1410,6 +1453,11 @@ def _set_fan_nbfc(dev: Dict, channel: str, speed, extra: dict) -> Dict:
         result["message"] = out or err or ("OK" if code == 0 else "Error")
     except Exception as exc:
         result["message"] = safe_errors.public_error(exc)
+        logger.warning(
+            "[fan_controller] nbfc set error for %s: %s",
+            safe_errors.log_text(dev.get("name")),
+            safe_errors.log_text(exc),
+        )
     finally:
         if ssh:
             try:
@@ -1446,6 +1494,11 @@ def _set_fan_liquidctl(dev: Dict, channel: str, speed, extra: dict) -> Dict:
         result["message"] = out or err or ("OK" if code == 0 else "Error")
     except Exception as exc:
         result["message"] = safe_errors.public_error(exc)
+        logger.warning(
+            "[fan_controller] liquidctl set error for %s: %s",
+            safe_errors.log_text(dev.get("name")),
+            safe_errors.log_text(exc),
+        )
     finally:
         if ssh:
             try:
@@ -1494,6 +1547,11 @@ def _set_fan_pwm_sysfs(dev: Dict, channel: str, speed, extra: dict) -> Dict:
         result["message"] = f"Set {pwm_path} → {pwm_val}/255 ({round(pwm_val/255*100)}%). {out or err}"
     except Exception as exc:
         result["message"] = safe_errors.public_error(exc)
+        logger.warning(
+            "[fan_controller] pwm_sysfs set error for %s: %s",
+            safe_errors.log_text(dev.get("name")),
+            safe_errors.log_text(exc),
+        )
     finally:
         if ssh:
             try:
@@ -1561,6 +1619,11 @@ def test_connection(dev_id: int) -> Dict:
                 "message": f"✘ Tool not found on remote host.\n{tool_msg}\n\n{install_hint}"
             }
     except Exception as exc:
+        logger.warning(
+            "[fan_controller] test_connection error for %s: %s",
+            safe_errors.log_text(dev.get("name")),
+            safe_errors.log_text(exc),
+        )
         return {"ok": False, "message": safe_errors.public_error(exc, "SSH connection")}
     finally:
         if ssh:
@@ -1586,7 +1649,7 @@ def _store_sample(dev_id: int, status: Dict):
                 (dev_id, cutoff)
             )
     except Exception as exc:
-        logger.warning("[fan_controller] store_sample error: %s", exc)
+        logger.warning("[fan_controller] store_sample error: %s", safe_errors.log_text(exc))
 
 
 def get_latest(dev_id: int) -> Optional[Dict]:
@@ -1628,7 +1691,7 @@ def _poll_all():
                 status = fetch_status(full_dev)
                 _store_sample(d["id"], status)
         except Exception as exc:
-            logger.warning("[fan_controller] poll_all error: %s", exc)
+            logger.warning("[fan_controller] poll_all error: %s", safe_errors.log_text(exc))
         time.sleep(_POLL_INTERVAL)
 
 
