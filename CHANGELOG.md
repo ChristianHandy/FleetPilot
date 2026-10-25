@@ -4,6 +4,56 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ## [Unreleased]
 
+### Security
+
+- **certifi updated to 2026.10.19** (PYSEC-2026-4320 in 2026.7.22, found by `pip-audit`), in `requirements-lock.txt` and `requirements-dev-lock.txt`.
+
+### Added
+
+- **Pull request summary comment:** one comment per pull request, updated whenever a check finishes, says whether it is ready to merge (required checks, merge conflicts, draft), lists the changed files by area and gives a fix hint for each failed check (`pr-summary.yml`, `scripts/pr_summary.py`). Copilot code review is also requested automatically on pull requests to `main`.
+
+- **Maintainer override for the AI assistance check:** the check stays required, but the repository owner, a member or a collaborator can allow one pull request by commenting `/allow-ai <head commit> <reason>`. Members and collaborators cannot allow their own pull requests; the owner can, since nobody else could approve them. The approval counts only for that commit, and the reason is shown in the check summary. The comment re-runs the check (`ai-override.yml`, `scripts/ai_override.py`).
+
+- **More pull request checks:** at least 70 % of the changed Python lines must be run by the tests (part of the pytest check; the summary lists the untested lines), and the new *Change checks* job, part of *Safe to merge*, runs ShellCheck on the install, update and root helper scripts, requires a `CHANGELOG.md` entry for changes users notice (label `no changelog` to skip), fails when a change adds interface text without a German translation, and warns above 800 changed lines (`scripts/pr_checks.py`).
+
+- **AI share of the current code:** a README badge, rebuilt daily by the Pages workflow, shows how many of today's code lines come from AI-assisted commits (`git blame`, `scripts/ai_share.py --codebase-json/--badge`; per-area numbers in `ai-codebase.json`). At the start: 79.6 % of 68,983 lines.
+- **AI artifacts fail the pull request check:** leftovers that give AI-generated code away (chat text such as "Here's the updated code", elided-code placeholders, pasted Markdown code fences, placeholder secrets, "in a real implementation" stubs, model tokens and tool signatures) and AI tool files (`CLAUDE.md`, `AGENTS.md`, `.cursorrules`, `copilot-instructions.md`, ...). The daily repository scan checks all files for them (`scripts/ai_detect.py --all`).
+
+- **Pull requests must be free of AI-written code** (required check "AI assistance" in `pr-check.yml`, `scripts/ai_detect.py`): it fails when a commit declares AI help (same rules as the AI-share chart) or the pull request's "AI assistance" section does, or when style signals in the added code (section dividers, check-mark emoji, em dashes, stock phrases, boilerplate docstrings) reach 50 of 100. The score is an estimate; the job summary shows what it found. The detector runs from the base branch.
+
+### Changed
+
+- Tests moved from the repository root into tests/ (#171).
+
+### Fixed
+
+- **Example dashboard widget and `dashboard_widget` hook receive host reachability counts** ([#144](https://github.com/ChristianHandy/FleetPilot/issues/144)). `templates/index.html` passed raw host dicts without a `status` key and `stats={}`, so `addons/example_dashboard_widget.py` always reported 0% Fleet Health with every host offline. Each host passed to `dashboard_widget` now includes `name` and `status` (`"online"`, `"offline"` or `"unknown"`) from the last capability check, `stats` provides `{"total", "online", "offline", "unknown"}`, and unchecked hosts are shown as unknown rather than offline.
+
+## [1.8.0] — 2026-10-18
+
+**Stable release with two security fixes. Please update.** It contains everything from 1.8.0-beta.2 (below: Windows support for every supported release, the Android app, the live demo, stricter checks and much more) plus the changes here. After updating, change the SSH passwords that were stored for scheduled shutdowns or in the server registry.
+
+
+### Security
+
+- **Scheduled shutdown exposed SSH passwords to every signed-in user** (all versions up to 1.8.0-beta.2). The schedules page and `GET /api/shutdown_schedule` returned each schedule's SSH password in plain text, readable by viewers and read-only API tokens, and the passwords were stored unencrypted. Passwords are now encrypted like all other device credentials (existing ones on the first start), never sent to the browser or the API, and kept when a schedule is edited without a new one. **If you use scheduled shutdown with passwords, change those passwords** (or switch to SSH keys). Schedules are also validated now (host, time, days, port, action); an unknown action no longer falls back to a shutdown, and a host that cannot be reached is logged instead of failing silently.
+- **Server registry exposed SSH passwords to every signed-in user** (all versions up to 1.8.0-beta.2; [GHSA-7h7w-wfff-7p6w](https://github.com/ChristianHandy/FleetPilot/security/advisories/GHSA-7h7w-wfff-7p6w)). `GET /api/registry/servers` and `/api/registry/servers/<id>` returned each server's stored SSH password in plain text and its SSH key, readable by viewers and read-only API tokens, and the Fan controller's add page put known servers' passwords into its JavaScript. Registry passwords are now encrypted at rest (existing ones on the first start), the API returns `has_password`/`has_ssh_key` instead, and only the code that opens the SSH connection reads the password. **Change the SSH passwords of servers that had a password in the registry.**
+
+### Added
+
+- **"Safe to merge" check on pull requests:** one required verdict that passes only when the functional check passes (`install.sh` installs the code on a fresh Ubuntu machine over HTTP and HTTPS, an admin signs in and every page the app links to opens, an installation of the latest release updates to the new code, and the Android app builds) and ClamAV plus `scripts/pr_threat_scan.py` find no virus or backdoor pattern in the change. The scanner runs from the base branch, so a pull request cannot switch it off.
+- **Daily repository scan** (and on every push to main): the functional check, ClamAV over every tracked file and the backdoor scan of the whole repository.
+
+### Fixed
+
+- **Plugin hooks `update_pre`, `update_post` and `notification` are fired now** ([#145](https://github.com/ChristianHandy/FleetPilot/issues/145)). They were registered by the add-on loader and documented on the plugin docs page, but nothing ever called `AddonManager.fire_hooks()`, so the bundled Slack example never sent a message and any third-party plugin built on these hooks silently did nothing:
+  - `update_pre` and `update_post` run around every host update (`updater.run_update`, which is also what the scheduler and the update routes call). `update_post` receives a result with `success`, `packages_updated`, `name`, `host` and `error`.
+  - `notification` fires with the event `new_version_available` (`data={"type", "version", "description", "url"}`) when a newer release or commit appears — once per version, not on every 24-hour check — and also fires for email update reports (`event="update_report"`, `data={"hosts_status", "history"}`), host update error notifications (`event="update_error"`, `data={"host", "error"}`), and `notify.send()` messages (`event` set to the notification category such as `smart`, `security`, `backup`, `router` or `vulnerability`, `data={"title", "message", "level"}`).
+  - A hook runs after the update result is stored, and an exception inside a hook is logged instead of propagated, so a notification can never break or delay the update it reports on.
+- The two-factor page's "Back" button pointed to `/settings`, which doesn't exist; it goes back to My Profile now ([#194](https://github.com/ChristianHandy/FleetPilot/issues/194)).
+- The SMART button on the Storage workspace pointed to `/disks/smart/<disk>`, which doesn't exist; it opens the disk's SMART report now ([#195](https://github.com/ChristianHandy/FleetPilot/issues/195)).
+- The network scanner page left a socket open when it could not find the local subnet.
+
 ## [1.8.0-beta.2] — 2026-10-18
 
 **Pre-release for testers.** Everything below is new since 1.7.0. Please try it on your own hardware and [report what breaks](https://github.com/ChristianHandy/FleetPilot/issues/new?template=bug_report.yml).

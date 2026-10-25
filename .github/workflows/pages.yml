@@ -36,7 +36,7 @@ jobs:
       - name: Install
         run: pip install --require-hashes -r requirements-lock.txt -r requirements-dev-lock.txt
       - name: Test the emulated lab
-        run: python -m pytest -q test_demo_lab.py
+        run: python -m pytest -q tests/test_demo_lab.py
       - name: Build the live demo
         run: python demo/build_live.py
       - name: Build the static tour
@@ -46,8 +46,10 @@ jobs:
           FLEETPILOT_GITHUB_STATS: "1"     # open issues, good first issues, contributors, … from the GitHub API
           GH_TOKEN: ${{ github.token }}    # read-only; only raises the API rate limit
         run: python demo/build_home.py
-      - name: AI-share chart (README and homepage)
-        run: python scripts/ai_share.py --svg demo/site/ai-share.svg --json demo/site/ai-share.json
+      - name: AI-share chart and current-code badge (README and homepage)
+        run: >-
+          python scripts/ai_share.py --svg demo/site/ai-share.svg --json demo/site/ai-share.json
+          --codebase-json demo/site/ai-codebase.json --badge demo/site/ai-code-badge.svg
       - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

@@ -1,0 +1,151 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Functional check
+
+# Checks that the code actually works for a user, beyond the unit tests: install.sh
+# installs this commit on a fresh Ubuntu machine (with and without HTTPS), FleetPilot
+# starts under systemd, an admin can sign in and every page the app links to opens
+# without a server error (scripts/smoke_test.py). It also updates an installation of
+# the latest release to this commit, and builds the Android app.
+# Called by pr-check.yml (pull requests) and repo-scan.yml (daily and on main).
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  install:
+    name: Install and use (${{ matrix.https == 'yes' && 'HTTPS' || 'HTTP' }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        https: ["yes", "no"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install this commit with install.sh
+        env:
+          FP_HTTPS: ${{ matrix.https }}
+        run: |
+          git switch --quiet -c ci-under-test
+          # install.sh runs as root and clones this checkout, which belongs to the runner user.
+          sudo git config --system --add safe.directory "$GITHUB_WORKSPACE"
+          sudo git config --system --add safe.directory "$GITHUB_WORKSPACE/.git"
+          password="$(openssl rand -hex 16)"
+          echo "::add-mask::$password"
+          echo "FP_SMOKE_PASSWORD=$password" >> "$GITHUB_ENV"
+          sudo FP_NONINTERACTIVE=1 FP_HTTPS="$FP_HTTPS" FP_ADMIN_PASSWORD="$password" \
+            FP_REPO="file://$GITHUB_WORKSPACE" FP_BRANCH=ci-under-test bash install.sh
+
+      - name: Sign in and open every page
+        env:
+          FP_HTTPS: ${{ matrix.https }}
+        run: |
+          if [ "$FP_HTTPS" = "yes" ]; then
+            sudo install -m 0644 /etc/fleetpilot/tls/fullchain.pem "$RUNNER_TEMP/fleetpilot.pem"
+            python3 scripts/smoke_test.py --base https://127.0.0.1 --cafile "$RUNNER_TEMP/fleetpilot.pem"
+          else
+            python3 scripts/smoke_test.py --base http://127.0.0.1:5000
+          fi
+
+      - name: Run install.sh again (update in place) and check again
+        env:
+          FP_HTTPS: ${{ matrix.https }}
+        run: |
+          sudo FP_NONINTERACTIVE=1 FP_HTTPS="$FP_HTTPS" FP_REPO="file://$GITHUB_WORKSPACE" FP_BRANCH=ci-under-test bash install.sh
+          if [ "$FP_HTTPS" = "yes" ]; then
+            python3 scripts/smoke_test.py --base https://127.0.0.1 --cafile "$RUNNER_TEMP/fleetpilot.pem"
+          else
+            python3 scripts/smoke_test.py --base http://127.0.0.1:5000
+          fi
+
+      - name: Service log
+        if: failure()
+        run: |
+          sudo systemctl status fleetpilot --no-pager || true
+          sudo journalctl -u fleetpilot --no-pager -n 300 || true
+          sudo tail -n 50 /var/log/nginx/error.log 2>/dev/null || true
+
+  update:
+    name: Update from the latest release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The installed release fetches this commit from here, so it needs the history
+          # that connects the two; a shallow checkout fails with "did not send all
+          # necessary objects".
+          fetch-depth: 0
+
+      - name: Install the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          latest="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)"
+          echo "Latest release: $latest"
+          password="$(openssl rand -hex 16)"
+          echo "::add-mask::$password"
+          echo "FP_SMOKE_PASSWORD=$password" >> "$GITHUB_ENV"
+          curl -fsSL "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$latest/install.sh" -o "$RUNNER_TEMP/install-latest.sh"
+          sudo FP_NONINTERACTIVE=1 FP_HTTPS=no FP_ADMIN_PASSWORD="$password" FP_BRANCH="$latest" \
+            bash "$RUNNER_TEMP/install-latest.sh"
+          FP_SMOKE_PASSWORD="$password" python3 scripts/smoke_test.py --base http://127.0.0.1:5000 --no-404
+
+      - name: Update it to this commit
+        run: |
+          git switch --quiet -c ci-under-test
+          sudo git config --system --add safe.directory "$GITHUB_WORKSPACE"
+          sudo git config --system --add safe.directory "$GITHUB_WORKSPACE/.git"
+          sudo git -C /opt/fleetpilot remote set-url origin "file://$GITHUB_WORKSPACE"
+          sudo FP_NONINTERACTIVE=1 FP_HTTPS=no FP_REPO="file://$GITHUB_WORKSPACE" FP_BRANCH=ci-under-test bash install.sh
+
+      - name: Same password still works, every page opens
+        run: python3 scripts/smoke_test.py --base http://127.0.0.1:5000
+
+      - name: Service log
+        if: failure()
+        run: |
+          sudo systemctl status fleetpilot --no-pager || true
+          sudo journalctl -u fleetpilot --no-pager -n 300 || true
+
+  android:
+    name: Android app builds
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      GRADLE_VERSION: "9.8.1"
+      GRADLE_SHA256: dce76f55f8e251a3a1f130eb120f30b3d271de2b76c9b0729d316b5a1b6dc01f
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Gradle and the Android SDK packages
+        run: |
+          curl -fsSLo "$RUNNER_TEMP/gradle.zip" "https://services.gradle.org/distributions/gradle-$GRADLE_VERSION-bin.zip"
+          echo "$GRADLE_SHA256  $RUNNER_TEMP/gradle.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/gradle.zip" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/gradle-$GRADLE_VERSION/bin" >> "$GITHUB_PATH"
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdkmanager" --licenses > /dev/null || true
+          "$sdkmanager" --install "platforms;android-37.0" "build-tools;36.0.0" > /dev/null
+
+      - name: Build (debug, unsigned)
+        working-directory: FleetPilotAndroid
+        run: gradle --no-daemon assembleDebug

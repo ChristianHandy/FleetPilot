@@ -12,6 +12,7 @@ import email_config
 import email_notifier
 import linux_distro
 import windows_host
+from addon_loader import fire_app_hook
 from constants import is_localhost, get_platform
 
 # Distribution IDs FleetPilot updates; derivatives are also matched through their ID_LIKE.
@@ -66,7 +67,24 @@ def _distro_name(info):
     return f"{name} ({family})" if family else name
 
 
-def run_local_update(name, log_list, repo_only, log_func):
+def update_result(name, host, error_occurred, packages_updated=0, error_details=()):
+    """
+    The result dict handed to plugins through the ``update_post`` hook.
+
+    FleetPilot does not parse the package managers' output for a count, so
+    ``packages_updated`` is 0 today; the key is there because the documented
+    payload and the bundled Slack plugin both read it.
+    """
+    return {
+        'success': not error_occurred,
+        'packages_updated': packages_updated,
+        'name': name,
+        'host': host,
+        'error': '\n'.join(error_details),
+    }
+
+
+def run_local_update(name, log_list, repo_only, log_func, host=''):
     """
     Run system update locally using subprocess.
     
@@ -75,6 +93,10 @@ def run_local_update(name, log_list, repo_only, log_func):
         log_list: List to append log messages to
         repo_only: If True, only update packages from repositories without modifying config files
         log_func: Logging function to use
+        host: Address the caller asked for; repeated in the result for plugins
+
+    Returns:
+        The result dict (see :func:`update_result`).
     """
     error_occurred = False
     error_details = []
@@ -110,7 +132,7 @@ def run_local_update(name, log_list, repo_only, log_func):
                 error_details.append(str(e))
                 if email_config.get_error_notifications_enabled():
                     email_notifier.send_error_notification(name, "\n".join(error_details))
-                return
+                return update_result(name, host, error_occurred, error_details=error_details)
             except PermissionError:
                 error_msg = "✗ Permission denied reading /etc/os-release. Ensure the application has read permissions."
                 log_func(error_msg)
@@ -118,7 +140,7 @@ def run_local_update(name, log_list, repo_only, log_func):
                 error_details.append("Permission denied reading /etc/os-release")
                 if email_config.get_error_notifications_enabled():
                     email_notifier.send_error_notification(name, "\n".join(error_details))
-                return
+                return update_result(name, host, error_occurred, error_details=error_details)
             except Exception as e:
                 error_msg = f"✗ Could not detect distribution: {e}"
                 log_func(error_msg)
@@ -126,7 +148,7 @@ def run_local_update(name, log_list, repo_only, log_func):
                 error_details.append(f"Could not detect distribution: {e}")
                 if email_config.get_error_notifications_enabled():
                     email_notifier.send_error_notification(name, "\n".join(error_details))
-                return
+                return update_result(name, host, error_occurred, error_details=error_details)
         
         os_release = os_release or {'ID': distro}
         log_func(f"Detected distribution: {_distro_name(os_release) if distro != 'windows' else distro}")
@@ -142,7 +164,7 @@ def run_local_update(name, log_list, repo_only, log_func):
             error_details.append(str(e))
             if email_config.get_error_notifications_enabled():
                 email_notifier.send_error_notification(name, "\n".join(error_details))
-            return
+            return update_result(name, host, error_occurred, error_details=error_details)
         
         # Execute the update command locally
         log_func("Executing update command...")
@@ -194,6 +216,9 @@ def run_local_update(name, log_list, repo_only, log_func):
         if error_occurred and email_config.get_error_notifications_enabled():
             error_message = "\n".join(error_details)
             email_notifier.send_error_notification(name, error_message)
+
+    return update_result(name, host, error_occurred, error_details=error_details)
+
 
 def _run_windows_update(ssh, repo_only, log):
     """Windows: name the release, install Windows updates as SYSTEM, then (full update) apps via winget.
@@ -276,6 +301,16 @@ def run_update(host, user, name, log_list, repo_only=False, password=None):
         log_list: List to append log messages to
         repo_only: If True, only update packages from repositories without modifying config files
         password: Optional SSH password. If None, SSH key authentication is used.
+
+    Returns:
+        The result dict (see :func:`update_result`). Plugins see the same dict
+        through the ``update_post`` hook.
+
+    Plugins can register ``update_pre`` and ``update_post`` (documented in
+    ``templates/plugin_docs.html``), and ``addon_loader`` stores them -- but
+    nothing fired them, so a plugin built on these hooks silently did nothing.
+    They are fired around every run, from here, so the scheduler and every
+    route that starts an update reach them the same way.
     """
     def log(msg):
         """Helper function to log messages"""
@@ -283,10 +318,18 @@ def run_update(host, user, name, log_list, repo_only=False, password=None):
         log_msg = f"[{timestamp}] {msg}"
         print(log_msg)
         log_list.append(log_msg)
-    
+
+    host_info = {'name': name, 'host': host, 'user': user}
+
+    def _finish(result):
+        fire_app_hook('update_post_hook', host_info, result)
+        return result
+
+    fire_app_hook('update_pre_hook', host_info)
+
     # Check if this is a local update
     if is_localhost(host):
-        return run_local_update(name, log_list, repo_only, log)
+        return _finish(run_local_update(name, log_list, repo_only, log, host=host))
     
     # Remote update via SSH
     ssh = None
@@ -334,7 +377,8 @@ def run_update(host, user, name, log_list, repo_only=False, password=None):
                 error_details.append(problem)
             if not error_occurred:
                 log(f"✓ Update completed successfully for {name}")
-            return
+            return _finish(update_result(name, host, error_occurred,
+                                         error_details=error_details))
         else:
             # Try Linux detection
             log("Detecting Linux distribution...")
@@ -350,7 +394,8 @@ def run_update(host, user, name, log_list, repo_only=False, password=None):
                 error_details.append("Could not detect operating system")
                 if email_config.get_error_notifications_enabled():
                     email_notifier.send_error_notification(name, "\n".join(error_details))
-                return
+                return _finish(update_result(name, host, error_occurred,
+                                             error_details=error_details))
         
         # Get the update command for this distribution
         # If connecting as root (e.g. Proxmox), skip sudo prefix
@@ -367,7 +412,8 @@ def run_update(host, user, name, log_list, repo_only=False, password=None):
             log(error_msg)
             error_occurred = True
             error_details.append(str(e))
-            return
+            return _finish(update_result(name, host, error_occurred,
+                                         error_details=error_details))
         
         # Execute the update command
         log("Executing update command...")
@@ -431,6 +477,9 @@ def run_update(host, user, name, log_list, repo_only=False, password=None):
         if error_occurred and email_config.get_error_notifications_enabled():
             error_message = "\n".join(error_details)
             email_notifier.send_error_notification(name, error_message)
+
+    return _finish(update_result(name, host, error_occurred, error_details=error_details))
+
 
 def get_current_distribution():
     try:

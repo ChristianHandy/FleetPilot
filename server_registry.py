@@ -33,6 +33,7 @@ Usage:
 import contextlib
 import sqlite3
 import db_util
+import secret_box
 import json
 import os
 import threading
@@ -41,6 +42,11 @@ from datetime import datetime, timezone
 from typing import Optional, List, Dict
 
 logger = logging.getLogger(__name__)
+
+# SSH passwords are encrypted at rest and never part of a server dict; only
+# get_credentials() returns them, for the code that opens the SSH connection.
+_box = secret_box.SecretBox("sha256")
+_ENCRYPTED_PREFIX = "gAAAAA"   # every Fernet token starts with this
 
 _instances: Dict[str, "ServerRegistry"] = {}
 _lock = threading.Lock()
@@ -139,7 +145,19 @@ class ServerRegistry:
     def _init_db(self):
         with sqlite3.connect(self._db_path, timeout=15, factory=db_util.ClosingConnection) as conn:
             conn.executescript(self.SCHEMA)
+            # Versions up to 1.8.0-beta.2 stored SSH passwords in plain text: encrypt them.
+            for sid, password in conn.execute(
+                    "SELECT id, password FROM servers WHERE password != '' AND password NOT LIKE ?",
+                    (_ENCRYPTED_PREFIX + "%",)).fetchall():
+                conn.execute("UPDATE servers SET password=? WHERE id=?", (_box.encrypt(password), sid))
             conn.commit()
+
+    @staticmethod
+    def _stored_password(password):
+        """The value to store for a password given by a caller ('' clears it)."""
+        if not password:
+            return ''
+        return _box.encrypt(str(password))
 
     # ── CRUD ──────────────────────────────────────────────────────────────────
 
@@ -162,6 +180,11 @@ class ServerRegistry:
                       if k in ('port','user','password','ssh_key','os_type',
                                'description','location','environment','criticality',
                                'mac','notes','online','last_seen')}
+            if 'password' in fields:   # None keeps the stored password
+                if fields['password'] is None:
+                    del fields['password']
+                else:
+                    fields['password'] = self._stored_password(fields['password'])
             fields['tags'] = tags
             fields['updated_at'] = now
             if 'name' not in fields:
@@ -182,7 +205,7 @@ class ServerRegistry:
                 name, host,
                 kwargs.get('port', 22),
                 kwargs.get('user', 'root'),
-                kwargs.get('password', ''),
+                self._stored_password(kwargs.get('password')),
                 kwargs.get('ssh_key', ''),
                 kwargs.get('os_type', 'linux'),
                 kwargs.get('description', ''),
@@ -425,13 +448,36 @@ class ServerRegistry:
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
+    def get_credentials(self, id: int = None, name: str = None) -> Optional[Dict]:
+        """The SSH password (decrypted) and key of a server, for opening a connection.
+
+        Never pass the result to a template or an API response."""
+        conn = self._conn()
+        if id is not None:
+            row = conn.execute("SELECT password, ssh_key FROM servers WHERE id=?", (id,)).fetchone()
+        elif name is not None:
+            row = conn.execute("SELECT password, ssh_key FROM servers WHERE name=?", (name,)).fetchone()
+        else:
+            return None
+        if not row:
+            return None
+        return {'password': _box.decrypt(row['password'] or ''), 'ssh_key': row['ssh_key'] or ''}
+
     def _row_to_dict(self, row) -> Dict:
         d = dict(row)
+        d['has_password'] = bool(d.pop('password', ''))
         try:
             d['tags'] = json.loads(d.get('tags') or '[]')
         except Exception:
             d['tags'] = []
         return d
+
+    @staticmethod
+    def public(server: Dict) -> Dict:
+        """A server as shown to users and API clients: no password, no key."""
+        shown = {k: v for k, v in server.items() if k not in ('password', 'ssh_key')}
+        shown['has_ssh_key'] = bool(server.get('ssh_key'))
+        return shown
 
     def to_hosts_json_format(self) -> Dict:
         """Convert registry to hosts.json format for backward compatibility."""

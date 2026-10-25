@@ -214,6 +214,142 @@ def test_path_sanitization():
         traceback.print_exc()
         raise AssertionError("test_path_sanitization failed; see the output above")
 
+
+def test_render_hooks_logs_error_and_hides_exception_from_page(caplog, capsys, tmp_path):
+    """Test that render_hooks logs hook errors and writes only a fixed HTML comment (#161)."""
+    import logging
+    from flask import Flask
+    from addon_loader import AddonManager
+
+    plugin_dir = tmp_path / "addons"
+    tpl_dir = tmp_path / "templates"
+    plugin_dir.mkdir()
+    tpl_dir.mkdir()
+    (plugin_dir / "broken_widget.py").write_text(
+        'def _boom(*args, **kwargs):\n'
+        '    raise Exception("--><b>x</b>")\n'
+        'addon_meta = {"name": "Broken Widget", "dashboard_widget": _boom}\n',
+        encoding="utf-8",
+    )
+
+    app = Flask(__name__)
+    addon_mgr = AddonManager(app, None)
+    addon_mgr.load_addons(str(plugin_dir), str(tpl_dir))
+    assert addon_mgr.status[0]["status"] == "ok"
+
+    with caplog.at_level(logging.ERROR, logger="fleetpilot.plugins"):
+        rendered = addon_mgr.render_hooks("dashboard_widgets")
+
+    assert "--><b>x</b>" not in rendered
+    assert "<b>x</b>" not in rendered
+    assert rendered == "<!-- plugin hook failed, see log -->"
+    assert capsys.readouterr().out == ""
+    assert any(
+        "Broken Widget" in rec.getMessage() and "--><b>x</b>" in (rec.exc_text or "")
+        for rec in caplog.records
+    )
+    assert addon_mgr.status[0]["status"] == "error"
+
+
+def test_hook_dispatchers_log_errors_with_plugin_name(caplog, capsys, tmp_path):
+    """Test that fire_hooks, get_sidebar_links, and get_host_detail_tabs log instead of printing (#161)."""
+    import logging
+    from flask import Flask
+    from addon_loader import AddonManager
+
+    plugin_dir = tmp_path / "addons"
+    tpl_dir = tmp_path / "templates"
+    plugin_dir.mkdir()
+    tpl_dir.mkdir()
+    (plugin_dir / "noisy_plugin.py").write_text(
+        'def _fail(*args, **kwargs):\n'
+        '    raise RuntimeError("hook exploded")\n'
+        'addon_meta = {\n'
+        '    "name": "Noisy Plugin",\n'
+        '    "update_post": _fail,\n'
+        '    "sidebar_link": _fail,\n'
+        '    "host_detail_tab": _fail,\n'
+        '}\n',
+        encoding="utf-8",
+    )
+
+    app = Flask(__name__)
+    addon_mgr = AddonManager(app, None)
+    addon_mgr.load_addons(str(plugin_dir), str(tpl_dir))
+
+    with caplog.at_level(logging.ERROR, logger="fleetpilot.plugins"):
+        addon_mgr.fire_hooks("update_post_hook", {}, {})
+        assert addon_mgr.get_sidebar_links() == []
+        assert addon_mgr.get_host_detail_tabs({"name": "nas"}) == []
+
+    assert capsys.readouterr().out == ""
+    messages = [rec.getMessage() for rec in caplog.records]
+    assert any("Noisy Plugin" in m and "update_post_hook" in m for m in messages)
+    assert any("Noisy Plugin" in m and "sidebar_links" in m for m in messages)
+    assert any("Noisy Plugin" in m and "host_detail_tabs" in m for m in messages)
+    assert addon_mgr.status[0]["status"] == "error"
+
+
+def test_example_and_tutorial_plugins_use_logger_not_print(caplog, capsys):
+    """Test that example_plugin and tutorial_plugin log via fleetpilot.plugins instead of print (#161)."""
+    import logging
+    from addons import example_plugin, tutorial_plugin
+
+    with caplog.at_level(logging.INFO, logger="fleetpilot.plugins"):
+        example_plugin.register(None, None)
+        tutorial_plugin.register(None, None)
+
+    assert capsys.readouterr().out == ""
+    messages = [rec.getMessage() for rec in caplog.records]
+    assert any("example_plugin" in m for m in messages)
+    assert any("tutorial_plugin" in m for m in messages)
+
+
+def test_example_dashboard_widget_renders_online_offline_and_unknown_counts():
+    """Test that example_dashboard_widget and _dashboard_widget_payload report real status counts (#144)."""
+    import app as fp_app
+    from addons import example_dashboard_widget
+
+    hosts_cfg = {
+        "pve1": {"host": "10.0.0.1", "user": "root", "management": {"state": "manageable"}},
+        "nas": {"host": "10.0.0.2", "user": "admin", "management": {"state": "web_only"}},
+        "old-box": {"host": "10.0.0.3", "user": "root", "management": {"state": "unreachable"}},
+        "new-box": {"host": "10.0.0.4", "user": "root"},
+    }
+    widget_hosts, widget_stats = fp_app._dashboard_widget_payload(hosts_cfg)
+
+    assert widget_stats == {"total": 4, "online": 2, "offline": 1, "unknown": 1}
+    by_name = {h["name"]: h["status"] for h in widget_hosts}
+    assert by_name == {
+        "pve1": "online",
+        "nas": "online",
+        "old-box": "offline",
+        "new-box": "unknown",
+    }
+
+    html = example_dashboard_widget._render_widget(widget_hosts, widget_stats)
+    assert "50%" in html
+    assert "Online: <strong" in html and ">2</strong>" in html
+    assert "Offline: <strong" in html and ">1</strong>" in html
+    assert "Unknown: <strong" in html and ">1</strong>" in html
+    assert "Total: <strong" in html and ">4</strong>" in html
+
+    # Direct host-list call without stats dictionary (known online and offline only)
+    direct_html = example_dashboard_widget._render_widget(
+        [
+            {"name": "h1", "status": "online"},
+            {"name": "h2", "status": "online"},
+            {"name": "h3", "status": "online"},
+            {"name": "h4", "status": "offline"},
+        ],
+        {},
+    )
+    assert "75%" in direct_html
+    assert ">3</strong>" in direct_html
+    assert ">1</strong>" in direct_html
+    assert "Unknown:" not in direct_html
+
+
 if __name__ == "__main__":
     import pytest
     sys.exit(pytest.main([__file__, "-q"]))

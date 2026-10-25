@@ -63,7 +63,6 @@
           <td><code>{{ s.host }}</code></td>
           <td><span class="badge badge-blue">{{ s.shutdown_time }}</span></td>
           <td>
-            {% set days = s.days | tojson | fromjson if s.days is string else s.days %}
             <div style="display:flex;gap:3px;flex-wrap:wrap;">
               {% for d in ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}
               <span class="badge {% if d in (s.days | string) %}badge-blue{% else %}badge-gray{% endif %}" style="font-size:0.65rem;padding:2px 5px;">{{ d }}</span>

@@ -14,6 +14,7 @@ import time as _time
 from collections import defaultdict
 from i18n import get_translator, SUPPORTED_LANGUAGES
 import json
+import logging
 import threading
 import paramiko
 import os
@@ -59,24 +60,27 @@ import corsair_commander
 import backup_controller as _bc
 import hw_monitor as _hw
 import vuln_scanner
+
+logger = logging.getLogger(__name__)
+
 try:
     import server_registry as _registry
     _REGISTRY_AVAILABLE = True
 except Exception as _reg_err:
     _REGISTRY_AVAILABLE = False
-    print(f'[ServerRegistry] Module not available: {_reg_err}')
+    logger.warning('[ServerRegistry] Module not available: %s', _reg_err)
 try:
     import hw_info as _hw_info
     _HW_INFO_AVAILABLE = True
 except Exception as _hwi_err:
     _HW_INFO_AVAILABLE = False
-    print(f'[HwInfo] Module not available: {_hwi_err}')
+    logger.warning('[HwInfo] Module not available: %s', _hwi_err)
 try:
     import two_factor as _2fa
     _2FA_AVAILABLE = True
 except Exception as _2fa_err:
     _2FA_AVAILABLE = False
-    print(f'[2FA] Module not available: {_2fa_err}')
+    logger.warning('[2FA] Module not available: %s', _2fa_err)
 
 # ── Persistent Data Directory ───────────────────────────────────────────────────
 # All mutable data files (hosts.json, history.json, etc.) are stored in DATA_DIR.
@@ -276,7 +280,7 @@ try:
     from flask_wtf.csrf import CSRFProtect as _CSRFProtect, generate_csrf as _gen_csrf, CSRFError
 except ImportError:
     _CSRFProtect = None
-    print('WARNING: Flask-WTF is not installed; CSRF protection is unavailable.')
+    logger.warning('WARNING: Flask-WTF is not installed; CSRF protection is unavailable.')
 
 if _CSRF_ENABLED and _CSRFProtect is not None:
     app.config['WTF_CSRF_TIME_LIMIT'] = 3600
@@ -316,7 +320,7 @@ if _CSRF_ENABLED and _CSRFProtect is not None:
     def _inject_csrf():
         return dict(csrf_token=_gen_csrf)
 else:
-    print('WARNING: CSRF protection is disabled (WTF_CSRF_ENABLED=false).')
+    logger.warning('WARNING: CSRF protection is disabled (WTF_CSRF_ENABLED=false).')
 
     @app.context_processor
     def _inject_csrf_fallback():
@@ -402,7 +406,7 @@ PASSWORD = os.environ.get('DASHBOARD_PASSWORD', '')  # Default empty, must be se
 
 # Warn if using default credentials
 if USERNAME == 'admin' and PASSWORD == 'password':
-    print("WARNING: Using default credentials! Set DASHBOARD_USERNAME and DASHBOARD_PASSWORD environment variables.")
+    logger.warning("WARNING: Using default credentials! Set DASHBOARD_USERNAME and DASHBOARD_PASSWORD environment variables.")
 
 # Initialize Disk Tools addon system
 addon_mgr = AddonManager(app, disktool_core)
@@ -419,9 +423,9 @@ with app.app_context():
     try:
         audit_log.prune(account_security.get_settings()['audit_retention_days'])
     except Exception as _prune_err:
-        print(f'WARNING: audit log pruning failed: {_prune_err}')
+        logger.warning('WARNING: audit log pruning failed: %s', _prune_err)
     if user_management.migrate_env_user_to_db():
-        print(f"INFO: Migrated env-var user '{USERNAME}' to database.")
+        logger.info("INFO: Migrated env-var user '%s' to database.", USERNAME)
     disktool_core.init_db(DATA_DIR)
     disktool_core.recover_interrupted_tasks()
     disktool_core.start_auto_mode_worker()
@@ -448,27 +452,27 @@ with app.app_context():
         _ss_init.init_db(DATA_DIR)
         _ss_init.start_polling()
     except Exception as _ss_err:
-        print(f'[Scheduled Shutdown] Init error: {_ss_err}')
+        logger.error('[Scheduled Shutdown] Init error: %s', _ss_err)
     # HW Monitor — init_db and start_polling only; register_routes called after login_required is defined
     try:
         _hw.init_db(DATA_DIR)
         _hw.start_polling()
     except Exception as _hw_err:
-        print(f"[HW Monitor] Init error: {_hw_err}")
+        logger.error('[HW Monitor] Init error: %s', _hw_err)
     # Initialize HW Info collector
     if _HW_INFO_AVAILABLE:
         try:
             _hw_info.init(DATA_DIR)
         except Exception as _hwi_e:
-            print(f'[HwInfo] Init error: {_hwi_e}')
+            logger.error('[HwInfo] Init error: %s', _hwi_e)
     # Initialize Fan Controller (must be in app_context so DB is created before routes are hit)
     try:
         import fan_controller as _fc_early
         _fc_early.init_db(DATA_DIR)
         _fc_early.start_polling()
-        print('[FanController] DB initialized OK')
+        logger.info('[FanController] DB initialized OK')
     except Exception as _fce:
-        print(f'[FanController] Early init error: {_fce}')
+        logger.error('[FanController] Early init error: %s', _fce)
 
     # Initialize central server registry and import from all existing DBs
     if _REGISTRY_AVAILABLE:
@@ -479,9 +483,9 @@ with app.app_context():
                 _reg.import_from_hw_monitor_db(os.path.join(DATA_DIR, 'hw_monitor.db'))
                 _reg.import_from_fan_controller_db(os.path.join(DATA_DIR, 'fan_controller.db'))
                 _reg.import_from_backup_db(os.path.join(DATA_DIR, 'backup_controller.db'))
-            print(f'[ServerRegistry] Ready — {_reg.stats()["total_servers"]} servers registered')
+            logger.info('[ServerRegistry] Ready — %s servers registered', _reg.stats()["total_servers"])
         except Exception as _re:
-            print(f'[ServerRegistry] Init error: {_re}')
+            logger.error('[ServerRegistry] Init error: %s', _re)
 
 # Template function for HTML extensions
 @app.context_processor
@@ -1249,9 +1253,9 @@ try:
             app.config['DATA_DIR'] = DATA_DIR
             _hw_info.register_routes(app, login_required)
         except Exception as _hwi_re:
-            print(f'[HwInfo] Route registration error: {_hwi_re}')
+            logger.error('[HwInfo] Route registration error: %s', _hwi_re)
 except Exception as _hw_reg_err:
-    print(f"[HW Monitor] Route registration error: {_hw_reg_err}")
+    logger.error('[HW Monitor] Route registration error: %s', _hw_reg_err)
 
 def _last_sign_in_notice(username):
     """Describe the previous sign-in and any failed attempts since then."""
@@ -2047,6 +2051,34 @@ def _home_manageability_summary(hosts):
     return states
 
 
+def _dashboard_widget_payload(hosts):
+    """Build ``(hosts_list, stats_dict)`` for the ``dashboard_widgets`` hook.
+
+    Each host dict carries its registered ``name`` and a ``status`` key
+    (``'online'``, ``'offline'`` or ``'unknown'``) from the last known
+    reachability check. ``stats`` contains ``{'total', 'online', 'offline', 'unknown'}``.
+    """
+    widget_hosts = []
+    counts = {'total': 0, 'online': 0, 'offline': 0, 'unknown': 0}
+    for name, host in hosts.items():
+        entry = dict(host)
+        entry.setdefault('name', name)
+        status = entry.get('status')
+        if status not in ('online', 'offline', 'unknown'):
+            state = (entry.get('management') or {}).get('state', 'unknown')
+            if state in ('manageable', 'web_only'):
+                status = 'online'
+            elif state in ('unreachable', 'invalid'):
+                status = 'offline'
+            else:
+                status = 'unknown'
+        entry['status'] = status
+        counts['total'] += 1
+        counts[status] += 1
+        widget_hosts.append(entry)
+    return widget_hosts, counts
+
+
 def _invalidate_service_map_cache():
     for cache_key in list(_cache):
         if cache_key.startswith('service_map:'):
@@ -2235,6 +2267,7 @@ def index():
     server_service_map = _build_server_service_map(hosts, service_map)
     home_pages = _home_page_catalog(is_admin)
     manageability = _home_manageability_summary(hosts)
+    dashboard_widget_hosts, dashboard_widget_stats = _dashboard_widget_payload(hosts)
 
     # Per-user dashboard layout
     layout = user_management.get_dashboard_layout(user_id) if user_id else user_management.DEFAULT_DASHBOARD_LAYOUT
@@ -2261,6 +2294,8 @@ def index():
         service_map=service_map,
         server_service_map=server_service_map,
         manageability=manageability,
+        dashboard_widget_hosts=dashboard_widget_hosts,
+        dashboard_widget_stats=dashboard_widget_stats,
     )
 
 
@@ -3712,10 +3747,10 @@ def scanner():
     managed_ips = [h.get('host', '') for h in hosts.values()]
     # Guess default subnet from local IP
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(('8.8.8.8', 80))
-        local_ip = s.getsockname()[0]
-        s.close()
+        # A UDP connect sends nothing; it only picks the interface of the default route.
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(('8.8.8.8', 80))
+            local_ip = s.getsockname()[0]
         default_prefix = '.'.join(local_ip.split('.')[:3])
     except Exception:
         default_prefix = '192.168.1'
@@ -6221,7 +6256,7 @@ def api_registry_servers():
     module = request.args.get('module')
     reg = _registry.get_registry(DATA_DIR)
     servers = reg.list_servers(module=module)
-    return jsonify(servers)
+    return jsonify([reg.public(srv) for srv in servers])
 
 
 @app.route("/api/registry/servers/<int:server_id>")
@@ -6234,7 +6269,7 @@ def api_registry_server(server_id):
     srv = reg.get_server(id=server_id)
     if not srv:
         return jsonify({'error': 'Not found'}), 404
-    return jsonify(srv)
+    return jsonify(reg.public(srv))
 
 
 @app.route("/api/registry/servers", methods=["POST"])
@@ -6501,7 +6536,7 @@ def api_host_metrics():
         # Single command: cpu%, ram%, uptime, load
         # Use /proc/stat for reliable CPU measurement (two samples 0.5s apart)
         cmd = ("python3 -c \""
-               "import time,os;"
+               "import time,os,sys;"
                "def cpu_pct():\n"
                "  s1=open('/proc/stat').readline().split()[1:];time.sleep(0.5);s2=open('/proc/stat').readline().split()[1:]\n"
                "  d=[int(b)-int(a) for a,b in zip(s1,s2)];tot=sum(d);idle=d[3]+d[4]\n"
@@ -6512,7 +6547,7 @@ def api_host_metrics():
                "secs=int(float(up));h=secs//3600;m=(secs%3600)//60;"
                "upstr=f'{h}h {m}m' if h>0 else f'{m}m';"
                "ld=open('/proc/loadavg').read().split()[:3];"
-               "print(f'{cpu}|{ram}|{upstr}|{ld[0]} {ld[1]} {ld[2]}')"
+               "sys.stdout.write(f'{cpu}|{ram}|{upstr}|{ld[0]} {ld[1]} {ld[2]}\\n')"
                "\" 2>/dev/null")
         try:
             _, stdout, _ = client.exec_command(cmd, timeout=10)
@@ -6696,23 +6731,43 @@ def shutdown_schedule_index():
                            known_hosts=known_hosts)
 
 
+def _schedule_form(password):
+    """The fields of a shutdown schedule from the submitted form, validated (ValueError if not)."""
+    form = request.form
+    name, host = form.get('name', '').strip(), form.get('host', '').strip()
+    if not name or not host:
+        raise ValueError('A schedule needs a name and a host.')
+    if not re.fullmatch(r'[A-Za-z0-9._:-]{1,253}', host):
+        raise ValueError('The host must be a host name or an IP address.')
+    try:
+        port, warn = int(form.get('port', 22)), int(form.get('warn_minutes', 5))
+    except ValueError:
+        raise ValueError('Port and warning time must be numbers.') from None
+    if not (1 <= port <= 65535 and 0 <= warn <= 60):
+        raise ValueError('The port must be 1–65535 and the warning 0–60 minutes.')
+    shutdown_time = form.get('shutdown_time', '23:00')
+    if not re.fullmatch(r'([01]\d|2[0-3]):[0-5]\d', shutdown_time):
+        raise ValueError('The time must look like 23:00.')
+    days = form.getlist('days')
+    if not days or not set(days) <= set(_ss.DAYS_OF_WEEK):
+        raise ValueError('Choose at least one day.')
+    action = form.get('action', 'shutdown')
+    if action not in _ss.ACTIONS:
+        raise ValueError('Unknown action.')
+    return dict(name=name, host=host, port=port, username=form.get('username', 'root').strip() or 'root',
+                password=password, ssh_key=form.get('ssh_key', ''), shutdown_time=shutdown_time, days=days,
+                enabled=bool(form.get('enabled')), warn_minutes=warn, action=action)
+
+
 @app.route('/shutdown_schedule/add', methods=['POST'])
 @operator_required
 def shutdown_schedule_add():
-    days = request.form.getlist('days')
-    _ss.add_schedule(
-        name=request.form.get('name', ''),
-        host=request.form.get('host', ''),
-        port=int(request.form.get('port', 22)),
-        username=request.form.get('username', 'root'),
-        password=request.form.get('password', ''),
-        ssh_key=request.form.get('ssh_key', ''),
-        shutdown_time=request.form.get('shutdown_time', '23:00'),
-        days=days,
-        enabled=bool(request.form.get('enabled')),
-        warn_minutes=int(request.form.get('warn_minutes', 5)),
-        action=request.form.get('action', 'shutdown'),
-    )
+    try:
+        fields = _schedule_form(password=request.form.get('password', ''))
+    except ValueError as exc:
+        flash(str(exc), 'error')
+        return redirect('/shutdown_schedule')
+    _ss.add_schedule(**fields)
     flash('Schedule added.', 'success')
     return redirect('/shutdown_schedule')
 
@@ -6720,20 +6775,15 @@ def shutdown_schedule_add():
 @app.route('/shutdown_schedule/<int:sid>/edit', methods=['POST'])
 @operator_required
 def shutdown_schedule_edit(sid):
-    days = request.form.getlist('days')
-    _ss.update_schedule(sid,
-        name=request.form.get('name', ''),
-        host=request.form.get('host', ''),
-        port=int(request.form.get('port', 22)),
-        username=request.form.get('username', 'root'),
-        password=request.form.get('password') or _ss.get_schedule(sid).get('password', ''),
-        ssh_key=request.form.get('ssh_key', ''),
-        shutdown_time=request.form.get('shutdown_time', '23:00'),
-        days=days,
-        enabled=bool(request.form.get('enabled')),
-        warn_minutes=int(request.form.get('warn_minutes', 5)),
-        action=request.form.get('action', 'shutdown'),
-    )
+    schedule = _ss.get_schedule(sid)
+    if schedule is None:
+        abort(404)
+    try:
+        fields = _schedule_form(password=request.form.get('password') or None)   # empty keeps the stored one
+    except ValueError as exc:
+        flash(str(exc), 'error')
+        return redirect('/shutdown_schedule')
+    _ss.update_schedule(sid, **fields)
     flash('Schedule updated.', 'success')
     return redirect('/shutdown_schedule')
 
@@ -6784,7 +6834,7 @@ if __name__ == "__main__":
     user_management.init_user_db()
     # Migrate environment variable user to database
     if user_management.migrate_env_user_to_db():
-        print(f"INFO: Migrated environment variable user '{USERNAME}' to database.")
+        logger.info("INFO: Migrated environment variable user '%s' to database.", USERNAME)
 
 
     # Configure automatic update scheduler
@@ -6801,7 +6851,7 @@ if __name__ == "__main__":
                     if version_manager.should_check_for_updates(check_interval_hours=24):
                         version_manager.check_for_updates()
             except Exception as e:
-                print(f"Error checking for dashboard updates: {e}")
+                logger.error("Error checking for dashboard updates: %s", e)
             # Sleep for 1 hour before checking again
             time.sleep(3600)
 

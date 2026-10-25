@@ -23,7 +23,7 @@ def data_dir(tmp_path, monkeypatch):
 def scheduler_module(data_dir, monkeypatch):
     # Load a separate module so the real scheduler never starts for these tests.
     monkeypatch.setattr(background, "BackgroundScheduler", Mock(return_value=Mock()))
-    spec = importlib.util.spec_from_file_location("scheduler_under_test", Path(__file__).with_name("scheduler.py"))
+    spec = importlib.util.spec_from_file_location("scheduler_under_test", Path(__file__).resolve().parent.parent / "scheduler.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     monkeypatch.setattr(module, "run_update", Mock(side_effect=AssertionError("Unexpected host update")))

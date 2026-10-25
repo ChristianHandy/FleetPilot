@@ -58,7 +58,7 @@ All Python dependencies, with exact versions and hashes, are in `requirements-lo
 
 ## Test policy
 
-- **New functionality must come with automated tests** in a `test_*.py` file at the top level (pytest). This is a rule, not a wish: a pull request that adds major functionality without tests is not merged until they are added.
+- **New functionality must come with automated tests** in a `test_*.py` file under `tests/` (pytest). This is a rule, not a wish: a pull request that adds major functionality without tests is not merged until they are added.
 - **Bug fixes come with a test** that fails without the fix whenever that is practical.
 - Code that talks to devices is tested against recorded or emulated output. See `test_routers.py` and the emulated lab in `demo/live/lab`.
 - Parsers for data from the network belong in the fuzzer (`fuzz/fuzz_parsers.py`).
@@ -91,6 +91,8 @@ Every change, including the maintainer's own, goes through a pull request and is
 - the reviewer approves. While FleetPilot has one maintainer, the maintainer reviews contributors' pull requests, and their own (and AI-assisted) changes are reviewed by the maintainer against this list before merging, without a second person (see [GOVERNANCE.md](GOVERNANCE.md#continuity))
 
 A pull request that does not meet these is not merged, however small.
+
+Two comments help with this on every pull request: Copilot's automatic code review (a repository ruleset; a suggestion, not a required check), and the *Pull request summary* comment (`pr-summary.yml`, `scripts/pr_summary.py`), which lists the changed files by area, the result of each required check and how to fix the usual failures. It is updated whenever a check finishes.
 
 ## Coding style
 

@@ -1,0 +1,42 @@
+# SPDX-FileCopyrightText: Copyright the FleetPilot contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Pull request summary
+
+# One comment per pull request that says what it changes (files by area) and whether it
+# can be merged (required checks, other failed checks, merge conflicts, how to fix).
+# It is updated each time one of the workflows below finishes.
+#
+# workflow_run runs from the default branch with a token that can comment, also for
+# pull requests from forks. That is safe here because nothing from the pull request is
+# checked out or run: the job checks out main and scripts/pr_summary.py only reads the
+# GitHub API. The head SHA is passed through an environment variable, not inlined.
+on:
+  workflow_run:  # zizmor: ignore[dangerous-triggers] no pull request code is checked out or run
+    workflows: ["Pull request check", "Tests", "CodeQL"]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  summary:
+    name: Summary comment
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read          # check out main for the script
+      checks: read            # read the check results
+      pull-requests: write    # create or update the comment
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Post or update the summary comment
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: python3 scripts/pr_summary.py "$HEAD_SHA"
