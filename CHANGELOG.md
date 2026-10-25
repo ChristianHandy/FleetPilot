@@ -27,6 +27,8 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ### Fixed
 
+- System monitor: stopping the background poller takes effect immediately instead of after up to 60 seconds ([#163](https://github.com/ChristianHandy/FleetPilot/issues/163)).
+
 - **Example dashboard widget and `dashboard_widget` hook receive host reachability counts** ([#144](https://github.com/ChristianHandy/FleetPilot/issues/144)). `templates/index.html` passed raw host dicts without a `status` key and `stats={}`, so `addons/example_dashboard_widget.py` always reported 0% Fleet Health with every host offline. Each host passed to `dashboard_widget` now includes `name` and `status` (`"online"`, `"offline"` or `"unknown"`) from the last capability check, `stats` provides `{"total", "online", "offline", "unknown"}`, and unchecked hosts are shown as unknown rather than offline.
 
 ## [1.8.0] — 2026-10-18
