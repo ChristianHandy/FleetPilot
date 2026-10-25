@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 _DB_PATH = None
 _poll_thread = None
 _poll_running = False
+_poll_stop = None
 _POLL_INTERVAL = 60  # seconds between samples
 _RETENTION_DAYS = 30  # keep 30 days of history
 
@@ -159,9 +160,9 @@ def _save(sample: dict):
 
 # ── Background polling thread ─────────────────────────────────────────────────
 
-def _poll_loop():
+def _poll_loop(stop_event):
     global _poll_running
-    while _poll_running:
+    while not stop_event.is_set():
         try:
             sample = _collect()
             if sample:
@@ -169,15 +170,17 @@ def _poll_loop():
                 _purge_old()
         except Exception as exc:
             logger.warning("system_monitor poll error: %s", exc)
-        time.sleep(_POLL_INTERVAL)
+        stop_event.wait(_POLL_INTERVAL)
+    _poll_running = False
 
 
 def start_polling():
-    global _poll_thread, _poll_running
+    global _poll_thread, _poll_running, _poll_stop
     if _poll_thread and _poll_thread.is_alive():
         return
     _poll_running = True
-    _poll_thread = threading.Thread(target=_poll_loop, daemon=True, name='sys-monitor')
+    _poll_stop = threading.Event()
+    _poll_thread = threading.Thread(target=_poll_loop, args=(_poll_stop,), daemon=True, name='sys-monitor')
     _poll_thread.start()
     logger.info("system_monitor polling started (interval=%ds)", _POLL_INTERVAL)
 
@@ -185,6 +188,8 @@ def start_polling():
 def stop_polling():
     global _poll_running
     _poll_running = False
+    if _poll_stop:
+        _poll_stop.set()
 
 
 # ── Query API ─────────────────────────────────────────────────────────────────

@@ -173,7 +173,7 @@ def test_start_and_stop_polling_runs_a_thread(monkeypatch, monitor_db):
         return None
 
     monkeypatch.setattr(system_monitor, "_collect", collect_once)
-    monkeypatch.setattr(system_monitor, "_POLL_INTERVAL", 0.01)
+    monkeypatch.setattr(system_monitor, "_POLL_INTERVAL", 60)
 
     system_monitor.start_polling()
 
@@ -184,3 +184,4 @@ def test_start_and_stop_polling_runs_a_thread(monkeypatch, monitor_db):
     system_monitor.stop_polling()
     thread.join(timeout=1)
     assert not thread.is_alive()
+    assert not system_monitor._poll_running
