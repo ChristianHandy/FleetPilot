@@ -4,6 +4,8 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ## [Unreleased]
 
+## [1.8.1] — 2026-10-24
+
 ### Security
 
 - **certifi updated to 2026.10.19** (PYSEC-2026-4320 in 2026.7.22, found by `pip-audit`), in `requirements-lock.txt` and `requirements-dev-lock.txt`.
@@ -11,6 +13,7 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ### Added
 
+- **Release workflow for every kind of release:** Actions → *Prepare release* prepares a beta, a main release, a patch (subrelease such as 1.8.1), a hotfix from a `release/X.Y` branch, or a major release: it sets the version in the app and the Android app, closes the changelog section and opens the way to the release pull request (`prepare-release.yml`, `scripts/release.py`). Hotfix releases are named "FleetPilot vX.Y.Z (hotfix)", and a hotfix of an older line no longer becomes the "Latest" release.
 - **Pull request summary comment:** one comment per pull request, updated whenever a check finishes, says whether it is ready to merge (required checks, merge conflicts, draft), lists the changed files by area and gives a fix hint for each failed check (`pr-summary.yml`, `scripts/pr_summary.py`). Copilot code review is also requested automatically on pull requests to `main`.
 
 - **Maintainer override for the AI assistance check:** the check stays required, but the repository owner, a member or a collaborator can allow one pull request by commenting `/allow-ai <head commit> <reason>`. Members and collaborators cannot allow their own pull requests; the owner can, since nobody else could approve them. The approval counts only for that commit, and the reason is shown in the check summary. The comment re-runs the check (`ai-override.yml`, `scripts/ai_override.py`).
@@ -25,10 +28,14 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 ### Changed
 
 - Tests moved from the repository root into tests/ (#171).
+- `hw_monitor.py` and `fan_controller.py` route warnings and errors through `logging.getLogger(__name__)` instead of `print()` or `warnings.warn()` ([#160](https://github.com/ChristianHandy/FleetPilot/issues/160)).
 
 ### Fixed
 
+- System monitor: stopping the background poller takes effect immediately instead of after up to 60 seconds ([#163](https://github.com/ChristianHandy/FleetPilot/issues/163)).
+
 - **Example dashboard widget and `dashboard_widget` hook receive host reachability counts** ([#144](https://github.com/ChristianHandy/FleetPilot/issues/144)). `templates/index.html` passed raw host dicts without a `status` key and `stats={}`, so `addons/example_dashboard_widget.py` always reported 0% Fleet Health with every host offline. Each host passed to `dashboard_widget` now includes `name` and `status` (`"online"`, `"offline"` or `"unknown"`) from the last capability check, `stats` provides `{"total", "online", "offline", "unknown"}`, and unchecked hosts are shown as unknown rather than offline.
+- **Backup servers:** the "Verify SSL certificate" setting (and optional `FLEETPILOT_BACKUP_CA` custom CA bundle path) is now respected across all HTTP backup backends (Proxmox Backup Server, Duplicati, Restic REST-Server, BorgWarehouse, and UrBackup) including connection tests, and defaults to enabled for newly added backup servers with a clear error message when certificate verification fails ([#147](https://github.com/ChristianHandy/FleetPilot/issues/147)).
 
 ## [1.8.0] — 2026-10-18
 
