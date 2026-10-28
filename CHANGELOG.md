@@ -4,6 +4,10 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ## [Unreleased]
 
+### Added
+
+- **Italian interface** ([#127](https://github.com/ChristianHandy/FleetPilot/issues/127)): choose **IT** in the language menu of the sidebar. All 747 interface strings are translated (`i18n.py`), including 44 that the German table does not have yet.
+
 ## [1.8.1] — 2026-10-24
 
 ### Security
