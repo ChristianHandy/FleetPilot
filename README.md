@@ -25,75 +25,31 @@ Updates for Linux and Windows machines, SMART disk health, FRITZ!Box / OpenWrt /
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue)](https://python.org)
 [![AI-written code](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fchristianhandy.github.io%2FFleetPilot%2Fai-codebase.json&query=%24.share&suffix=%20%25&label=AI-written%20code&color=e05d44)](#how-much-of-fleetpilot-is-written-by-ai)
 
+**⭐ [Star FleetPilot on GitHub](https://github.com/ChristianHandy/FleetPilot)** if it's useful to you: it helps others find it, and [community-scripts.org](https://community-scripts.org) lists apps from 600 stars.
+
 <img src="docs/screenshots/routers.png" alt="FleetPilot routers page: FRITZ!Box, repeater, OpenWrt and OPNsense with status, firmware, uptime and connected devices" width="100%">
 
-**[▶ Try the live demo](https://christianhandy.github.io/FleetPilot/demo/)** · [Website](https://christianhandy.github.io/FleetPilot/) · [Install](#quick-start) · [Features](#features) · [Screenshots](#screenshots) · [User guide](docs/user-guide.md) · [Security](SECURITY.md)
+**[▶ Try the live demo](https://christianhandy.github.io/FleetPilot/demo/)** · [Website](https://christianhandy.github.io/FleetPilot/) · [Install](#quick-start) · [Features](#features) · [User guide](docs/user-guide.md) · [Security](SECURITY.md)
 
-> **Test it before you install it.** The live demo is the real FleetPilot, running in your browser (WebAssembly) against an emulated homelab: Proxmox nodes, TrueNAS, a backup server, Linux and Windows machines, a FRITZ!Box, OpenWrt and OPNsense. Updates, Wake-on-LAN, VMs, fans, SMART alerts and router checks all work, and nothing leaves your browser.
-
-**Proxmox VE, in the node's Shell:**
-
-```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/proxmox/fleetpilot-lxc.sh)"
-```
+The live demo is the real FleetPilot running in your browser against an emulated homelab. Nothing leaves your browser.
 
 </div>
 
 ---
 
-## What is FleetPilot?
-
-FleetPilot is a modern, self-hosted web dashboard that gives you a single pane of glass over your entire infrastructure. Whether you run a homelab with a few Raspberry Pis or manage dozens of servers, FleetPilot keeps everything under control — without any cloud dependency or subscription fee.
-
-It combines remote update management, disk health monitoring, VM controller integration (Proxmox), storage controller integration (TrueNAS), and CheckMK monitoring into one unified interface with multi-user RBAC and a fully customizable dashboard.
-
----
-
 ## Features
 
-| Category | Capabilities |
+| | |
 |---|---|
-| **Dashboard** | Fully customizable widget layout (drag & drop, per-user persistence) |
-| **Host Management** | Linux servers, and Windows 10/11 (incl. LTSC 2019–2024) and Windows Server 2016–2025 with their support end dates ([details](WINDOWS_SUPPORT.md)); tags, environments, DHCP/MAC tracking |
-| **Remote Updates** | SSH-based updates for Debian/Ubuntu and derivatives (Mint, Pop!_OS, Raspberry Pi OS, Kali …), Fedora/RHEL/Rocky/AlmaLinux/Oracle/Amazon Linux, openSUSE/SLES, Arch/Manjaro/EndeavourOS, Alpine, Void, Solus, Clear Linux and Windows (Windows Update and winget) |
-| **Vulnerability scan** | Known CVEs in the packages of every Linux server (Debian, Ubuntu, Proxmox, TrueNAS, Raspberry Pi OS, Alpine, Rocky, Alma) via [OSV.dev](https://osv.dev), Docker images via Trivy, pfSense/OPNsense `pkg audit` and FleetPilot itself; severity, fixed version, daily scan and alerts |
-| **VM Controllers** | Proxmox integration with retry/backoff, VM status overview |
-| **Storage Controllers** | TrueNAS and custom storage system management |
-| **Routers & repeaters** | AVM FRITZ!Box and FRITZ!Repeater (incl. Mesh), OpenWrt, OPNsense, pfSense, VyOS, DD-WRT/FreshTomato, MikroTik RouterOS, IPFire, plus availability checks for any repeater or access point: status, interfaces, DHCP clients, update checks, encrypted config backups. See [docs/routers.md](docs/routers.md) |
-| **Disk & SMART** | Format (ext4/XFS/FAT32), SMART tests, block validation, history |
-| **Monitoring** | CheckMK integration and a Prometheus `/metrics` endpoint, both token-authenticated |
-| **Alerts** | Email when a disk is newly flagged by SMART, when updates fail, and scheduled reports |
-| **Backups** | One-click and daily automatic backups of FleetPilot's own data, with verified restore |
-| **User Management** | Multi-user RBAC (Admin / Operator / Viewer), profile management |
-| **Security** | Security center, 2FA (TOTP, WebAuthn, YubiKey), session management, API tokens, tamper-evident audit trail, FIPS and offline modes. See [SECURITY.md](SECURITY.md) |
-| **Plugins** | Extensible addon system with remote plugin repository |
-| **Scheduling** | Automatic updates (daily/weekly/monthly) with email notifications |
-| **i18n** | Interface available in EN, DE, FR, ES, NL |
-| **Accessibility** | WCAG 2.2 AA checked; text size, high contrast, readable font, spacing, reduced motion, and easy language (EN / German Leichte Sprache). See [docs/accessibility.md](docs/accessibility.md) |
-
----
-
-## Security and supply chain
-
-FleetPilot holds SSH keys and admin access to your machines, so the project is built and released with the same care it asks of you. Checked continuously by [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/ChristianHandy/FleetPilot).
-
-| Area | What is in place |
-|---|---|
-| **Code analysis** | CodeQL (security-extended queries) for the Python code and the GitHub workflows, Bandit, a linter, and ~200 tests on Python 3.11–3.13 for every change |
-| **Fuzzing** | The parsers for router, disk and SOAP output are fuzzed with Atheris: ClusterFuzzLite on every pull request, plus a weekly long run |
-| **Dependencies** | Every dependency is locked with hashes (`pip install --require-hashes`) and checked with pip-audit; pull requests that add a vulnerable dependency are blocked (dependency review); Dependabot security updates, and version updates only after a 7-day cooldown |
-| **CI/CD** | Every action pinned to a full commit SHA and only allowed publishers (GitHub, Google ClusterFuzzLite, OpenSSF Scorecard, zizmor), both enforced by repository settings; least-privilege tokens per job; no stored credentials; workflows audited by [zizmor](https://docs.zizmor.sh); pull requests from outside contributors need approval before CI runs |
-| **Branch** | `main` is protected: changes only through pull requests with passing tests and CodeQL, no force-push or deletion, rules apply to admins too |
-| **Releases** | GPG-signed tags; each release carries the source archive, a CycloneDX SBOM, `SHA256SUMS` and Sigstore-signed SLSA build provenance: `gh attestation verify fleetpilot-X.Y.Z.tar.gz --repo ChristianHandy/FleetPilot` |
-| **Secrets** | Secret scanning with push protection; no credentials in the repository |
-| **Reporting** | Private vulnerability reporting, see [SECURITY.md](SECURITY.md) |
-| **The app itself** | Read-only install, unprivileged service user, 2FA and passkeys, audit trail, CVE scan of your servers; see [SECURITY.md](SECURITY.md#security-architecture) |
-
----
-
-## Screenshots
-
-Demo data; every page also has a light theme and works on phones. Try all of it in the **[live demo](https://christianhandy.github.io/FleetPilot/demo/)** (or the lighter [static tour](https://christianhandy.github.io/FleetPilot/tour/)).
+| **Hosts and updates** | Linux (Debian/Ubuntu and derivatives, Fedora/RHEL family, openSUSE, Arch, Alpine and more) and Windows 10/11 and Server 2016–2025 ([details](WINDOWS_SUPPORT.md)) over SSH: updates with live output, schedules and history |
+| **Vulnerability scan** | Known CVEs in server packages ([OSV.dev](https://osv.dev)), Docker images (Trivy) and pfSense/OPNsense, with severity, fixed version and daily alerts |
+| **Disks** | SMART health and tests, formatting, block validation, alerts before a disk dies |
+| **Proxmox, storage, backups** | Proxmox VMs and containers, TrueNAS and Unraid, Proxmox Backup Server, Duplicati, restic, UrBackup and more |
+| **Routers** | FRITZ!Box and Repeater (Mesh), OpenWrt, OPNsense, pfSense, MikroTik, VyOS and more: status, devices, firmware checks, encrypted backups ([details](docs/routers.md)) |
+| **Hardware** | Live CPU, memory and temperatures, fan control, Wake-on-LAN, scheduled shutdowns |
+| **Security** | 2FA (TOTP, passkeys, YubiKey), roles (Admin / Operator / Viewer), sessions, scoped API tokens, tamper-evident audit trail, security center ([SECURITY.md](SECURITY.md)) |
+| **Integrations** | Prometheus `/metrics`, CheckMK, Home Assistant ([component](integrations/home-assistant/README.md)), REST API, [plugins](PLUGIN_REPOSITORY.md), public status page, [Android app (beta)](docs/user-guide.md#android-app-beta) |
+| **For everyone** | English, Deutsch, Français, Español, Nederlands, Italiano; WCAG 2.2 AA, high contrast, easy language ([accessibility](docs/accessibility.md)) |
 
 <table>
 <tr>
@@ -104,145 +60,50 @@ Demo data; every page also has a light theme and works on phones. Try all of it 
 <td width="50%"><b>FRITZ!Box details</b><br><img src="docs/screenshots/router-detail.png" alt="FRITZ!Box detail page with uptime, updates and connected devices"></td>
 <td width="50%"><b>Security center</b><br><img src="docs/screenshots/security.png" alt="Security center checks such as HTTPS, 2FA for admins and backups"></td>
 </tr>
-<tr>
-<td width="50%"><b>Accessibility settings</b><br><img src="docs/screenshots/accessibility.png" alt="Accessibility settings: text size, contrast, readable font, easy language"></td>
-<td width="50%"><b>On a phone</b><br><img src="docs/screenshots/mobile.png" alt="FleetPilot home page on a phone" width="60%"></td>
-</tr>
 </table>
 
 ---
 
 ## Quick Start
 
-### Proxmox VE (one command)
-
-In the **Shell** of your Proxmox node:
+**Proxmox VE**, in the Shell of your node. Creates an unprivileged Debian container with HTTPS and prints the address and admin password:
 
 ```bash
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/proxmox/fleetpilot-lxc.sh)"
 ```
 
-This creates an unprivileged Debian container, installs FleetPilot with HTTPS and prints the address and admin password. Update it later with the same command followed by `-- update <container ID>`.
-
-### Debian, Ubuntu or Raspberry Pi OS
-
-As root:
+**Debian, Ubuntu or Raspberry Pi OS**, as root. Then open `https://<server-ip>` and sign in as `admin` with the password the installer shows:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/install.sh | bash
 ```
 
-Then open `https://<server-ip>`, accept the self-signed certificate once and sign in as `admin` with the password the installer shows.
-
-The **[installation guide](docs/installation.md)** ([Deutsch](docs/de/installation.md)) covers all options, unattended installs, your own certificate, updates, backups, high-security settings and troubleshooting.
-
-### Development
-
-```bash
-git clone https://github.com/ChristianHandy/FleetPilot.git
-```
-
-```bash
-cd FleetPilot && python3 -m venv venv && venv/bin/pip install -r requirements.txt
-```
-
-```bash
-cp .env.example .env && venv/bin/python app.py
-```
-
-This serves `http://localhost:5000` for development only; use one of the installers above for real use.
+Guides: **[installation](docs/installation.md)** (options, your own certificate, updates, backups, troubleshooting) and **[user guide](docs/user-guide.md)**, also in [Deutsch](docs/de/benutzerhandbuch.md) and [简体中文](docs/zh-CN/user-guide.md) ([all guides and PDFs](docs/user-guides/)). Development setup: [CONTRIBUTING.md](CONTRIBUTING.md#building-and-running-from-source).
 
 ---
 
-## Customizable Dashboard
+## Security and supply chain
 
-The dashboard is fully customizable — every user can arrange their own layout:
-
-1. Click **"✏️ Customize"** in the top-right corner
-2. **Drag & drop** widgets into any order
-3. **Hide** widgets with the red ✕ button; restore them from the "Hidden Widgets" panel
-4. Click **"💾 Save Layout"** — persisted per user in the database
-5. **"↺ Reset"** restores the default layout
-
-Available widgets: Quick Stats, Fleet Overview, VM Controllers, Storage Controllers, SMART Health, Environment Breakdown, Tag Cloud, Recent Updates, Navigation Cards, Plugin Widgets.
-
----
-
-## User Guides
-
-| | English | Deutsch |
-|---|---|---|
-| Installation | [docs/installation.md](docs/installation.md) · [PDF](docs/user-guides/FleetPilot_Installation_EN.pdf) | [docs/de/installation.md](docs/de/installation.md) · [PDF](docs/user-guides/FleetPilot_Installation_DE.pdf) |
-| User guide (all features) | [docs/user-guide.md](docs/user-guide.md) · [PDF](docs/user-guides/FleetPilot_User_Guide_EN.pdf) | [docs/de/benutzerhandbuch.md](docs/de/benutzerhandbuch.md) · [PDF](docs/user-guides/FleetPilot_Handbuch_DE.pdf) |
-
-Older guides (version 1.0) in French, Spanish and Italian are in [`docs/user-guides/`](docs/user-guides/).
-
----
-
-## Plugin System
-
-Extend FleetPilot with custom disk tools and integrations via the addon system. Browse plugins under **System → Plugins** and add one by copying its file into `/opt/fleetpilot/addons`, or create your own — see [PLUGIN_REPOSITORY.md](PLUGIN_REPOSITORY.md).
-
----
-
-## Android App (beta)
-
-`FleetPilotAndroid/` is a native Android app (Kotlin, Jetpack Compose) for your phone: dashboard, servers, VMs, hardware monitor and fans, with Wake-on-LAN, shutdown, VM power actions and fan control. It signs in with a personal API token and pins FleetPilot's self-signed certificate after you confirm its fingerprint. Get the signed APK from the [releases](https://github.com/ChristianHandy/FleetPilot/releases); setup is in the [user guide](docs/user-guide.md#android-app-beta).
-
----
-
-## Home Assistant Integration
-
-`integrations/home-assistant/` contains a Home Assistant custom component that shows SMART health for disks on your servers as sensors, binary sensors and self-test buttons. It runs inside Home Assistant on its own and reads the same `smartctl` data as FleetPilot's SMART pages. See [its README](integrations/home-assistant/README.md) for installation.
-
-This component was previously the separate `HAOS_SMART_Monitor` repository. The older standalone `Disk_Tools` app is fully covered by FleetPilot's Disk Tools pages (`/disks`).
+FleetPilot holds the keys to your machines, so it's built and released with care: a read-only install with an unprivileged service user; CodeQL, Bandit, zizmor and about 860 tests on every change; fuzzed parsers; every dependency locked by hash and audited; every action pinned to a commit; GPG-signed tags; releases with an SBOM, checksums and Sigstore-signed build provenance (`gh attestation verify fleetpilot-X.Y.Z.tar.gz --repo ChristianHandy/FleetPilot`). Details and how to report a vulnerability: [SECURITY.md](SECURITY.md).
 
 ---
 
 ## How much of FleetPilot is written by AI?
 
-<img src="https://christianhandy.github.io/FleetPilot/ai-share.svg" alt="Bar chart: share of changed lines per month that were written with AI assistance. The current values are listed at https://christianhandy.github.io/FleetPilot/ai-share.json" width="100%">
+<img src="https://christianhandy.github.io/FleetPilot/ai-share.svg" alt="Chart: bars show the share of changed lines per month written with AI assistance, a line shows the share of all code at each month's end, and a note says whether it is going up or down. Values: https://christianhandy.github.io/FleetPilot/ai-share.json" width="100%">
 
-**Too much, and this number needs to be as low as we can get.** Most of FleetPilot so far was written with AI coding assistants (GitHub Copilot, Manus, Claude). Every change goes through the same tests, CodeQL, fuzzing and review. But software that holds the keys to your servers should be written and reviewed by people, and that's the goal of the [roadmap](ROADMAP.md#project-more-people-less-ai-written-code).
+**Too much, and it needs to go down.** Most of FleetPilot so far was written with AI coding assistants (GitHub Copilot, Manus, Claude). Software that holds the keys to your servers should be written and reviewed by people; that's the goal of the [roadmap](ROADMAP.md#project-more-people-less-ai-written-code).
 
-The chart counts the lines each commit changed, per month, and marks a commit as AI-assisted when its author is a coding agent or its message names an AI co-author. Dependency bots are left out. It's a lower bound: AI help that isn't declared isn't counted. It's rebuilt daily from the git history by [`scripts/ai_share.py`](scripts/ai_share.py).
+The bars count the lines each commit changed per month; the line is the share of all code at each month's end (`git blame`), and the note at the top says whether it is going up or down. A commit counts as AI-assisted when its author is a coding agent or its message names an AI co-author, so undeclared AI help is not counted. Rebuilt daily by [`scripts/ai_share.py`](scripts/ai_share.py).
 
-**In the code as it is today:** the badge at the top shows the share of all current code lines that come from AI-assisted commits (by `git blame`, rebuilt daily, details per area in [ai-codebase.json](https://christianhandy.github.io/FleetPilot/ai-codebase.json)). It drops as people rewrite AI-written code ([#201](https://github.com/ChristianHandy/FleetPilot/issues/201)).
-
-**New code must be AI-free:** every pull request gets the required **AI assistance** check. It fails when AI help is declared, when the added code shows strong AI style signals, or when it contains leftovers that give AI-generated code away (chat text like "Here's the updated code", "rest of the code remains the same", pasted Markdown fences, placeholder secrets, tool signatures, or AI tool files like `CLAUDE.md` or `.cursorrules`). The daily repository scan looks for the same leftovers in all files.
-
-**You can help push it down:** pick a [good first issue](https://github.com/ChristianHandy/FleetPilot/labels/good%20first%20issue), review a pull request, or [translate FleetPilot](https://github.com/ChristianHandy/FleetPilot/labels/translation).
+**New code must be AI-free:** the required **AI assistance** check fails pull requests that declare AI help, show strong AI style signals or contain AI leftovers. **Help push it down:** pick a [good first issue](https://github.com/ChristianHandy/FleetPilot/labels/good%20first%20issue), review a pull request, or rewrite AI-written code ([#201](https://github.com/ChristianHandy/FleetPilot/issues/201)).
 
 ---
 
 ## Contributing
 
-Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
-
-- [CONTRIBUTING.md](CONTRIBUTING.md): how to contribute, the test policy, code review and coding style
-- [Code of conduct](CODE_OF_CONDUCT.md)
-- [Roadmap](ROADMAP.md): what is planned for the next year, and what is not
-- [Governance](GOVERNANCE.md): roles, decisions and continuity
-- [Good first issues](https://github.com/ChristianHandy/FleetPilot/labels/good%20first%20issue): small tasks to start with
-
----
-
-## Support the project
-
-If FleetPilot is useful to you, a ⭐ on GitHub helps other people find it, and helps it reach the 600 stars that [community-scripts.org](https://community-scripts.org) asks for before listing an app. Bug reports and ideas are welcome in [Issues](https://github.com/ChristianHandy/FleetPilot/issues).
-
----
+Testers, translators, reviewers and developers are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) and a [good first issue](https://github.com/ChristianHandy/FleetPilot/labels/good%20first%20issue); see also the [code of conduct](CODE_OF_CONDUCT.md), [roadmap](ROADMAP.md) and [governance](GOVERNANCE.md).
 
 ## License
 
-[GNU General Public License v3.0 or later](LICENSE) (`SPDX-License-Identifier: GPL-3.0-or-later`, stated in every source file): free to use, study, change and share; changed versions you distribute must stay under the GPL.
-
----
-
-<div align="center">
-
-Made with care for the homelab community.
-
-⭐ If FleetPilot is useful to you, consider starring the repository — it helps others find it.
-
-</div>
+[GPL-3.0-or-later](LICENSE): free to use, study, change and share; changed versions you distribute stay under the GPL.
