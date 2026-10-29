@@ -136,6 +136,34 @@ def codebase(ref="HEAD"):
     return result
 
 
+def month_end_commits(ref, months):
+    """{month: the last commit of that month reachable from ``ref``}."""
+    out = {}
+    for month in months:
+        year, mon = int(month[:4]), int(month[5:])
+        after = f"{year + 1}-01-01" if mon == 12 else f"{year}-{mon + 1:02d}-01"
+        sha = subprocess.run(["git", "rev-list", "-1", f"--before={after}", ref], check=True,
+                             capture_output=True, text=True).stdout.strip()
+        if sha:
+            out[month] = sha
+    return out
+
+
+def trend(ref, months):
+    """{month: AI share of the whole code at the end of that month}, by git blame."""
+    return {month: codebase(sha)["share"] for month, sha in month_end_commits(ref, months).items()}
+
+
+def direction(code_trend):
+    """("up" | "down" | "flat", change in percentage points, previous month) for the last two months, or None."""
+    items = list(code_trend.items())
+    if len(items) < 2:
+        return None
+    (prev_month, prev), (_, last) = items[-2], items[-1]
+    change = round(last - prev, 1)
+    return ("up" if change >= 0.5 else "down" if change <= -0.5 else "flat"), change, prev_month
+
+
 def badge(percent):
     """A flat badge "AI-written code | NN %", readable on light and dark backgrounds."""
     label, value = "AI-written code", f"{percent:.0f} %"
@@ -152,8 +180,11 @@ def share(m):
     return round(100 * m["ai"] / m["all"], 1) if m["all"] else 0.0
 
 
-def svg(months):
-    """A bar chart of the monthly AI share; readable on GitHub's light and dark themes."""
+def svg(months, code_trend=None):
+    """Bars: the monthly AI share of changed lines. Line: the AI share of all code at each month's end.
+
+    Readable on GitHub's light and dark themes."""
+    code_trend = code_trend or {}
     items = list(months.items())
     total = {k: sum(m[k] for _, m in items) for k in ("ai", "all")}
     overall = share(total)
@@ -161,16 +192,33 @@ def svg(months):
     plot_h = h - top - bottom
     step = (w - left - 16) / max(len(items), 1)
     bar = min(46, step * 0.62)
-    grey, accent = "#8b949e", "#e5534b"
+    grey, accent, line = "#8b949e", "#e5534b", "#539bf5"
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" width="{w}" height="{h}" role="img" '
            f'aria-labelledby="t d" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif">',
            '<title id="t">Share of FleetPilot code written with AI assistance, per month</title>',
-           '<desc id="d">' + escape("; ".join(f"{k}: {share(m)} % of changed lines" for k, m in items)
-                                    + f". Overall: {overall} %. Goal: as low as possible.") + "</desc>",
+           '<desc id="d">' + escape("; ".join(
+               f"{k}: {share(m)} % of changed lines"
+               + (f", {code_trend[k]} % of all code at month end" if k in code_trend else "") for k, m in items)
+               + f". Overall: {overall} %. Goal: as low as possible.") + "</desc>",
            f'<text x="{left}" y="22" font-size="16" font-weight="700" fill="{grey}">'
-           f'AI-assisted share of changed lines per month</text>',
-           f'<text x="{left}" y="42" font-size="12.5" fill="{grey}">Overall {overall} % · '
-           f'goal: as low as we can get · counts only declared AI help</text>']
+           f'AI-assisted code in FleetPilot</text>',
+           f'<rect x="{left}" y="33" width="11" height="11" rx="2" fill="{accent}"/>'
+           f'<text x="{left + 16}" y="42" font-size="12.5" fill="{grey}">changed lines per month '
+           f'(overall {overall} %)</text>']
+    if code_trend:
+        out.append(f'<line x1="{left + 245}" x2="{left + 263}" y1="38.5" y2="38.5" stroke="{line}" stroke-width="3"/>'
+                   f'<text x="{left + 269}" y="42" font-size="12.5" fill="{grey}">all code at month end</text>')
+    out.append(f'<text x="{w - 10}" y="42" font-size="12.5" text-anchor="end" fill="{grey}">'
+               f'goal: as low as we can get · declared AI help</text>')
+    trend_now = direction(code_trend)
+    if trend_now:
+        way, change, since = trend_now
+        since = datetime.date(int(since[:4]), int(since[5:]), 1).strftime("%b %Y")
+        text, colour = {"up": (f"▲ going up: +{change} points since {since}", accent),
+                        "down": (f"▼ going down: {change} points since {since}", "#3fb950"),
+                        "flat": (f"► unchanged since {since}", grey)}[way]
+        out.append(f'<text x="{w - 10}" y="22" font-size="14" font-weight="700" text-anchor="end" '
+                   f'fill="{colour}">AI share of all code {text}</text>')
     for pct in (0, 25, 50, 75, 100):
         y = top + plot_h * (1 - pct / 100)
         out.append(f'<line x1="{left}" x2="{w - 10}" y1="{y:.1f}" y2="{y:.1f}" stroke="{grey}" stroke-opacity=".3" stroke-width="1"/>')
@@ -188,6 +236,16 @@ def svg(months):
                    f'font-weight="700" text-anchor="middle" fill="{"#ffffff" if inside else grey}">{pct:.0f}%</text>')
         out.append(f'<text x="{x + bar / 2:.1f}" y="{h - bottom + 18}" font-size="11" text-anchor="middle" '
                    f'fill="{grey}">{escape(label)}</text>')
+    points = [(left + step * i + step / 2, top + plot_h * (1 - code_trend[month] / 100), code_trend[month], month)
+              for i, (month, _) in enumerate(items) if month in code_trend]
+    if points:
+        out.append(f'<polyline points="{" ".join(f"{x:.1f},{y:.1f}" for x, y, _, _ in points)}" fill="none" '
+                   f'stroke="{line}" stroke-width="3" stroke-linejoin="round"/>')
+        for x, y, pct, month in points:
+            out.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="4.5" fill="{line}"><title>{escape(month)}: '
+                       f'{pct} % of all code</title></circle>')
+            out.append(f'<text x="{x + 8:.1f}" y="{y - 7:.1f}" font-size="11.5" font-weight="700" fill="{line}">'
+                       f'{pct:.0f}%</text>')
     out.append("</svg>")
     return "\n".join(out) + "\n"
 
@@ -220,12 +278,19 @@ def main(argv=None):
         return 1
     for month, m in months.items():
         print(f"{month}  {share(m):5.1f} % of {m['all']:7d} lines  ({m['ai_commits']}/{m['commits']} commits)")
+    code_trend = trend(args.ref, months)
+    for month, pct in code_trend.items():
+        print(f"{month}  all code at month end: {pct:5.1f} %")
+    if direction(code_trend):
+        way, change, since = direction(code_trend)
+        print(f"AI share of all code is going {way} ({change:+} points since {since})")
     if args.svg:
         with open(args.svg, "w", encoding="utf-8") as fh:
-            fh.write(svg(months))
+            fh.write(svg(months, code_trend))
     if args.json:
         with open(args.json, "w", encoding="utf-8") as fh:
-            json.dump({k: dict(v, share=share(v)) for k, v in months.items()}, fh, indent=2)
+            json.dump({k: dict(v, share=share(v), codebase_share=code_trend.get(k)) for k, v in months.items()},
+                      fh, indent=2)
     return 0
 
 

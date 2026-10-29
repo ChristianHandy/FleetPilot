@@ -4,6 +4,10 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ## [Unreleased]
 
+### Changed
+
+- **AI share chart shows the trend:** a line for the AI share of all code at each month's end (`git blame`) next to the monthly bars, and a note whether it is going up or down; `ai-share.json` gets `codebase_share` per month (`scripts/ai_share.py`). The README is shorter, with the star notice near the top.
+
 ### Added
 
 - **Italian interface** ([#127](https://github.com/ChristianHandy/FleetPilot/issues/127)): choose **IT** in the language menu of the sidebar. All 747 interface strings are translated (`i18n.py`), including 44 that the German table does not have yet.
