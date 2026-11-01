@@ -3,7 +3,7 @@
 """Checks on what a pull request changes, run by tests.yml and pr-check.yml.
 
     python3 scripts/pr_checks.py changed-coverage BASE coverage.json   # changed lines are tested
-    python3 scripts/pr_checks.py changelog BASE HEAD [--labels FILE]   # CHANGELOG.md is updated
+    python3 scripts/pr_checks.py changelog BASE HEAD [--labels FILE] [--author LOGIN]   # CHANGELOG.md is updated
     python3 scripts/pr_checks.py translations BASE HEAD                # no new untranslated text
     python3 scripts/pr_checks.py size BASE HEAD                        # warn on very large changes
 
@@ -22,6 +22,7 @@ MIN_COVERED = 70          # percent of changed executable lines that tests must 
 MIN_CHANGED = 10          # fewer changed executable lines than this: nothing to judge
 LARGE_PR = 800            # changed lines (lock files left out) above which reviews get hard
 NO_CHANGELOG_LABEL = "no changelog"
+NO_CHANGELOG_AUTHORS = {"dependabot[bot]"}   # dependency bumps; releases note the security-relevant ones
 # Changes that users don't notice and that need no changelog entry.
 NO_ENTRY_NEEDED = re.compile(r"^(tests/|test_[^/]*\.py|conftest\.py|docs/|\.github/|demo/|fuzz/|\.clusterfuzzlite/|"
                              r"integrations/home-assistant/tests/)|\.md$|(^|/)requirements[^/]*-lock\.txt$|"
@@ -123,6 +124,9 @@ def cmd_changelog(args):
     if "CHANGELOG.md" in changed:
         summary("## Changelog\n\n`CHANGELOG.md` is updated.")
         return 0
+    if args.author in NO_CHANGELOG_AUTHORS:
+        summary(f"## Changelog\n\nNo entry needed: dependency update by {args.author}.")
+        return 0
     if NO_CHANGELOG_LABEL in labels:
         summary(f"## Changelog\n\nNo entry: the pull request has the label \"{NO_CHANGELOG_LABEL}\".")
         return 0
@@ -192,6 +196,7 @@ def main(argv=None):
         p.add_argument("head")
         if name == "changelog":
             p.add_argument("--labels", help="file with the pull request's labels, one per line")
+            p.add_argument("--author", help="the pull request's author (login)")
     args = parser.parse_args(argv)
     return {"changed-coverage": cmd_changed_coverage, "changelog": cmd_changelog,
             "translations": cmd_translations, "size": cmd_size}[args.command](args)
