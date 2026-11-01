@@ -131,7 +131,7 @@ jobs:
     permissions:
       contents: read
       issues: read            # read the pull request's comments for a maintainer override
-      pull-requests: read
+      pull-requests: read     # read the /allow-ai comments on the pull request
     env:
       BASE_SHA: ${{ github.event.pull_request.base.sha }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
