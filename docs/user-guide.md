@@ -52,7 +52,9 @@ Actions that change security-relevant data (users, tokens, security rules, backu
 
 ### Languages
 
-English, Deutsch, Français, Español and Nederlands. Choose the language at the top right; the choice is saved in your profile.
+English, Deutsch, Français, Español, Italiano and Nederlands.
+
+On a first visit, FleetPilot uses the browser's preferred supported language. A language selected at the top right takes precedence for the current session.
 
 Translation contributors can run `python scripts/missing_translations.py` from a source checkout to list untranslated template strings and counts by language. Use `--lang de` to check one language. The command exits with `0` when complete, `1` when translations are missing and `2` for invalid arguments; it does not start FleetPilot.
 

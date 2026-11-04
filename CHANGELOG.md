@@ -11,6 +11,7 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 ### Changed
 
 - **AI share chart shows the trend:** a line for the AI share of all code at each month's end (`git blame`) next to the monthly bars, and a note whether it is going up or down; `ai-share.json` gets `codebase_share` per month (`scripts/ai_share.py`). The README is shorter, with the star notice near the top.
+- On a first visit, FleetPilot now uses the browser's preferred supported language; an explicit language selection still takes precedence.
 
 ### Added
 
