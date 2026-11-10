@@ -1,17 +1,17 @@
 # SPDX-FileCopyrightText: Copyright the FleetPilot contributors
 # SPDX-License-Identifier: GPL-3.0-or-later
 """
-ssh_helper.py — Secure SSH connection helper for FleetPilot.
+ssh_helper.py - a Secure SSH connection helper for FleetPilot.
 
-All SSH connections in FleetPilot go through this module to ensure
-consistent, secure host-key handling.
+All SSH connections in FleetPilot will go through this module to ensure
+consistent & secure host-key handling.
 
 Security design:
 - Uses a per-application known_hosts file stored in DATA_DIR
-- First connection: host key is recorded (TOFU — Trust On First Use)
+- First connection: host key is recorded (TOFU - Trust On First Use)
 - Subsequent connections: host key is verified against stored key
 - If key changes: connection is rejected and admin is alerted
-- No AutoAddPolicy or WarningPolicy — both accept unknown keys silently
+- No AutoAddPolicy or WarningPolicy - both accept unknown keys silently
 """
 
 import os
@@ -69,7 +69,7 @@ class _TOFUPolicy(paramiko.MissingHostKeyPolicy):
     def missing_host_key(self, client, hostname, key):
         """Called when the host key is not in known_hosts."""
         logger.info(
-            "SSH: First connection to %s — recording host key (TOFU). "
+            "SSH: First connection to %s - recording host key (TOFU). "
             "Key type: %s, fingerprint: %s",
             hostname,
             key.get_name(),
