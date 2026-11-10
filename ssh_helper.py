@@ -164,8 +164,11 @@ def create_client(
         "port": port,
         "username": username,
         "timeout": timeout,
-        # paramiko waits only 15s for the server's banner by default; a busy Windows sshd can take longer.
+        
+        # By default, paramiko waits 15s for the Srv-Banner
+        # [*] a busy Windows sshd can take longer.
         "banner_timeout": max(timeout, 15),
+        
         "auth_timeout": max(timeout, 30),
         "allow_agent": bool(allow_agent),
         "look_for_keys": look_for_keys,
