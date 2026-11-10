@@ -110,6 +110,7 @@ def _new_client(kh_path: str) -> paramiko.SSHClient:
     return client
 
 
+# Create and return a connected, authenticated SSHClient
 def create_client(
     hostname: str,
     port: int = 22,
@@ -151,17 +152,23 @@ def create_client(
     kh_path = known_hosts_path or _get_known_hosts_path()
 
     client = _new_client(kh_path)
-
+    
+    # Determine whether to search default keys if not explicitly provided
+    if look_for_keys is None:
+        look_for_keys = (key_filename is None)
+    else:
+        look_for_keys = bool(look_for_keys)
+    
     connect_kwargs: dict = {
         "hostname": hostname,
         "port": port,
         "username": username,
         "timeout": timeout,
-        # paramiko waits only 15 s for the server's banner by default; a busy Windows sshd can take longer.
+        # paramiko waits only 15s for the server's banner by default; a busy Windows sshd can take longer.
         "banner_timeout": max(timeout, 15),
         "auth_timeout": max(timeout, 30),
         "allow_agent": bool(allow_agent),
-        "look_for_keys": (key_filename is None) if look_for_keys is None else bool(look_for_keys),
+        "look_for_keys": look_for_keys,
     }
     if password:
         connect_kwargs["password"] = password
