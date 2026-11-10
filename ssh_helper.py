@@ -1,17 +1,17 @@
 # SPDX-FileCopyrightText: Copyright the FleetPilot contributors
 # SPDX-License-Identifier: GPL-3.0-or-later
 """
-ssh_helper.py — Secure SSH connection helper for FleetPilot.
+ssh_helper.py - a Secure SSH connection helper for FleetPilot.
 
-All SSH connections in FleetPilot go through this module to ensure
-consistent, secure host-key handling.
+All SSH connections in FleetPilot will go through this module to ensure
+consistent & secure host-key handling.
 
 Security design:
 - Uses a per-application known_hosts file stored in DATA_DIR
-- First connection: host key is recorded (TOFU — Trust On First Use)
+- First connection: host key is recorded (TOFU - Trust On First Use)
 - Subsequent connections: host key is verified against stored key
 - If key changes: connection is rejected and admin is alerted
-- No AutoAddPolicy or WarningPolicy — both accept unknown keys silently
+- No AutoAddPolicy or WarningPolicy - both accept unknown keys silently
 """
 
 import os
@@ -69,7 +69,7 @@ class _TOFUPolicy(paramiko.MissingHostKeyPolicy):
     def missing_host_key(self, client, hostname, key):
         """Called when the host key is not in known_hosts."""
         logger.info(
-            "SSH: First connection to %s — recording host key (TOFU). "
+            "SSH: First connection to %s - recording host key (TOFU). "
             "Key type: %s, fingerprint: %s",
             hostname,
             key.get_name(),
@@ -110,6 +110,7 @@ def _new_client(kh_path: str) -> paramiko.SSHClient:
     return client
 
 
+# Create and return a connected, authenticated SSHClient
 def create_client(
     hostname: str,
     port: int = 22,
@@ -151,17 +152,26 @@ def create_client(
     kh_path = known_hosts_path or _get_known_hosts_path()
 
     client = _new_client(kh_path)
-
+    
+    # Determine whether to search default keys if not explicitly provided
+    if look_for_keys is None:
+        look_for_keys = (key_filename is None)
+    else:
+        look_for_keys = bool(look_for_keys)
+    
     connect_kwargs: dict = {
         "hostname": hostname,
         "port": port,
         "username": username,
         "timeout": timeout,
-        # paramiko waits only 15 s for the server's banner by default; a busy Windows sshd can take longer.
+        
+        # By default, paramiko waits 15s for the Srv-Banner
+        # [*] a busy Windows sshd can take longer.
         "banner_timeout": max(timeout, 15),
+        
         "auth_timeout": max(timeout, 30),
         "allow_agent": bool(allow_agent),
-        "look_for_keys": (key_filename is None) if look_for_keys is None else bool(look_for_keys),
+        "look_for_keys": look_for_keys,
     }
     if password:
         connect_kwargs["password"] = password
@@ -201,11 +211,7 @@ def create_client(
     return client
 
 
-def exec_command(
-    client: paramiko.SSHClient,
-    command: str,
-    timeout: float = 30.0,
-) -> tuple[int, str, str]:
+def exec_command(client: paramiko.SSHClient, command: str, timeout: float = 30.0) -> tuple[int, str, str]:
     """Execute a command on the remote host.
 
     Args:
