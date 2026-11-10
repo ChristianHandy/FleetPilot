@@ -211,11 +211,7 @@ def create_client(
     return client
 
 
-def exec_command(
-    client: paramiko.SSHClient,
-    command: str,
-    timeout: float = 30.0,
-) -> tuple[int, str, str]:
+def exec_command(client: paramiko.SSHClient, command: str, timeout: float = 30.0) -> tuple[int, str, str]:
     """Execute a command on the remote host.
 
     Args:
