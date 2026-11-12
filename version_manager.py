@@ -15,6 +15,13 @@ from addon_loader import fire_app_hook
 from datetime import datetime, timedelta
 from fleetpilot_version import TAG
 
+try:
+    from packaging.version import InvalidVersion as _InvalidVersion
+    from packaging.version import Version as _packaging_version
+except ImportError:  # packaging is not a runtime dependency of FleetPilot
+    _packaging_version = None
+    _InvalidVersion = ValueError
+
 # Get logger for this module
 logger = logging.getLogger(__name__)
 
@@ -29,6 +36,49 @@ GITHUB_API_BASE = "https://api.github.com"
 def get_current_version() -> str:
     """Return the authoritative semantic FleetPilot release version."""
     return TAG
+
+
+_PRERELEASE_RANKS = {"a": 0, "alpha": 0, "b": 1, "beta": 1, "c": 2, "rc": 2,
+                     "pre": 2, "preview": 2}
+
+
+def _version_key(text):
+    """Sort key for a dotted version with an optional pre-release suffix.
+
+    Fallback for environments without `packaging`. A final release sorts
+    after its own pre-releases: 1.8.0-beta.2 < 1.8.0 < 1.8.1.
+    """
+    match = re.match(r"^(\d+(?:\.\d+)*)(?:[-.]?([a-zA-Z]+)[-.]?(\d+)?)?$", text)
+    if not match:
+        return None
+    numbers = tuple(int(part) for part in match.group(1).split("."))
+    numbers += (0,) * max(0, 4 - len(numbers))
+    label = (match.group(2) or "").lower()
+    if not label:
+        return numbers, 3, 0
+    return numbers, _PRERELEASE_RANKS.get(label, 2), int(match.group(3) or 0)
+
+
+def _is_newer_version(candidate, current) -> bool:
+    """True when `candidate` (a release tag or version) is newer than `current`.
+
+    Both may carry a leading "v" ("v1.8.0"). Anything unparsable is not an
+    update.
+    """
+    candidate = (candidate or "").strip().lstrip("vV")
+    current = (current or "").strip().lstrip("vV")
+    if not candidate or not current:
+        return False
+    if _packaging_version is not None:
+        try:
+            return _packaging_version(candidate) > _packaging_version(current)
+        except _InvalidVersion:
+            return False
+    candidate_key = _version_key(candidate)
+    current_key = _version_key(current)
+    if candidate_key is None or current_key is None:
+        return False
+    return candidate_key > current_key
 
 
 def load_version_data():
@@ -168,16 +218,21 @@ def check_for_updates():
         
         if response.status_code == 200:
             release = response.json()
-            latest_release_sha = release.get("target_commitish", "")
-            
-            # Check if release is newer than current
-            if latest_release_sha and current_sha and latest_release_sha != current_sha:
+            tag_name = release.get("tag_name", "")
+
+            # Compare versions, not commits: target_commitish is the branch
+            # the release targets ("main"), never a commit SHA, so comparing
+            # it with the running commit reported an update on every check.
+            if _is_newer_version(tag_name, get_current_version()):
                 data["update_available"] = True
                 data["update_type"] = "release"
-                data["latest_version"] = release.get("tag_name", "Unknown")
+                data["latest_version"] = tag_name
                 data["update_url"] = release.get("html_url")
                 data["update_description"] = release.get("name", "New release available")
-                data["notification_dismissed"] = False
+                if previous_version != tag_name:
+                    # A genuinely new version re-arms the banner; the same
+                    # version keeps the user's dismissal.
+                    data["notification_dismissed"] = False
                 save_version_data(data)
                 _notify_new_version(data, previous_version)
                 return data
@@ -197,7 +252,8 @@ def check_for_updates():
                 data["update_url"] = commit.get("html_url")
                 commit_msg = commit.get("commit", {}).get("message", "").split("\n")[0]
                 data["update_description"] = f"New commit: {commit_msg}"
-                data["notification_dismissed"] = False
+                if previous_version != data["latest_version"]:
+                    data["notification_dismissed"] = False
                 save_version_data(data)
                 _notify_new_version(data, previous_version)
                 return data
