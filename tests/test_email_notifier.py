@@ -226,3 +226,130 @@ def test_helper_notifications_use_send_email(monkeypatch):
     assert len(events) == 3
     assert all(e.kind == "SMTP_SSL" and e.closed for e in events)
 
+
+def _plain_body(msg):
+    for part in msg.walk():
+        if part.get_content_type() == "text/plain":
+            payload = part.get_payload(decode=True)
+            return payload.decode() if payload is not None else ""
+    raise AssertionError("no text/plain part in message")
+
+
+def test_send_email_disabled_returns_exact_message(monkeypatch):
+    events, FakeSMTP, FakeSMTP_SSL = _make_recorder()
+    monkeypatch.setattr(smtplib, "SMTP", FakeSMTP)
+    monkeypatch.setattr(smtplib, "SMTP_SSL", FakeSMTP_SSL)
+    _patch_settings(monkeypatch, email_enabled=False)
+
+    assert email_notifier.send_email("Subj", "Body") == (
+        False,
+        "Email notifications are disabled",
+    )
+    assert events == []
+
+
+def test_send_email_missing_recipients_returns_incomplete_message(monkeypatch):
+    events, FakeSMTP, FakeSMTP_SSL = _make_recorder()
+    monkeypatch.setattr(smtplib, "SMTP", FakeSMTP)
+    monkeypatch.setattr(smtplib, "SMTP_SSL", FakeSMTP_SSL)
+    _patch_settings(monkeypatch, recipient_emails=[])
+
+    assert email_notifier.send_email("Subj", "Body") == (
+        False,
+        "Email configuration incomplete: recipient_emails not set",
+    )
+    assert events == []
+
+
+def test_send_email_without_credentials_skips_login(monkeypatch):
+    events, FakeSMTP, FakeSMTP_SSL = _make_recorder()
+    monkeypatch.setattr(smtplib, "SMTP", FakeSMTP)
+    monkeypatch.setattr(smtplib, "SMTP_SSL", FakeSMTP_SSL)
+    _patch_settings(monkeypatch, smtp_username="", smtp_password="")
+
+    ok, err = email_notifier.send_email("Subj", "Body")
+
+    assert ok is True and err is None
+    assert len(events) == 1
+    assert events[0].logged_in is None
+    assert len(events[0].sent_messages) == 1
+
+
+def test_send_email_authentication_error_returns_auth_message(monkeypatch):
+    events, FakeSMTP, FakeSMTP_SSL = _make_recorder(
+        raise_on_send=smtplib.SMTPAuthenticationError(535, b"authentication failed")
+    )
+    monkeypatch.setattr(smtplib, "SMTP", FakeSMTP)
+    monkeypatch.setattr(smtplib, "SMTP_SSL", FakeSMTP_SSL)
+    _patch_settings(monkeypatch)
+
+    assert email_notifier.send_email("Subj", "Body") == (
+        False,
+        "SMTP authentication failed. Check username and password.",
+    )
+    assert events[0].closed is True
+
+
+def test_update_report_disabled_returns_exact_message(monkeypatch):
+    events, FakeSMTP, FakeSMTP_SSL = _make_recorder()
+    monkeypatch.setattr(smtplib, "SMTP", FakeSMTP)
+    monkeypatch.setattr(smtplib, "SMTP_SSL", FakeSMTP_SSL)
+    _patch_settings(monkeypatch, report_enabled=False)
+
+    assert email_notifier.send_update_report({"node-1": True}, {}) == (
+        False,
+        "Scheduled reports are disabled",
+    )
+    assert events == []
+
+
+def test_update_report_email_mentions_the_hosts(monkeypatch):
+    events, FakeSMTP, FakeSMTP_SSL = _make_recorder()
+    monkeypatch.setattr(smtplib, "SMTP", FakeSMTP)
+    monkeypatch.setattr(smtplib, "SMTP_SSL", FakeSMTP_SSL)
+    _patch_settings(monkeypatch, report_enabled=True)
+
+    ok, err = email_notifier.send_update_report(
+        {"node-1": True, "node-2": False},
+        {"node-1": ["2026-10-17 ok"], "node-2": []},
+    )
+
+    assert ok is True and err is None
+    assert len(events) == 1
+    msg = events[0].sent_messages[0]
+    assert "System Report" in msg["Subject"]
+    body = _plain_body(msg)
+    assert "node-1: ONLINE" in body
+    assert "node-2: OFFLINE" in body
+    assert "2026-10-17 ok" in body
+
+
+def test_error_notification_disabled_returns_exact_message(monkeypatch):
+    events, FakeSMTP, FakeSMTP_SSL = _make_recorder()
+    monkeypatch.setattr(smtplib, "SMTP", FakeSMTP)
+    monkeypatch.setattr(smtplib, "SMTP_SSL", FakeSMTP_SSL)
+    _patch_settings(monkeypatch, error_notifications_enabled=False)
+
+    assert email_notifier.send_error_notification("node-1", "apt failed") == (
+        False,
+        "Error notifications are disabled",
+    )
+    assert events == []
+
+
+def test_error_notification_email_mentions_host_and_error(monkeypatch):
+    events, FakeSMTP, FakeSMTP_SSL = _make_recorder()
+    monkeypatch.setattr(smtplib, "SMTP", FakeSMTP)
+    monkeypatch.setattr(smtplib, "SMTP_SSL", FakeSMTP_SSL)
+    _patch_settings(monkeypatch, error_notifications_enabled=True)
+
+    ok, err = email_notifier.send_error_notification("node-9", "disk full")
+
+    assert ok is True and err is None
+    assert len(events) == 1
+    msg = events[0].sent_messages[0]
+    assert "node-9" in msg["Subject"]
+    body = _plain_body(msg)
+    assert "Host: node-9" in body
+    assert "disk full" in body
+
