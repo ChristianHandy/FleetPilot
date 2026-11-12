@@ -31,7 +31,7 @@ Older releases still work as far as their tools allow. FleetPilot marks them **S
 - Windows 11 24H2 Home and Pro, Windows 10 22H2 without ESU and Windows 10 LTSB 2016 ended in October 2025 or October 2026.
 - Windows Server 23H2 (Annual Channel) ended in October 2025.
 
-The dates come from Microsoft's lifecycle pages and are kept in [`windows_host.py`](windows_host.py).
+The dates come from Microsoft's lifecycle pages and are kept in [`windows_host.py`](../../windows_host.py).
 
 ## What works
 
