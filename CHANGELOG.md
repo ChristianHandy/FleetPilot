@@ -94,7 +94,7 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 ### Added
 
 - **Translation report:** `python scripts/missing_translations.py` lists untranslated literal template strings and per-language totals without starting the application; `--lang` checks one language.
-- **Windows PCs and servers, every release Microsoft still supports**, all over OpenSSH (see [WINDOWS_SUPPORT.md](WINDOWS_SUPPORT.md)):
+- **Windows PCs and servers, every release Microsoft still supports**, all over OpenSSH (see [WINDOWS_SUPPORT.md](docs/dev/WINDOWS_SUPPORT.md)):
   - covers Windows 11 up to 26H2, Windows 10/11 LTSC 2019/2021/2024 (including IoT and evaluation editions) and Windows Server 2016, 2019, 2022 and 2025 (Desktop or Core), in any display language
   - **Detect OS** names the exact release and edition and shows Microsoft's support end date; the host list warns about ended support
   - updates use the built-in Windows Update Agent, run once as SYSTEM through a scheduled task (Windows does not let an SSH session install updates), never restart the machine, and work with WSUS, LTSC and Server Core; a full update also runs `winget upgrade` where winget exists
@@ -131,7 +131,7 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 ### Fixed
 
 - **SSH connections leaked** when a command or read timed out: the HW monitor's polling, the hardware overview, the live host stats, shutdown and the remote-disk plugin closed the connection only on success, and a failed connect left its socket open. On a slow Windows host FleetPilot held 193 connections until Windows' sshd refused every new one ("Exceeded MaxStartups"). Every path now closes the connection.
-- An SSH server that closes the connection before greeting is reported as overloaded, out of memory or with too many logins waiting, not as paramiko's "Error reading SSH protocol banner". [WINDOWS_SUPPORT.md](WINDOWS_SUPPORT.md) explains how to recognise and clear an sshd that has too many connections waiting. A Windows Update that Windows ends by restarting (task result 0x41306) now says so.
+- An SSH server that closes the connection before greeting is reported as overloaded, out of memory or with too many logins waiting, not as paramiko's "Error reading SSH protocol banner". [WINDOWS_SUPPORT.md](docs/dev/WINDOWS_SUPPORT.md) explains how to recognise and clear an sshd that has too many connections waiting. A Windows Update that Windows ends by restarting (task result 0x41306) now says so.
 - Windows Update no longer stops with "The process cannot access the file … update.log" when the log is being written while FleetPilot reads it (seen after an hour of installing on Server 2025).
 - SSH connections send keepalives every 30 seconds, so a long Windows Update whose host stops answering (a firewall that starts dropping packets) ends with an error instead of waiting forever.
 - Windows hosts were detected as Linux, could not be shut down (FleetPilot sent the Linux `shutdown -h now`), and updates failed when the SSH shell was PowerShell or the PowerShell Gallery was unreachable.
