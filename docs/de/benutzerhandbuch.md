@@ -54,7 +54,9 @@ Aktionen, die sicherheitsrelevante Daten ändern (Benutzer, Tokens, Sicherheitsr
 
 ### Sprachen
 
-English, Deutsch, Français, Español und Nederlands. Die Sprache wählen Sie oben rechts; sie wird in Ihrem Profil gespeichert.
+English, Deutsch, Français, Español, Italiano und Nederlands.
+
+Beim ersten Besuch verwendet FleetPilot die bevorzugte unterstützte Sprache des Browsers. Eine oben rechts ausgewählte Sprache hat für die aktuelle Sitzung Vorrang.
 
 Wer Übersetzungen ergänzt, kann im Quellverzeichnis `python scripts/missing_translations.py` ausführen. Der Befehl listet fehlende Vorlagenübersetzungen und deren Anzahl pro Sprache auf. `--lang de` prüft nur Deutsch. Der Rückgabewert ist `0` bei vollständiger Übersetzung, `1` bei fehlenden Übersetzungen und `2` bei ungültigen Argumenten; FleetPilot wird dabei nicht gestartet.
 

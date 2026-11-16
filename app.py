@@ -515,12 +515,26 @@ def inject_user_context():
         localhost_identifiers=LOCALHOST_IDENTIFIERS
     )
 
+def _current_language():
+    lang = session.get("lang")
+
+    if lang:
+        return lang
+
+    lang = request.accept_languages.best_match(SUPPORTED_LANGUAGES)
+
+    if lang:
+        return lang
+
+    return "en"
+
+
 # Accessibility preferences and easy-language helpers for every template
 @app.context_processor
 def inject_accessibility():
     user_id = session.get("user_id")
     prefs = user_management.get_accessibility(user_id) if user_id else dict(user_management.DEFAULT_ACCESSIBILITY)
-    lang = session.get('lang', 'en')
+    lang = _current_language()
     easy = prefs.get('easy_language') == 'on'
     return dict(
         a11y=prefs,
@@ -542,7 +556,7 @@ def inject_login_banner():
 @app.context_processor
 def inject_ui_context():
     """Inject current theme and language into all templates."""
-    lang = session.get('lang', 'en')
+    lang = _current_language()
     theme = session.get('theme', 'dark')
     translator = get_translator(lang)
     return dict(

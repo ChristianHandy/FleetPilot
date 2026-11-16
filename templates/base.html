@@ -318,7 +318,7 @@
 
         <select class="lang-select" title="{{ _('Language') }}" aria-label="{{ _('Language') }}"
                 onchange="window.location='/set_language?lang='+this.value+'&next='+encodeURIComponent(window.location.pathname+window.location.search)">
-          {% for code in ['en', 'de', 'es', 'fr', 'nl'] %}
+          {% for code in ['en', 'de', 'es', 'fr', 'nl', 'it'] %}
           <option value="{{ code }}" {% if current_lang == code %}selected{% endif %}>{{ code|upper }}</option>
           {% endfor %}
         </select>

@@ -76,3 +76,37 @@ def test_badge_shows_the_rounded_share(ai_share):
     svg = ai_share.badge(79.6)
     assert 'aria-label="AI-written code: 80 %"' in svg and svg.startswith("<svg") and "#d64545" in svg
     assert "#2f9e44" in ai_share.badge(10)
+
+
+def test_trend_measures_all_code_at_each_month_end(tmp_path, ai_share, monkeypatch):
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    ai = "with help\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+    _commit(tmp_path, "Ann <ann@example.org>", ai, {"app.py": 30}, "2026-03-10T12:00:00+00:00")
+    _commit(tmp_path, "Ann <ann@example.org>", "by hand", {"tool.py": 10}, "2026-03-20T12:00:00+00:00")
+    (tmp_path / "app.py").write_text("y\n" * 30)   # every AI-written line rewritten by hand
+    _commit(tmp_path, "Ann <ann@example.org>", "rewritten by hand", {}, "2026-04-05T12:00:00+00:00")
+    monkeypatch.chdir(tmp_path)
+    months = ai_share.monthly("HEAD")
+    assert list(months) == ["2026-03", "2026-04"]
+    assert ai_share.trend("HEAD", months) == {"2026-03": 75.0, "2026-04": 0.0}
+
+
+def test_chart_draws_the_trend_line_only_when_given(ai_share):
+    months = {"2026-03": {"ai": 3, "all": 4, "ai_commits": 1, "commits": 2},
+              "2026-04": {"ai": 0, "all": 30, "ai_commits": 0, "commits": 1}}
+    plain = ai_share.svg(months)
+    assert "<polyline" not in plain and "all code at month end" not in plain
+    chart = ai_share.svg(months, {"2026-03": 75.0, "2026-04": 0.0})
+    assert chart.count("<circle") == 2 and "<polyline" in chart and "all code at month end" in chart
+    assert "2026-03: 75.0 % of all code" in chart and "2026-03: 75.0 % of changed lines, 75.0 % of all code" in chart
+
+
+def test_direction_says_whether_the_ai_share_goes_up_or_down(ai_share):
+    assert ai_share.direction({"2026-08": 55.6, "2026-10": 78.4}) == ("up", 22.8, "2026-08")
+    assert ai_share.direction({"2026-09": 60.0, "2026-10": 52.0}) == ("down", -8.0, "2026-09")
+    assert ai_share.direction({"2026-09": 60.0, "2026-10": 60.2})[0] == "flat"
+    assert ai_share.direction({"2026-10": 60.0}) is None
+    months = {"2026-09": {"ai": 6, "all": 10, "ai_commits": 1, "commits": 1},
+              "2026-10": {"ai": 1, "all": 10, "ai_commits": 1, "commits": 1}}
+    assert "▼ going down: -8.0 points since Sep 2026" in ai_share.svg(months, {"2026-09": 60.0, "2026-10": 52.0})
+    assert "going" not in ai_share.svg(months)

@@ -79,6 +79,17 @@ def test_changelog_required_only_for_user_visible_changes(tmp_path, monkeypatch)
     assert checks.main(["changelog", "HEAD~1", "HEAD"]) == 0
 
 
+def test_dependabot_needs_no_changelog_entry(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    monkeypatch.chdir(tmp_path)
+    _repo(tmp_path, {"requirements.txt": "a\n"}, {"requirements.txt": "b\n"})
+    assert checks.main(["changelog", "HEAD~1", "HEAD"]) == 1
+    assert checks.main(["changelog", "HEAD~1", "HEAD", "--author", "someone"]) == 1
+    capsys.readouterr()
+    assert checks.main(["changelog", "HEAD~1", "HEAD", "--author", "dependabot[bot]"]) == 0
+    assert "dependency update by dependabot[bot]" in capsys.readouterr().out
+
+
 def test_size_warns_but_never_fails(tmp_path, monkeypatch, capsys):
     monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
     monkeypatch.chdir(tmp_path)

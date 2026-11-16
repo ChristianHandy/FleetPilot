@@ -4,6 +4,19 @@ All notable changes to FleetPilot are recorded here. Version numbers follow [sem
 
 ## [Unreleased]
 
+### Security
+
+- **pyasn1 updated to 0.6.5** (CVE-2026-119194 to CVE-2026-119197 in 0.6.4, found by `pip-audit`), in `requirements-lock.txt`.
+
+### Changed
+
+- **AI share chart shows the trend:** a line for the AI share of all code at each month's end (`git blame`) next to the monthly bars, and a note whether it is going up or down; `ai-share.json` gets `codebase_share` per month (`scripts/ai_share.py`). The README is shorter, with the star notice near the top.
+- On a first visit, FleetPilot now uses the browser's preferred supported language; an explicit language selection still takes precedence.
+
+### Added
+
+- **Italian interface** ([#127](https://github.com/ChristianHandy/FleetPilot/issues/127)): choose **IT** in the language menu of the sidebar. All 747 interface strings are translated (`i18n.py`), including 44 that the German table does not have yet.
+
 ## [1.8.1] — 2026-10-24
 
 ### Security

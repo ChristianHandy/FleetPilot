@@ -106,7 +106,8 @@ jobs:
         if: github.event_name == 'pull_request' && (success() || failure())
         run: |
           jq -r '.pull_request.labels[].name' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/labels.txt"
-          python3 scripts/pr_checks.py changelog "$BASE_SHA" "$HEAD_SHA" --labels "$RUNNER_TEMP/labels.txt"
+          python3 scripts/pr_checks.py changelog "$BASE_SHA" "$HEAD_SHA" --labels "$RUNNER_TEMP/labels.txt" \
+            --author "$(jq -r '.pull_request.user.login' "$GITHUB_EVENT_PATH")"
 
       - name: No new untranslated German text
         if: github.event_name == 'pull_request' && (success() || failure())
@@ -130,7 +131,7 @@ jobs:
     permissions:
       contents: read
       issues: read            # read the pull request's comments for a maintainer override
-      pull-requests: read
+      pull-requests: read     # read the /allow-ai comments on the pull request
     env:
       BASE_SHA: ${{ github.event.pull_request.base.sha }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
