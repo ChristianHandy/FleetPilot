@@ -743,7 +743,7 @@ TRANSLATIONS = {
         'Used for automatic IP change detection on DHCP hosts.': 'Används för automatisk identifiering av IP-ändringar på DHCP-värdar.',
         'Used once to copy the SSH key. Not stored anywhere.': 'Används en gång för att kopiera SSH-nyckeln. Lagras inte någonstans.',
         'role to manage hosts.': 'roll för att hantera värdar.',
-    }
+    },
 
     
     "de": {
