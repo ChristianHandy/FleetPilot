@@ -7,7 +7,7 @@ FleetPilot is a single-maintainer open source project. This document says who de
 | Role | Who | Responsibilities |
 |---|---|---|
 | **Maintainer** | [@ChristianHandy](https://github.com/ChristianHandy) | Sets the direction and the [roadmap](ROADMAP.md), reviews pull requests against the [review standards](CONTRIBUTING.md#code-review) and merges them, publishes releases, answers issues and security reports, enforces the code of conduct, manages the repository settings and secrets |
-| **Second maintainer** | [@loneicewolf](https://github.com/loneicewolf) (since November 2026) | Reviews pull requests and helps in issues, as available; Triage role on the repository (labels, closing issues, review requests). Write access follows the rules under *Granting escalated permissions* |
+| **Second maintainer** | [@loneicewolf](https://github.com/loneicewolf) (approved November 2026) | Reviews pull requests and helps in issues, as available. No repository access yet, by their own choice: they join the organization once they're sure about the three months below. Access then follows *Granting escalated permissions* |
 | **Contributor** | Anyone who opens an issue, discussion or pull request | Follows [CONTRIBUTING.md](CONTRIBUTING.md) and the [code of conduct](CODE_OF_CONDUCT.md), signs off every commit (DCO), adds tests with new functionality |
 | **Security contact** | the maintainer | Receives private vulnerability reports and code of conduct reports, answers within 48 hours, coordinates the fix and the advisory (see [SECURITY.md](SECURITY.md)) |
 | **Automation** | GitHub Actions, Dependabot | Tests, analysis and release builds with least-privilege tokens; dependency update pull requests. Automation never merges and never holds long-lived secrets |
@@ -22,7 +22,6 @@ AI coding assistants (Claude) help write code and documentation. Their changes g
 | Release signing key (OpenPGP `09D7 7410 5F9A A1DE 6B12 6AD1 F73D EF20 4C54 E71D`, signs tags) | @ChristianHandy |
 | Release workflow (Sigstore keyless signing of build provenance) | GitHub Actions, only from version tags on this repository; tag creation is limited to the maintainer |
 | GitHub Pages site and repository secrets (`SCORECARD_TOKEN`, optional) | @ChristianHandy |
-| Repository Triage role (labels, issues, review requests; no push, no secrets) | @ChristianHandy, @loneicewolf |
 | Private vulnerability reports (GitHub security advisories) | @ChristianHandy |
 | community-scripts.org submission (DevScripts) | @ChristianHandy |
 
