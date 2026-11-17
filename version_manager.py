@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 VERSION_CHECK_FILE = os.path.join(
     os.environ.get("FLEETPILOT_DATA_DIR") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "data"),
     "version_check.json")
-GITHUB_REPO = "ChristianHandy/fleetpilot"
+GITHUB_REPO = "fleetpilot-dev/FleetPilot"
 GITHUB_API_BASE = "https://api.github.com"
 
 

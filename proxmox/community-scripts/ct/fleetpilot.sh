@@ -5,7 +5,7 @@ source "$_cs_boot" 2>/dev/null || source <(curl -fsSL "${COMMUNITY_SCRIPTS_CORE_
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: ChristianHandy
 # License: MIT | https://github.com/community-scripts/DevScripts/raw/main/LICENSE
-# Source: https://github.com/ChristianHandy/FleetPilot
+# Source: https://github.com/fleetpilot-dev/FleetPilot
 
 APP="FleetPilot"
 var_tags="${var_tags:-monitoring;infrastructure}"
@@ -32,14 +32,14 @@ function update_script() {
     exit
   fi
 
-  if check_for_gh_release "fleetpilot" "ChristianHandy/FleetPilot"; then
+  if check_for_gh_release "fleetpilot" "fleetpilot-dev/FleetPilot"; then
     msg_info "Stopping FleetPilot"
     systemctl stop fleetpilot
     msg_ok "Stopped FleetPilot"
 
     create_backup /opt/fleetpilot/.env
 
-    CLEAN_INSTALL=1 CLEAN_INSTALL_KEEP="data logs venv" fetch_and_deploy_gh_release "fleetpilot" "ChristianHandy/FleetPilot" "tarball"
+    CLEAN_INSTALL=1 CLEAN_INSTALL_KEEP="data logs venv" fetch_and_deploy_gh_release "fleetpilot" "fleetpilot-dev/FleetPilot" "tarball"
 
     restore_backup
     PYTHON_VERSION="3.13" setup_uv

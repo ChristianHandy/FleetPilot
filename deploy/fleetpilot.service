@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 [Unit]
 Description=FleetPilot infrastructure operations platform
-Documentation=https://github.com/ChristianHandy/FleetPilot
+Documentation=https://github.com/fleetpilot-dev/FleetPilot
 Wants=network-online.target
 After=network-online.target
 

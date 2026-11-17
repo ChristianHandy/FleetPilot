@@ -384,7 +384,7 @@ Nützliche Endpunkte (alle JSON): `/api/me`, `/api/hosts`, `/api/vms`, `/api/sma
 
 ### Android-App (Beta)
 
-Die FleetPilot-App für Android 8.0 und neuer zeigt Dashboard, Server, virtuelle Maschinen, den HW-Monitor und Lüfter und kann Server wecken und herunterfahren, VMs starten und stoppen und Lüfter einstellen. Laden Sie die APK unter [Releases](https://github.com/ChristianHandy/FleetPilot/releases) herunter (*Android app*) und installieren Sie sie; Android fragt, ob der Browser oder Dateimanager Apps installieren darf.
+Die FleetPilot-App für Android 8.0 und neuer zeigt Dashboard, Server, virtuelle Maschinen, den HW-Monitor und Lüfter und kann Server wecken und herunterfahren, VMs starten und stoppen und Lüfter einstellen. Laden Sie die APK unter [Releases](https://github.com/fleetpilot-dev/FleetPilot/releases) herunter (*Android app*) und installieren Sie sie; Android fragt, ob der Browser oder Dateimanager Apps installieren darf.
 
 1. Erstellen Sie wie oben ein API-Token. Ein *read-only*-Token zeigt nur an; ein *read/write*-Token erlaubt zusätzlich, was Ihre Rolle darf (Operatoren: wecken, herunterfahren, Lüfter; Admins: auch VMs).
 2. Öffnen Sie die App, geben Sie die FleetPilot-Adresse (zum Beispiel `https://192.168.1.62`) und das Token ein.

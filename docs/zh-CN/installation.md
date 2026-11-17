@@ -45,7 +45,7 @@ FleetPilot 通过 SSH 管理其他机器，因此不需要运行在被管理的�
 打开 Proxmox 节点的 **Shell**（Web 界面 → 节点 → *Shell*），然后运行：
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/proxmox/fleetpilot-lxc.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/fleetpilot-dev/FleetPilot/main/proxmox/fleetpilot-lxc.sh)"
 ```
 
 脚本只问一个问题：
@@ -79,7 +79,7 @@ pct exec 114 -- cat /root/fleetpilot-credentials.txt
 
 ```bash
 CT_ID=150 CT_HOSTNAME=fleetpilot CT_RAM=4096 CT_IP=192.168.1.50/24 CT_GW=192.168.1.1 FP_DEFAULTS=1 \
-  bash -c "$(curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/proxmox/fleetpilot-lxc.sh)"
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/fleetpilot-dev/FleetPilot/main/proxmox/fleetpilot-lxc.sh)"
 ```
 
 | 变量 | 默认值 | 含义 |
@@ -105,7 +105,7 @@ CT_ID=150 CT_HOSTNAME=fleetpilot CT_RAM=4096 CT_IP=192.168.1.50/24 CT_GW=192.168
 ### 更新容器
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/proxmox/fleetpilot-lxc.sh)" -- update 114
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/fleetpilot-dev/FleetPilot/main/proxmox/fleetpilot-lxc.sh)" -- update 114
 ```
 
 把 `114` 换成您的容器 ID。数据和设置会保留。
@@ -117,13 +117,13 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilo
 在将运行 FleetPilot 的机器上以 root 身份执行：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/fleetpilot-dev/FleetPilot/main/install.sh | bash
 ```
 
 或者从仓库副本安装：
 
 ```bash
-git clone https://github.com/ChristianHandy/FleetPilot.git
+git clone https://github.com/fleetpilot-dev/FleetPilot.git
 ```
 
 ```bash
@@ -163,7 +163,7 @@ sudo bash FleetPilot/install.sh
 示例：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/install.sh | FP_NONINTERACTIVE=1 FP_EXTRAS=yes bash
+curl -fsSL https://raw.githubusercontent.com/fleetpilot-dev/FleetPilot/main/install.sh | FP_NONINTERACTIVE=1 FP_EXTRAS=yes bash
 ```
 
 ### Raspberry Pi 附加功能
@@ -382,4 +382,4 @@ sudo systemctl reload nginx
 | 在较旧的 LXC 中服务无法启动 | 安装程序会自动添加兼容的沙箱配置片段（`/etc/systemd/system/fleetpilot.service.d/lxc.conf`） |
 | 安装插件时提示文件夹只读 | 这是有意设计的。以 root 身份把插件文件复制到 `/opt/fleetpilot/addons`，然后重启 FleetPilot |
 
-仍然卡住？提交 issue 并附上 `journalctl -u fleetpilot -n 100` 的输出（请去掉您认为属于隐私的地址和名称）：<https://github.com/ChristianHandy/FleetPilot/issues>
+仍然卡住？提交 issue 并附上 `journalctl -u fleetpilot -n 100` 的输出（请去掉您认为属于隐私的地址和名称）：<https://github.com/fleetpilot-dev/FleetPilot/issues>

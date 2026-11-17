@@ -7,11 +7,11 @@
 #  Creates a Debian LXC container on this Proxmox host and installs FleetPilot
 #  in it. Run on the Proxmox host as root (Shell of the node in the web UI):
 #
-#    bash -c "$(curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/proxmox/fleetpilot-lxc.sh)"
+#    bash -c "$(curl -fsSL https://raw.githubusercontent.com/fleetpilot-dev/FleetPilot/main/proxmox/fleetpilot-lxc.sh)"
 #
 #  Update an existing FleetPilot container:
 #
-#    bash -c "$(curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/proxmox/fleetpilot-lxc.sh)" -- update 105
+#    bash -c "$(curl -fsSL https://raw.githubusercontent.com/fleetpilot-dev/FleetPilot/main/proxmox/fleetpilot-lxc.sh)" -- update 105
 #
 #  Unattended (all optional): CT_ID, CT_HOSTNAME, CT_CORES, CT_RAM (MB),
 #  CT_DISK (GB), CT_STORAGE, CT_TEMPLATE_STORAGE, CT_BRIDGE, CT_VLAN,
@@ -20,8 +20,8 @@
 # =============================================================================
 set -euo pipefail
 
-FP_RAW="${FP_RAW:-https://raw.githubusercontent.com/ChristianHandy/FleetPilot}"
-FP_REPO="${FP_REPO:-https://github.com/ChristianHandy/FleetPilot.git}"
+FP_RAW="${FP_RAW:-https://raw.githubusercontent.com/fleetpilot-dev/FleetPilot}"
+FP_REPO="${FP_REPO:-https://github.com/fleetpilot-dev/FleetPilot.git}"
 FP_BRANCH="${FP_BRANCH:-main}"
 # Runs inside the container, where FP_BRANCH and FP_REPO arrive through env: clone that
 # branch and run its install.sh, which installs or updates /opt/fleetpilot.
@@ -163,7 +163,7 @@ CREATE_ARGS=(
     --hostname "$CT_HOSTNAME" --cores "$CT_CORES" --memory "$CT_RAM" --swap 512
     --rootfs "$CT_STORAGE:$CT_DISK" --net0 "$NET"
     --unprivileged 1 --features nesting=1 --onboot 1 --ostype debian
-    --tags fleetpilot --description "FleetPilot · https://github.com/ChristianHandy/FleetPilot"
+    --tags fleetpilot --description "FleetPilot · https://github.com/fleetpilot-dev/FleetPilot"
 )
 if [[ -n "$CT_SSH_KEY" ]]; then CREATE_ARGS+=(--ssh-public-keys "$CT_SSH_KEY"); fi
 msg "Creating container $CT_ID ($CT_HOSTNAME)…"

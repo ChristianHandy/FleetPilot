@@ -2,7 +2,7 @@
 
 The project is registered as [#15465](https://www.bestpractices.dev/projects/15465). To change answers, sign in at bestpractices.dev with GitHub. Many fields are filled in automatically. Copy the rest from below: **status**, then the **justification** (most fields accept a URL).
 
-`R` = https://github.com/ChristianHandy/FleetPilot
+`R` = https://github.com/fleetpilot-dev/FleetPilot
 
 ## Basics
 
@@ -17,7 +17,7 @@ The project is registered as [#15465](https://www.bestpractices.dev/projects/154
 | license_location | Met | R/blob/main/LICENSE |
 | documentation_basics | Met | R/blob/main/docs/installation.md, R/blob/main/docs/user-guide.md |
 | documentation_interface | Met | User guide section 9 "Integrations": REST API, `/metrics`, Home Assistant (R/blob/main/docs/user-guide.md) |
-| sites_https | Met | GitHub and https://christianhandy.github.io/FleetPilot/ are HTTPS only |
+| sites_https | Met | GitHub and https://fleetpilot-dev.github.io/FleetPilot/ are HTTPS only |
 | discussion | Met | GitHub Issues and Discussions: searchable, URL-addressable, no proprietary client |
 | english | Met | Documentation, code and issues in English (German also accepted) |
 | maintained | Met | Regular releases and commits (R/releases, R/commits/main) |

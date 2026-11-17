@@ -45,7 +45,7 @@ FleetPilot verwaltet andere Rechner über SSH und muss deshalb nicht auf den ver
 Öffnen Sie die **Shell** Ihres Proxmox-Knotens (Weboberfläche → Knoten → *Shell*) und führen Sie aus:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/proxmox/fleetpilot-lxc.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/fleetpilot-dev/FleetPilot/main/proxmox/fleetpilot-lxc.sh)"
 ```
 
 Das Skript stellt eine Frage:
@@ -79,7 +79,7 @@ Alle Fragen lassen sich vorab mit Umgebungsvariablen beantworten, zum Beispiel:
 
 ```bash
 CT_ID=150 CT_HOSTNAME=fleetpilot CT_RAM=4096 CT_IP=192.168.1.50/24 CT_GW=192.168.1.1 FP_DEFAULTS=1 \
-  bash -c "$(curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/proxmox/fleetpilot-lxc.sh)"
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/fleetpilot-dev/FleetPilot/main/proxmox/fleetpilot-lxc.sh)"
 ```
 
 | Variable | Standard | Bedeutung |
@@ -105,7 +105,7 @@ Für die virtuellen Maschinen und Container des Knotens fügen Sie ihn unter **V
 ### Container aktualisieren
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/proxmox/fleetpilot-lxc.sh)" -- update 114
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/fleetpilot-dev/FleetPilot/main/proxmox/fleetpilot-lxc.sh)" -- update 114
 ```
 
 Ersetzen Sie `114` durch Ihre Container-ID. Daten und Einstellungen bleiben erhalten.
@@ -117,13 +117,13 @@ Ersetzen Sie `114` durch Ihre Container-ID. Daten und Einstellungen bleiben erha
 Als root auf dem Rechner, auf dem FleetPilot laufen soll:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/fleetpilot-dev/FleetPilot/main/install.sh | bash
 ```
 
 Oder aus einer Kopie des Repositorys:
 
 ```bash
-git clone https://github.com/ChristianHandy/FleetPilot.git
+git clone https://github.com/fleetpilot-dev/FleetPilot.git
 ```
 
 ```bash
@@ -163,7 +163,7 @@ Ein erneuter Aufruf des Installers **aktualisiert** die Installation und behält
 Beispiel:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/install.sh | FP_NONINTERACTIVE=1 FP_EXTRAS=yes bash
+curl -fsSL https://raw.githubusercontent.com/fleetpilot-dev/FleetPilot/main/install.sh | FP_NONINTERACTIVE=1 FP_EXTRAS=yes bash
 ```
 
 ### Raspberry-Pi-Extras
@@ -382,4 +382,4 @@ Entfernen Sie FleetPilots öffentlichen Schlüssel aus den `authorized_keys`-Dat
 | Dienst startet in einem älteren LXC nicht | Der Installer legt automatisch eine passende Sandbox-Ergänzung an (`/etc/systemd/system/fleetpilot.service.d/lxc.conf`) |
 | Plugin-Installation meldet einen schreibgeschützten Ordner | Das ist so gewollt. Die Plugin-Datei als root nach `/opt/fleetpilot/addons` kopieren und FleetPilot neu starten |
 
-Weiterhin Probleme? Erstellen Sie ein Issue mit der Ausgabe von `journalctl -u fleetpilot -n 100` (Adressen und Namen, die Sie als privat ansehen, vorher entfernen): <https://github.com/ChristianHandy/FleetPilot/issues>
+Weiterhin Probleme? Erstellen Sie ein Issue mit der Ausgabe von `journalctl -u fleetpilot -n 100` (Adressen und Namen, die Sie als privat ansehen, vorher entfernen): <https://github.com/fleetpilot-dev/FleetPilot/issues>

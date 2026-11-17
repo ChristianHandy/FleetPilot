@@ -7,12 +7,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FleetPilot · Self-hosted homelab dashboard</title>
 <meta name="description" content="FleetPilot is a free, self-hosted dashboard for your homelab: OS updates, CVE scan, SMART disk health, Proxmox VMs and backups, FRITZ!Box, OpenWrt and OPNsense routers. Agentless, one-command install. Try the live demo in your browser.">
-<link rel="canonical" href="https://christianhandy.github.io/FleetPilot/">
+<link rel="canonical" href="https://fleetpilot-dev.github.io/FleetPilot/">
 <meta property="og:type" content="website">
 <meta property="og:title" content="FleetPilot · Self-hosted homelab dashboard">
 <meta property="og:description" content="Updates, CVE scan, disk health, Proxmox, routers and backups in one self-hosted dashboard. Try the live demo in your browser.">
-<meta property="og:url" content="https://christianhandy.github.io/FleetPilot/">
-<meta property="og:image" content="https://christianhandy.github.io/FleetPilot/assets/screens/home.png">
+<meta property="og:url" content="https://fleetpilot-dev.github.io/FleetPilot/">
+<meta property="og:image" content="https://fleetpilot-dev.github.io/FleetPilot/assets/screens/home.png">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="assets/fleetpilot-logo.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/bootstrap-icons/bootstrap-icons.min.css">
@@ -30,9 +30,9 @@
       <a href="#install">Install</a>
       <a href="#security">Security</a>
       <a href="#contribute">Contribute</a>
-      <a href="https://github.com/ChristianHandy/FleetPilot/blob/main/docs/user-guide.md">Docs</a>
+      <a href="https://github.com/fleetpilot-dev/FleetPilot/blob/main/docs/user-guide.md">Docs</a>
     </nav>
-    <a class="btn btn-ghost-light btn-sm" href="https://github.com/ChristianHandy/FleetPilot"><i class="bi bi-github" aria-hidden="true"></i> GitHub</a>
+    <a class="btn btn-ghost-light btn-sm" href="https://github.com/fleetpilot-dev/FleetPilot"><i class="bi bi-github" aria-hidden="true"></i> GitHub</a>
   </div>
 </header>
 
@@ -141,17 +141,17 @@
         <article class="card install-card">
           <h3><i class="bi bi-hdd-rack" aria-hidden="true"></i> Proxmox VE</h3>
           <p>In the Shell of your Proxmox node. Creates an unprivileged Debian container, installs FleetPilot with HTTPS and prints the address and admin password.</p>
-          <div class="code"><code id="cmd-pve">bash -c "$(curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/proxmox/fleetpilot-lxc.sh)"</code>
+          <div class="code"><code id="cmd-pve">bash -c "$(curl -fsSL https://raw.githubusercontent.com/fleetpilot-dev/FleetPilot/main/proxmox/fleetpilot-lxc.sh)"</code>
             <button type="button" class="copy" data-copy="cmd-pve" aria-label="Copy the Proxmox command"><i class="bi bi-clipboard" aria-hidden="true"></i></button></div>
         </article>
         <article class="card install-card">
           <h3><i class="bi bi-ubuntu" aria-hidden="true"></i> Debian, Ubuntu, Raspberry Pi OS</h3>
           <p>As root on the machine. Then open <code>https://&lt;server-ip&gt;</code> and sign in as <code>admin</code> with the password the installer shows.</p>
-          <div class="code"><code id="cmd-deb">curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/install.sh | bash</code>
+          <div class="code"><code id="cmd-deb">curl -fsSL https://raw.githubusercontent.com/fleetpilot-dev/FleetPilot/main/install.sh | bash</code>
             <button type="button" class="copy" data-copy="cmd-deb" aria-label="Copy the Debian command"><i class="bi bi-clipboard" aria-hidden="true"></i></button></div>
         </article>
       </div>
-      <p class="center muted">Read the scripts before you run them, as with any <code>curl | bash</code>. The <a href="https://github.com/ChristianHandy/FleetPilot/blob/main/docs/installation.md">installation guide</a> (<a href="https://github.com/ChristianHandy/FleetPilot/blob/main/docs/de/installation.md">Deutsch</a>) covers unattended installs, your own certificate, updates and backups.</p>
+      <p class="center muted">Read the scripts before you run them, as with any <code>curl | bash</code>. The <a href="https://github.com/fleetpilot-dev/FleetPilot/blob/main/docs/installation.md">installation guide</a> (<a href="https://github.com/fleetpilot-dev/FleetPilot/blob/main/docs/de/installation.md">Deutsch</a>) covers unattended installs, your own certificate, updates and backups.</p>
     </div>
   </section>
 
@@ -161,8 +161,8 @@
         <p class="eyebrow eyebrow-accent">Security</p>
         <h2 id="security-title">It holds the keys to your homelab. It is built like it.</h2>
         <p>FleetPilot runs as an unprivileged service user from a read-only install, and its few root actions go through small helpers with fixed arguments. The project itself is hardened too, and every release can be verified.</p>
-        <a class="btn btn-ghost" href="https://github.com/ChristianHandy/FleetPilot/blob/main/SECURITY.md">Security policy</a>
-        <a class="btn btn-ghost" href="https://scorecard.dev/viewer/?uri=github.com/ChristianHandy/FleetPilot">OpenSSF Scorecard</a>
+        <a class="btn btn-ghost" href="https://github.com/fleetpilot-dev/FleetPilot/blob/main/SECURITY.md">Security policy</a>
+        <a class="btn btn-ghost" href="https://scorecard.dev/viewer/?uri=github.com/fleetpilot-dev/FleetPilot">OpenSSF Scorecard</a>
       </div>
       <ul class="sec-list">
         <li><i class="bi bi-patch-check" aria-hidden="true"></i><div><strong>Signed releases</strong><span>SBOM, checksums and Sigstore-signed SLSA build provenance: <code>gh attestation verify</code></span></div></li>
@@ -181,11 +181,11 @@
 {{GITHUB_STATS}}
       <figure class="ai-share">
         <img src="ai-share.svg" width="760" height="310" loading="lazy" alt="Bar chart: share of changed lines per month written with AI assistance. The values are in ai-share.json.">
-        <figcaption>Most of FleetPilot so far was written with AI assistants. <strong>This number needs to be as low as we can get</strong>: every task taken by a person brings it down. <a href="https://github.com/ChristianHandy/FleetPilot#how-much-of-fleetpilot-is-written-by-ai">How it's measured</a></figcaption>
+        <figcaption>Most of FleetPilot so far was written with AI assistants. <strong>This number needs to be as low as we can get</strong>: every task taken by a person brings it down. <a href="https://github.com/fleetpilot-dev/FleetPilot#how-much-of-fleetpilot-is-written-by-ai">How it's measured</a></figcaption>
       </figure>
       <div class="cta cta-center">
-        <a class="btn btn-primary" href="https://github.com/ChristianHandy/FleetPilot/labels/good%20first%20issue"><i class="bi bi-flag" aria-hidden="true"></i> Find a first task</a>
-        <a class="btn btn-ghost" href="https://github.com/ChristianHandy/FleetPilot/blob/main/CONTRIBUTING.md"><i class="bi bi-book" aria-hidden="true"></i> How to contribute</a>
+        <a class="btn btn-primary" href="https://github.com/fleetpilot-dev/FleetPilot/labels/good%20first%20issue"><i class="bi bi-flag" aria-hidden="true"></i> Find a first task</a>
+        <a class="btn btn-ghost" href="https://github.com/fleetpilot-dev/FleetPilot/blob/main/CONTRIBUTING.md"><i class="bi bi-book" aria-hidden="true"></i> How to contribute</a>
       </div>
     </div>
   </section>
@@ -196,7 +196,7 @@
       <p class="lead-dark">Open the demo, click around, break a disk. Then install it on your own hardware.</p>
       <div class="cta cta-center">
         <a class="btn btn-primary btn-lg" href="demo/"><i class="bi bi-play-fill" aria-hidden="true"></i> Try the live demo</a>
-        <a class="btn btn-ghost btn-lg" href="https://github.com/ChristianHandy/FleetPilot"><i class="bi bi-github" aria-hidden="true"></i> Star on GitHub</a>
+        <a class="btn btn-ghost btn-lg" href="https://github.com/fleetpilot-dev/FleetPilot"><i class="bi bi-github" aria-hidden="true"></i> Star on GitHub</a>
       </div>
     </div>
   </section>
@@ -206,12 +206,12 @@
   <div class="wrap foot-row">
     <div class="brand brand-foot"><img src="assets/fleetpilot-logo.svg" alt="" width="22" height="22"><span>FleetPilot {{VERSION}}</span></div>
     <nav aria-label="Footer">
-      <a href="https://github.com/ChristianHandy/FleetPilot/blob/main/docs/user-guide.md">User guide</a>
-      <a href="https://github.com/ChristianHandy/FleetPilot/blob/main/docs/de/benutzerhandbuch.md">Benutzerhandbuch</a>
-      <a href="https://github.com/ChristianHandy/FleetPilot/releases">Releases</a>
-      <a href="https://github.com/ChristianHandy/FleetPilot/discussions">Discussions</a>
-      <a href="https://github.com/ChristianHandy/FleetPilot/blob/main/CONTRIBUTING.md">Contributing</a>
-      <a href="https://github.com/ChristianHandy/FleetPilot/blob/main/LICENSE">GPL-3.0</a>
+      <a href="https://github.com/fleetpilot-dev/FleetPilot/blob/main/docs/user-guide.md">User guide</a>
+      <a href="https://github.com/fleetpilot-dev/FleetPilot/blob/main/docs/de/benutzerhandbuch.md">Benutzerhandbuch</a>
+      <a href="https://github.com/fleetpilot-dev/FleetPilot/releases">Releases</a>
+      <a href="https://github.com/fleetpilot-dev/FleetPilot/discussions">Discussions</a>
+      <a href="https://github.com/fleetpilot-dev/FleetPilot/blob/main/CONTRIBUTING.md">Contributing</a>
+      <a href="https://github.com/fleetpilot-dev/FleetPilot/blob/main/LICENSE">GPL-3.0</a>
     </nav>
   </div>
 </footer>

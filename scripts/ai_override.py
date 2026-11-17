@@ -12,9 +12,9 @@ A maintainer can still let one specific pull request through by commenting on it
 for example "/allow-ai d6b1f82 release PR, reviewed line by line". The override counts
 only when:
 
-- the comment's author is the repository owner, a member or a collaborator; members
-  and collaborators cannot allow their own pull requests, the owner can (nobody else
-  could approve the owner's pull requests);
+- the comment's author is the repository owner, a member or a collaborator; only the
+  people in SELF_APPROVERS (the lead maintainer, see GOVERNANCE.md) can allow their own
+  pull requests, because nobody else could approve them;
 - <commit> is the pull request's current head commit (at least 7 characters of its
   SHA), so new pushes need a new approval;
 - a reason follows the commit.
@@ -30,6 +30,8 @@ import urllib.request
 
 COMMAND = re.compile(r"^\s*/allow-ai\s+([0-9a-f]{7,40})\s+(\S.{2,})$", re.I | re.M)
 ALLOWED = {"OWNER", "MEMBER", "COLLABORATOR"}
+# In an organization repository the lead maintainer comments as MEMBER, not OWNER.
+SELF_APPROVERS = {"ChristianHandy"}
 
 
 def find_override(comments, head_sha, pr_author):
@@ -37,7 +39,7 @@ def find_override(comments, head_sha, pr_author):
     for comment in reversed(comments):
         login = (comment.get("user") or {}).get("login", "")
         association = comment.get("author_association")
-        if association not in ALLOWED or not login or (login == pr_author and association != "OWNER"):
+        if association not in ALLOWED or not login or (login == pr_author and association != "OWNER" and login not in SELF_APPROVERS):
             continue
         for sha, reason in COMMAND.findall(comment.get("body") or ""):
             if head_sha.lower().startswith(sha.lower()):
