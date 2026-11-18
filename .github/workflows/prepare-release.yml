@@ -126,11 +126,12 @@ jobs:
 
           ## After merging
 
-              git fetch origin && git checkout {base} && git pull
+              git remote set-url origin https://github.com/{repo}.git
+              git fetch origin && git checkout {base} && git pull origin {base}
               git tag -s {tag} -m "{label}"
               git push origin {tag}
 
-          The tag starts the release workflow (archive, SBOM, signed APK, checksums, provenance). The release is named "{label}".
+          The first line points your clone at the repository's current home ({repo}); it is harmless if it already does. The tag starts the release workflow (archive, SBOM, signed APK, checksums, provenance). The release is named "{label}".
 
           ## AI assistance
 
