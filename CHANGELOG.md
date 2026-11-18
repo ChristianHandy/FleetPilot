@@ -3,6 +3,8 @@
 All notable changes to FleetPilot are recorded here. Version numbers follow [semantic versioning](https://semver.org).
 
 ## [Unreleased]
+
+## [1.9.0-beta.1] — 2026-11-18
 - **Swedish interface:** choose SV in the language menu.
 
 ### Security
