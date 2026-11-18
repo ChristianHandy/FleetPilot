@@ -41,14 +41,14 @@ The live demo is the real FleetPilot running in your browser against an emulated
 
 | | |
 |---|---|
-| **Hosts and updates** | Linux (Debian/Ubuntu and derivatives, Fedora/RHEL family, openSUSE, Arch, Alpine and more) and Windows 10/11 and Server 2016–2025 ([details](WINDOWS_SUPPORT.md)) over SSH: updates with live output, schedules and history |
+| **Hosts and updates** | Linux (Debian/Ubuntu and derivatives, Fedora/RHEL family, openSUSE, Arch, Alpine and more) and Windows 10/11 and Server 2016–2025 ([details](docs/dev/WINDOWS_SUPPORT.md)) over SSH: updates with live output, schedules and history |
 | **Vulnerability scan** | Known CVEs in server packages ([OSV.dev](https://osv.dev)), Docker images (Trivy) and pfSense/OPNsense, with severity, fixed version and daily alerts |
 | **Disks** | SMART health and tests, formatting, block validation, alerts before a disk dies |
 | **Proxmox, storage, backups** | Proxmox VMs and containers, TrueNAS and Unraid, Proxmox Backup Server, Duplicati, restic, UrBackup and more |
 | **Routers** | FRITZ!Box and Repeater (Mesh), OpenWrt, OPNsense, pfSense, MikroTik, VyOS and more: status, devices, firmware checks, encrypted backups ([details](docs/routers.md)) |
 | **Hardware** | Live CPU, memory and temperatures, fan control, Wake-on-LAN, scheduled shutdowns |
 | **Security** | 2FA (TOTP, passkeys, YubiKey), roles (Admin / Operator / Viewer), sessions, scoped API tokens, tamper-evident audit trail, security center ([SECURITY.md](SECURITY.md)) |
-| **Integrations** | Prometheus `/metrics`, CheckMK, Home Assistant ([component](integrations/home-assistant/README.md)), REST API, [plugins](PLUGIN_REPOSITORY.md), public status page, [Android app (beta)](docs/user-guide.md#android-app-beta) |
+| **Integrations** | Prometheus `/metrics`, CheckMK, Home Assistant ([component](integrations/home-assistant/README.md)), REST API, [plugins](docs/dev/PLUGIN_REPOSITORY.md), public status page, [Android app (beta)](docs/user-guide.md#android-app-beta) |
 | **For everyone** | English, Deutsch, Français, Español, Nederlands, Italiano; WCAG 2.2 AA, high contrast, easy language ([accessibility](docs/accessibility.md)) |
 
 <table>

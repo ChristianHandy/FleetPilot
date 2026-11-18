@@ -448,7 +448,7 @@ rest:
 - Windows 10 和 11，包括 LTSC 2019、2021、2024 以及 IoT 版本
 - Windows Server 2016 至 2025，包括 Server Core
 
-启用 OpenSSH 服务器，用管理员账户添加主机，然后点击**检测系统**（Detect OS）。FleetPilot 随后会显示版本及其支持终止日期。它会安装 Windows 更新（不重启），并在已安装的情况下通过 winget 更新应用程序。关机、Wake-on-LAN、硬件概览和 SMART（配合 smartmontools）同样可用。各版本的配置说明：[WINDOWS_SUPPORT.md](../WINDOWS_SUPPORT.md)。
+启用 OpenSSH 服务器，用管理员账户添加主机，然后点击**检测系统**（Detect OS）。FleetPilot 随后会显示版本及其支持终止日期。它会安装 Windows 更新（不重启），并在已安装的情况下通过 winget 更新应用程序。关机、Wake-on-LAN、硬件概览和 SMART（配合 smartmontools）同样可用。各版本的配置说明：[WINDOWS_SUPPORT.md](../dev/WINDOWS_SUPPORT.md)。
 
 **两个 FleetPilot 实例可以互相备份吗？** 可以：数据同步会把主实例的全部数据复制到从实例。在两边设置相同的 `SYNC_TOKEN`。
 

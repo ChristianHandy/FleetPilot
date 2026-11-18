@@ -452,7 +452,7 @@ Das Repository enthält außerdem eine eigene Integration, `integrations/home-as
 - Windows 10 und 11, auch LTSC 2019, 2021 und 2024 und die IoT-Editionen
 - Windows Server 2016 bis 2025, auch Server Core
 
-Den OpenSSH-Server einschalten, den Host mit einem Administratorkonto anlegen und **Detect OS** klicken. FleetPilot zeigt dann die Version und ihr Support-Ende. Es installiert Windows-Updates (ohne Neustart) und, wo vorhanden, Anwendungsupdates über winget. Herunterfahren, Wake-on-LAN, die Hardwareübersicht und SMART (mit smartmontools) funktionieren ebenfalls. Einrichtung je Version: [WINDOWS_SUPPORT.md](../../WINDOWS_SUPPORT.md).
+Den OpenSSH-Server einschalten, den Host mit einem Administratorkonto anlegen und **Detect OS** klicken. FleetPilot zeigt dann die Version und ihr Support-Ende. Es installiert Windows-Updates (ohne Neustart) und, wo vorhanden, Anwendungsupdates über winget. Herunterfahren, Wake-on-LAN, die Hardwareübersicht und SMART (mit smartmontools) funktionieren ebenfalls. Einrichtung je Version: [WINDOWS_SUPPORT.md](../dev/WINDOWS_SUPPORT.md).
 
 **Können sich zwei FleetPilot-Instanzen gegenseitig absichern?** Ja: Die Datensynchronisation spiegelt alle Daten von einer primären auf eine sekundäre Instanz. Setzen Sie auf beiden dasselbe `SYNC_TOKEN`.
 
