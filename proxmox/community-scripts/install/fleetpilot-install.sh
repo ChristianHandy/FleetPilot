@@ -3,7 +3,7 @@
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: ChristianHandy
 # License: MIT | https://github.com/community-scripts/DevScripts/raw/main/LICENSE
-# Source: https://github.com/ChristianHandy/FleetPilot
+# Source: https://github.com/fleetpilot-dev/FleetPilot
 
 source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 color
@@ -19,7 +19,7 @@ $STD apt install -y \
   smartmontools
 msg_ok "Installed Dependencies"
 
-fetch_and_deploy_gh_release "fleetpilot" "ChristianHandy/FleetPilot" "tarball"
+fetch_and_deploy_gh_release "fleetpilot" "fleetpilot-dev/FleetPilot" "tarball"
 PYTHON_VERSION="3.13" setup_uv
 
 msg_info "Setting up Python Environment"

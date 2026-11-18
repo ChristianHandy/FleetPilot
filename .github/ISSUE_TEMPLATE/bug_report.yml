@@ -8,7 +8,7 @@ body:
     attributes:
       value: |
         Thanks for taking the time to report a problem.
-        **Security problems do not belong here:** report them privately as described in [SECURITY.md](https://github.com/ChristianHandy/FleetPilot/blob/main/SECURITY.md).
+        **Security problems do not belong here:** report them privately as described in [SECURITY.md](https://github.com/fleetpilot-dev/FleetPilot/blob/main/SECURITY.md).
         Remove passwords, tokens, keys and public IP addresses from everything you paste.
   - type: textarea
     id: what-happened

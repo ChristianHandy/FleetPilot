@@ -97,7 +97,7 @@ Mapped to the [OWASP Top 10 (2021)](https://owasp.org/Top10/) and the most relev
   - zizmor and ClusterFuzzLite
 - **Fuzzing:** the scheduled fuzzing workflow runs the parsers for longer.
 - **Branch protection:** these checks must pass before anything reaches `main`.
-- **Scorecard:** the project's OpenSSF Scorecard is published at [scorecard.dev](https://scorecard.dev/viewer/?uri=github.com/ChristianHandy/FleetPilot).
+- **Scorecard:** the project's OpenSSF Scorecard is published at [scorecard.dev](https://scorecard.dev/viewer/?uri=github.com/fleetpilot-dev/FleetPilot).
 
 ## 7. What is not claimed
 

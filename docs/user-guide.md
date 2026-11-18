@@ -382,7 +382,7 @@ Useful endpoints (all JSON): `/api/me`, `/api/hosts`, `/api/vms`, `/api/smart/su
 
 ### Android app (beta)
 
-The FleetPilot app for Android 8.0 and newer shows the dashboard, servers, virtual machines, the HW monitor and fans, and can wake and shut down servers, start and stop VMs and set fan speeds. Download the APK from the [releases](https://github.com/ChristianHandy/FleetPilot/releases) (look for *Android app*) and install it; Android asks you to allow installing apps from your browser or file manager.
+The FleetPilot app for Android 8.0 and newer shows the dashboard, servers, virtual machines, the HW monitor and fans, and can wake and shut down servers, start and stop VMs and set fan speeds. Download the APK from the [releases](https://github.com/fleetpilot-dev/FleetPilot/releases) (look for *Android app*) and install it; Android asks you to allow installing apps from your browser or file manager.
 
 1. Create an API token as described above. A *read-only* token only shows; a *read/write* token also allows the actions your role permits (operators: wake, shut down, fans; admins: also VMs).
 2. Open the app, enter your FleetPilot address (for example `https://192.168.1.62`) and the token.

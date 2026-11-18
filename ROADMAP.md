@@ -1,6 +1,6 @@
 # Roadmap
 
-Where FleetPilot is heading from October 2026 to October 2027. This is a statement of intent, not a promise: plans change with what users report and what contributors bring. Proposals are welcome in [Discussions](https://github.com/ChristianHandy/FleetPilot/discussions). The maintainer reviews this roadmap at least once a year and with every minor release.
+Where FleetPilot is heading from October 2026 to October 2027. This is a statement of intent, not a promise: plans change with what users report and what contributors bring. Proposals are welcome in [Discussions](https://github.com/fleetpilot-dev/FleetPilot/discussions). The maintainer reviews this roadmap at least once a year and with every minor release.
 
 ## Planned
 
@@ -17,7 +17,7 @@ Where FleetPilot is heading from October 2026 to October 2027. This is a stateme
 
 - Deeper support for the devices FleetPilot already manages (Proxmox, TrueNAS, Unraid, backup servers, routers) rather than many new platforms.
 - The vulnerability scan for more systems and package formats.
-- Keeping the [live demo](https://christianhandy.github.io/FleetPilot/demo/) in step with every release, so you can try each version before installing it.
+- Keeping the [live demo](https://fleetpilot-dev.github.io/FleetPilot/demo/) in step with every release, so you can try each version before installing it.
 
 ### Project: more people, less AI-written code
 
@@ -30,8 +30,8 @@ Much of FleetPilot's code was written with an AI coding assistant (see [GOVERNAN
 - **Getting started in minutes:**
   - a developer guide covering setup, running the tests, and the [demo lab](demo/README.md) for testing without real hardware
   - a short tour of the code, building on [docs/architecture.md](docs/architecture.md)
-- **Tasks for newcomers:** small, well-described tasks labelled [good first issue](https://github.com/ChristianHandy/FleetPilot/labels/good%20first%20issue) and [help wanted](https://github.com/ChristianHandy/FleetPilot/labels/help%20wanted), with a pointer to the code involved.
-- **Quick answers:** a first reply to every issue and pull request within a week, and questions welcome in [Discussions](https://github.com/ChristianHandy/FleetPilot/discussions).
+- **Tasks for newcomers:** small, well-described tasks labelled [good first issue](https://github.com/fleetpilot-dev/FleetPilot/labels/good%20first%20issue) and [help wanted](https://github.com/fleetpilot-dev/FleetPilot/labels/help%20wanted), with a pointer to the code involved.
+- **Quick answers:** a first reply to every issue and pull request within a week, and questions welcome in [Discussions](https://github.com/fleetpilot-dev/FleetPilot/discussions).
 - **Credit:** every contributor named in the release notes.
 
 **Move away from AI-written code**

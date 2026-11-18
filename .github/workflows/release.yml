@@ -12,7 +12,7 @@ name: Release
 #   fleetpilot-X.Y.Z-sbom.cdx.json          CycloneDX SBOM of the locked dependencies
 #   SHA256SUMS                              checksums of every file of the release
 #   *.sigstore.json / *.intoto.jsonl        signed SLSA build provenance (Sigstore, keyless)
-# Verify with:  gh attestation verify fleetpilot-X.Y.Z.tar.gz --repo ChristianHandy/FleetPilot
+# Verify with:  gh attestation verify fleetpilot-X.Y.Z.tar.gz --repo fleetpilot-dev/FleetPilot
 #
 #   FleetPilot-android-X.Y.Z.apk            the Android app, signed with the release key
 #

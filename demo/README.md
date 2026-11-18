@@ -1,6 +1,6 @@
 # FleetPilot website and demo
 
-Published at **https://christianhandy.github.io/FleetPilot/** by `.github/workflows/pages.yml` on every push to `main`.
+Published at **https://fleetpilot-dev.github.io/FleetPilot/** by `.github/workflows/pages.yml` on every push to `main`.
 
 | Path | What it is | Built by |
 |------|------------|----------|

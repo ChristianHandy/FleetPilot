@@ -2,12 +2,12 @@
 
 Thanks for helping. Bug reports, ideas, translations, documentation and code are all welcome. Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md). Where the project is heading is in the [roadmap](ROADMAP.md), and who decides what is in [GOVERNANCE.md](GOVERNANCE.md).
 
-**New here?** Issues labelled [good first issue](https://github.com/ChristianHandy/FleetPilot/labels/good%20first%20issue) are small, self-contained tasks (a test, a translation, a documentation fix) that need little knowledge of the code.
+**New here?** Issues labelled [good first issue](https://github.com/fleetpilot-dev/FleetPilot/labels/good%20first%20issue) are small, self-contained tasks (a test, a translation, a documentation fix) that need little knowledge of the code.
 
 ## Reporting bugs and asking for features
 
-- **Bugs and feature requests:** [GitHub Issues](https://github.com/ChristianHandy/FleetPilot/issues). Include your FleetPilot version (shown in the sidebar), how you installed it, what you did, what happened and what you expected. Logs (`journalctl -u fleetpilot`) help, but remove addresses and names you don't want to share.
-- **Questions and ideas:** [GitHub Discussions](https://github.com/ChristianHandy/FleetPilot/discussions).
+- **Bugs and feature requests:** [GitHub Issues](https://github.com/fleetpilot-dev/FleetPilot/issues). Include your FleetPilot version (shown in the sidebar), how you installed it, what you did, what happened and what you expected. Logs (`journalctl -u fleetpilot`) help, but remove addresses and names you don't want to share.
+- **Questions and ideas:** [GitHub Discussions](https://github.com/fleetpilot-dev/FleetPilot/discussions).
 - **Security problems:** never in a public issue. Follow [SECURITY.md](SECURITY.md) (private vulnerability reporting).
 
 Reports in English or German are fine; issues are usually answered within a few days.
@@ -49,7 +49,7 @@ FleetPilot is Python and needs no compile step. You need:
 - `openssh-client`; optionally `smartmontools`, `lm-sensors` and `nginx` (the installer sets these up for production)
 
 ```bash
-git clone https://github.com/ChristianHandy/FleetPilot.git && cd FleetPilot
+git clone https://github.com/fleetpilot-dev/FleetPilot.git && cd FleetPilot
 python3 -m venv venv && venv/bin/pip install --require-hashes -r requirements-lock.txt
 cp .env.example .env && venv/bin/python app.py      # development server on http://localhost:5000
 ```

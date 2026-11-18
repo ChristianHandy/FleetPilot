@@ -67,3 +67,10 @@ def test_main_reports_and_exits(monkeypatch, capsys):
     assert "::notice title=AI assistance::Allowed by @ChristianHandy" in capsys.readouterr().out
     assert override.main(["7", "0" * 40, "contributor"]) == 1
     assert "/allow-ai 0000000 <reason>" in capsys.readouterr().out
+
+
+def test_the_lead_maintainer_can_allow_their_own_pull_request_in_an_organization():
+    comment = _comment("ChristianHandy", "/allow-ai d6b1f82 mine", "MEMBER")
+    assert override.find_override([comment], HEAD, "ChristianHandy")[0] == "ChristianHandy"
+    other = _comment("helper", "/allow-ai d6b1f82 mine", "MEMBER")
+    assert override.find_override([other], HEAD, "helper") is None

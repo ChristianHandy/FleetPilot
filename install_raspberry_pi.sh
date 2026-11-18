@@ -9,5 +9,5 @@ if [[ -f "$HERE/install.sh" ]]; then
     exec bash "$HERE/install.sh" "$@"
 fi
 echo "install.sh was not found next to this script. Clone the repository and run it:" >&2
-echo "  git clone https://github.com/ChristianHandy/FleetPilot.git && sudo bash FleetPilot/install.sh" >&2
+echo "  git clone https://github.com/fleetpilot-dev/FleetPilot.git && sudo bash FleetPilot/install.sh" >&2
 exit 1
