@@ -43,11 +43,18 @@ Each release (from v1.7.1 on) carries the source archive, a CycloneDX SBOM, `SHA
 
 ```bash
 sha256sum -c SHA256SUMS
-gh attestation verify fleetpilot-X.Y.Z.tar.gz --repo ChristianHandy/FleetPilot \
-  --signer-workflow ChristianHandy/FleetPilot/.github/workflows/release.yml
+gh attestation verify fleetpilot-X.Y.Z.tar.gz --repo fleetpilot-dev/FleetPilot \
+  --signer-workflow fleetpilot-dev/FleetPilot/.github/workflows/release.yml
 ```
 
-**Expected identity:** the provenance must be signed by the workflow `.github/workflows/release.yml` of `ChristianHandy/FleetPilot`, running for a `refs/tags/vX.Y.Z` tag, or `refs/tags/vX.Y.Z-beta.N` for a pre-release (`gh attestation verify` prints both). The provenance also covers files built outside the workflow and attached to the release, such as the signed Android APK: `gh attestation verify FleetPilot-android-X.Y.Z.apk --repo ChristianHandy/FleetPilot` proves the file is the one published with that release. Nobody holds a private key for this signature; it comes from GitHub's OIDC identity of that workflow run.
+**Expected identity:** the provenance must be signed by the workflow `.github/workflows/release.yml` of `fleetpilot-dev/FleetPilot`, running for a `refs/tags/vX.Y.Z` tag, or `refs/tags/vX.Y.Z-beta.N` for a pre-release (`gh attestation verify` prints both). The provenance also covers files built outside the workflow and attached to the release, such as the signed Android APK: `gh attestation verify FleetPilot-android-X.Y.Z.apk --repo fleetpilot-dev/FleetPilot` proves the file is the one published with that release. Nobody holds a private key for this signature; it comes from GitHub's OIDC identity of that workflow run.
+
+The repository moved from `ChristianHandy/FleetPilot` to `fleetpilot-dev/FleetPilot` after v1.8.1. Releases up to and including v1.8.1 were built under the old name, and GitHub's stored attestations did not move with the repository: verify them with the provenance file attached to the release:
+
+```bash
+gh attestation verify fleetpilot-X.Y.Z.tar.gz --bundle fleetpilot-X.Y.Z.sigstore.json \
+  --repo ChristianHandy/FleetPilot --signer-workflow ChristianHandy/FleetPilot/.github/workflows/release.yml
+```
 
 Release tags are signed by the maintainer's OpenPGP key:
 

@@ -6,7 +6,7 @@
 #  Debian 12/13, Ubuntu 22.04/24.04, Raspberry Pi OS (Bookworm/Trixie).
 #  Run as root on the machine (or LXC container) that will host FleetPilot:
 #
-#    curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/install.sh | bash
+#    curl -fsSL https://raw.githubusercontent.com/fleetpilot-dev/FleetPilot/main/install.sh | bash
 #
 #  Unattended install / options (environment variables):
 #    FP_NONINTERACTIVE=1     never ask questions
@@ -23,7 +23,7 @@
 # =============================================================================
 set -euo pipefail
 
-FP_REPO="${FP_REPO:-https://github.com/ChristianHandy/FleetPilot.git}"
+FP_REPO="${FP_REPO:-https://github.com/fleetpilot-dev/FleetPilot.git}"
 FP_BRANCH="${FP_BRANCH:-main}"
 FP_HTTPS="${FP_HTTPS:-yes}"
 FP_NONINTERACTIVE="${FP_NONINTERACTIVE:-0}"

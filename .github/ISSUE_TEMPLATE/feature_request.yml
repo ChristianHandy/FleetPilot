@@ -7,7 +7,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Please check the [roadmap](https://github.com/ChristianHandy/FleetPilot/blob/main/ROADMAP.md) and the open issues first; a 👍 on an existing request helps too.
+        Please check the [roadmap](https://github.com/fleetpilot-dev/FleetPilot/blob/main/ROADMAP.md) and the open issues first; a 👍 on an existing request helps too.
   - type: textarea
     id: problem
     attributes:

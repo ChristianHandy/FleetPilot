@@ -13,8 +13,8 @@ android {
         applicationId = "com.fleetpilot"
         minSdk = 26
         targetSdk = 35
-        versionCode = 19
-        versionName = "1.8.1"
+        versionCode = 20
+        versionName = "1.9.0-beta.1"
     }
 
     // Release signing key: kept outside the repository and passed in by the environment

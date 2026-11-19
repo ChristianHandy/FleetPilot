@@ -45,7 +45,7 @@ FleetPilot manages other machines over SSH, so it does not need to run on the ma
 Open the **Shell** of your Proxmox node (web UI → node → *Shell*) and run:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/proxmox/fleetpilot-lxc.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/fleetpilot-dev/FleetPilot/main/proxmox/fleetpilot-lxc.sh)"
 ```
 
 The script asks one question:
@@ -79,7 +79,7 @@ All questions can be answered in advance with environment variables, for example
 
 ```bash
 CT_ID=150 CT_HOSTNAME=fleetpilot CT_RAM=4096 CT_IP=192.168.1.50/24 CT_GW=192.168.1.1 FP_DEFAULTS=1 \
-  bash -c "$(curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/proxmox/fleetpilot-lxc.sh)"
+  bash -c "$(curl -fsSL https://raw.githubusercontent.com/fleetpilot-dev/FleetPilot/main/proxmox/fleetpilot-lxc.sh)"
 ```
 
 | Variable | Default | Meaning |
@@ -105,7 +105,7 @@ To show the node's virtual machines and containers, add it under **VM controller
 ### Updating the container
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/proxmox/fleetpilot-lxc.sh)" -- update 114
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/fleetpilot-dev/FleetPilot/main/proxmox/fleetpilot-lxc.sh)" -- update 114
 ```
 
 Replace `114` with your container ID. Data and settings are kept.
@@ -117,13 +117,13 @@ Replace `114` with your container ID. Data and settings are kept.
 As root on the machine that will run FleetPilot:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/fleetpilot-dev/FleetPilot/main/install.sh | bash
 ```
 
 Or from a copy of the repository:
 
 ```bash
-git clone https://github.com/ChristianHandy/FleetPilot.git
+git clone https://github.com/fleetpilot-dev/FleetPilot.git
 ```
 
 ```bash
@@ -163,7 +163,7 @@ Running the installer again **updates** the installation and keeps your data and
 Example:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ChristianHandy/FleetPilot/main/install.sh | FP_NONINTERACTIVE=1 FP_EXTRAS=yes bash
+curl -fsSL https://raw.githubusercontent.com/fleetpilot-dev/FleetPilot/main/install.sh | FP_NONINTERACTIVE=1 FP_EXTRAS=yes bash
 ```
 
 ### Raspberry Pi extras
@@ -382,4 +382,4 @@ Remove FleetPilot's public key from the `authorized_keys` files of your servers.
 | Service does not start inside an older LXC | The installer adds a compatible sandbox drop-in automatically (`/etc/systemd/system/fleetpilot.service.d/lxc.conf`) |
 | Plugin install says the folder is read-only | That is intended. Copy the plugin file into `/opt/fleetpilot/addons` as root and restart FleetPilot |
 
-Still stuck? Open an issue with the output of `journalctl -u fleetpilot -n 100` (remove addresses and names you consider private): <https://github.com/ChristianHandy/FleetPilot/issues>
+Still stuck? Open an issue with the output of `journalctl -u fleetpilot -n 100` (remove addresses and names you consider private): <https://github.com/fleetpilot-dev/FleetPilot/issues>

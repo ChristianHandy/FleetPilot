@@ -380,7 +380,7 @@ curl -H "Authorization: Bearer fp_..." https://fleetpilot.example/api/me
 
 ### 安卓应用（测试版）
 
-适用于 Android 8.0 及更新版本的 FleetPilot 应用可以查看仪表盘、服务器、虚拟机、硬件监控和风扇，并能唤醒和关闭服务器、启动和停止虚拟机、设置风扇转速。从 [releases](https://github.com/ChristianHandy/FleetPilot/releases) 下载 APK（找 *Android app*）并安装；Android 会询问是否允许从浏览器或文件管理器安装应用。
+适用于 Android 8.0 及更新版本的 FleetPilot 应用可以查看仪表盘、服务器、虚拟机、硬件监控和风扇，并能唤醒和关闭服务器、启动和停止虚拟机、设置风扇转速。从 [releases](https://github.com/fleetpilot-dev/FleetPilot/releases) 下载 APK（找 *Android app*）并安装；Android 会询问是否允许从浏览器或文件管理器安装应用。
 
 1. 按上面的说明创建 API 令牌。*只读* 令牌只能查看；*读写* 令牌还会允许执行您角色许可的操作（运维员：唤醒、关机、风扇；管理员：还包括虚拟机）。
 2. 打开应用，输入您的 FleetPilot 地址（例如 `https://192.168.1.62`）和令牌。

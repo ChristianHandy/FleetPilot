@@ -17,7 +17,7 @@ AI coding assistants (Claude) help write code and documentation. Their changes g
 
 | Resource | Access |
 |---|---|
-| GitHub repository (admin: settings, branch rules, secrets, security alerts) | @ChristianHandy |
+| GitHub organization [fleetpilot-dev](https://github.com/fleetpilot-dev) (owner) and repository (admin: settings, branch rules, secrets, security alerts) | @ChristianHandy |
 | Release signing key (OpenPGP `09D7 7410 5F9A A1DE 6B12 6AD1 F73D EF20 4C54 E71D`, signs tags) | @ChristianHandy |
 | Release workflow (Sigstore keyless signing of build provenance) | GitHub Actions, only from version tags on this repository; tag creation is limited to the maintainer |
 | GitHub Pages site and repository secrets (`SCORECARD_TOKEN`, optional) | @ChristianHandy |
@@ -39,7 +39,7 @@ Access follows least privilege: triage or write access first, admin only when ne
 
 ## Decisions
 
-The maintainer decides, after discussion in the issue, pull request or [Discussions](https://github.com/ChristianHandy/FleetPilot/discussions). Security-relevant changes (authentication, installer, release pipeline, root helpers) need passing CI, including CodeQL, and an explicit note in the pull request.
+The maintainer decides, after discussion in the issue, pull request or [Discussions](https://github.com/fleetpilot-dev/FleetPilot/discussions). Security-relevant changes (authentication, installer, release pipeline, root helpers) need passing CI, including CodeQL, and an explicit note in the pull request.
 
 ## Continuity
 

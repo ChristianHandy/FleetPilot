@@ -12,7 +12,7 @@ VENV_PIP="$APP_DIR/venv/bin/pip"
 SERVICE_NAME="fleetpilot"
 REMOTE_NAME="origin"
 BRANCH_NAME="main"
-EXPECTED_REMOTE="https://github.com/ChristianHandy/FleetPilot.git"
+EXPECTED_REMOTE="https://github.com/fleetpilot-dev/FleetPilot.git"
 
 usage() {
     echo "Usage: fleetpilot-update {check|apply|restart}" >&2

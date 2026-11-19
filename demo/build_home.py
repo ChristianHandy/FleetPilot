@@ -32,7 +32,7 @@ self.addEventListener('activate', (event) => event.waitUntil(self.registration.u
 """
 
 
-SLUG = "ChristianHandy/FleetPilot"
+SLUG = "fleetpilot-dev/FleetPilot"
 GITHUB = f"https://github.com/{SLUG}"
 
 # icon, label, link, how to count: ("search", query) | ("contributors",) | ("stars",)
@@ -117,7 +117,7 @@ def main():
         fh.write(RETIRED_SW)
     with open(os.path.join(OUT, "sitemap.xml"), "w") as fh:
         fh.write('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-                 + "".join(f"  <url><loc>https://christianhandy.github.io/FleetPilot/{p}</loc></url>\n"
+                 + "".join(f"  <url><loc>https://fleetpilot-dev.github.io/FleetPilot/{p}</loc></url>\n"
                            for p in ("", "demo/", "tour/"))
                  + "</urlset>\n")
     open(os.path.join(OUT, ".nojekyll"), "w").close()

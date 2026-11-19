@@ -9,10 +9,10 @@
   "updateable": true,
   "privileged": false,
   "interface_port": 443,
-  "documentation": "https://github.com/ChristianHandy/FleetPilot/blob/main/docs/user-guide.md",
-  "website": "https://github.com/ChristianHandy/FleetPilot",
-  "repository": "https://github.com/ChristianHandy/FleetPilot",
-  "logo": "https://cdn.jsdelivr.net/gh/ChristianHandy/FleetPilot@main/static/fleetpilot-logo.svg",
+  "documentation": "https://github.com/fleetpilot-dev/FleetPilot/blob/main/docs/user-guide.md",
+  "website": "https://github.com/fleetpilot-dev/FleetPilot",
+  "repository": "https://github.com/fleetpilot-dev/FleetPilot",
+  "logo": "https://cdn.jsdelivr.net/gh/fleetpilot-dev/FleetPilot@main/static/fleetpilot-logo.svg",
   "description": "Self-hosted operations dashboard for home labs and small companies: server updates, SMART disk health, routers (FRITZ!Box, OpenWrt, OPNsense, pfSense, MikroTik), Proxmox VMs, TrueNAS/Unraid storage, backup servers and fans, managed over SSH and APIs without agents.",
   "install_methods": [
     {
